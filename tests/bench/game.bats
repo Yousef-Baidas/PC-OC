@@ -3,13 +3,14 @@
 bats_require_minimum_version 1.5.0
 
 setup() {
-  skip "contract #12 pending"
   SCRIPT="$BATS_TEST_DIRNAME/../../bench/game.sh"
   FIX="$BATS_TEST_DIRNAME/fixtures/game"
   # run-100.csv: 99 frames at 10.0 ms, then 1 at 40.0 ms
   # run-200.csv: 197 frames at 10.0 ms, 1 each at 50.0, 25.0 and 20.0 ms
   RUN100="$FIX/run-100.csv"
   RUN200="$FIX/run-200.csv"
+  # run-100_summary.csv: what MangoHud writes next to run-100.csv when logging stops
+  SUM100="$FIX/run-100_summary.csv"
 }
 
 # value <key>: print the value of stdout line <key>=
@@ -86,7 +87,46 @@ contract_order() {
   [[ "$stderr" != *"not implemented"* ]]
 }
 
+@test "parse exits 1 with pc-oc: bench: on a log without the v1 version header" {
+  run --separate-stderr bash "$SCRIPT" parse "$FIX/no-version.csv"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: bench: "* ]]
+}
+
 @test "parse with no files exits 2" {
   run --separate-stderr bash "$SCRIPT" parse
   [ "$status" -eq 2 ]
+}
+
+@test "parse skips a MangoHud _summary.csv operand and names it in its inputs" {
+  run --separate-stderr bash "$SCRIPT" parse "$RUN100" "$SUM100"
+  [ "$status" -eq 0 ]
+  contract_order
+  [ "$(value input.files)" = 1 ]
+  [ "$(value input.skipped)" = "$(realpath "$SUM100")" ]
+  [[ "${lines[0]}" != *_summary.csv* ]]
+  [ "$(value result.game.avg_fps)" = 97.1 ]
+  [ "$(value result.game.low1_fps)" = 25.0 ]
+}
+
+@test "parse exits 1 with pc-oc: bench: when every operand is a _summary.csv" {
+  run --separate-stderr bash "$SCRIPT" parse "$SUM100"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: bench: "* ]]
+}
+
+@test "the parse line setup prints works on a log folder holding a frame log and its _summary.csv" {
+  export XDG_DATA_HOME="$BATS_TEST_TMPDIR/data"
+  run --separate-stderr bash "$SCRIPT" setup
+  [ "$status" -eq 0 ]
+  local dir cmd
+  dir="$(value input.log_dir)"
+  cmd="$(printf '%s\n' "${lines[@]}" | grep ' parse ')"
+  cp "$RUN100" "$dir/Cyberpunk2077_2026-09-30_19-00-00.csv"
+  cp "$SUM100" "$dir/Cyberpunk2077_2026-09-30_19-00-00_summary.csv"
+  run --separate-stderr bash -c "$cmd"
+  [ "$status" -eq 0 ]
+  [ "$(value input.files)" = 1 ]
+  [ "$(value result.game.avg_fps)" = 97.1 ]
+  [ "$(value result.game.low1_fps)" = 25.0 ]
 }
