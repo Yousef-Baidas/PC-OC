@@ -155,3 +155,34 @@ contract_order() {
   [ "$status" -eq 2 ]
   [ ! -e "$BATS_TEST_TMPDIR/calls-curl" ]
 }
+
+@test "compile exits 1 with pc-oc: bench: make defconfig/clean/build failed when make fails" {
+  skip "contract #21 pending"
+  for t in bc flex bison perl cpio openssl; do
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$STUB_DIR/$t"
+  done
+  cat >"$STUB_DIR/make" <<'STUB'
+#!/usr/bin/env bash
+if [ "$1" = --version ]; then echo 'GNU Make 4.4.1'; exit 0; fi
+case " $* " in *" -j"*) exit 2 ;; esac
+exit 0
+STUB
+  chmod +x "$STUB_DIR"/*
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: bench: make"* ]]
+  [[ "$output" != *result.compile.* ]]
+}
+
+@test "compile exits 1 naming bc when bc is missing, before any download" {
+  skip "contract #21 pending"
+  mkdir -p "$BATS_TEST_TMPDIR/nobc"
+  for f in /usr/bin/*; do
+    [ "${f##*/}" = bc ] || ln -s "$f" "$BATS_TEST_TMPDIR/nobc/"
+  done
+  export PATH="$STUB_DIR:$BATS_TEST_TMPDIR/nobc"
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: bench: bc"* ]]
+  [ ! -e "$BATS_TEST_TMPDIR/calls-curl" ]
+}
