@@ -19,15 +19,15 @@ setup() {
   STUB_DIR="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$STUB_DIR"
   write_stubs
-  # build tools the script checks for; fallbacks after the real PATH so the
-  # suite runs on a box without them (the bc-missing case replaces PATH)
+  # build tools the script only checks for: stubbed ahead of the real PATH so
+  # the suite is the same with or without them (the bc-missing case replaces PATH)
   TOOLS_DIR="$BATS_TEST_TMPDIR/tools"
   mkdir -p "$TOOLS_DIR"
   for t in bc flex bison perl cpio openssl; do
     printf '#!/usr/bin/env bash\nexit 0\n' >"$TOOLS_DIR/$t"
   done
   chmod +x "$TOOLS_DIR"/*
-  export PATH="$STUB_DIR:$PATH:$TOOLS_DIR"
+  export PATH="$STUB_DIR:$TOOLS_DIR:$PATH"
 }
 
 # write_stubs: curl copies the fixture tarball; make logs args and cwd, sleeps
