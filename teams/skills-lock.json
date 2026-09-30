@@ -116,6 +116,38 @@
     "two-factor-authentication-best-practices": {
       "source": "better-auth/skills",
       "hash": "1d24faf3ab1f8caf1fc0e461f76a1d414cf330b1eb2d1ffcb90ab45db02ddae9"
+    },
+    "bash-defensive-patterns": {
+      "source": "wshobson/agents",
+      "hash": "37fbe39a01c2f7312ba0aacf5a90cdde44ba6bb18e4301edbae66a0d7d09c635"
+    },
+    "bats-testing-patterns": {
+      "source": "wshobson/agents",
+      "hash": "ead46043ad3d234aa3081a66981d23d6ed68cdc4f4251a549af4a141733e5fce"
+    },
+    "arch-linux-triage": {
+      "source": "github/awesome-copilot",
+      "hash": "012744f7a5a24c3d0913793abee335bf20e9b8c564ff6049aaab9dd98353d81a"
+    },
+    "systemd-services": {
+      "source": "bagelhole/devops-security-agent-skills",
+      "hash": "fabd2d5ef07730986b9ae96bcc35936bade7b5564631bb0749902d8814eaf0ce"
+    },
+    "shellcheck-configuration": {
+      "source": "wshobson/agents",
+      "hash": "acbff48a14170ca46ebb45c3ee7eae8b2e0e5f161a8b541e502f6d05df91056d"
+    },
+    "security-and-hardening": {
+      "source": "addyosmani/agent-skills",
+      "hash": "b5ec48fcf5ff50c72c444942a37d8f5ccfcce6b8f3d01ab9df8bd7cda7707298"
+    },
+    "sharp-edges": {
+      "source": "trailofbits/skills",
+      "hash": "ebee1b56033692edcfa826ffa252a165c4483d6f18fef8d56e08cda03ff12d89"
+    },
+    "writing-runbooks": {
+      "source": "riekelt/technical-writer",
+      "hash": "ecd95fd4c3207cff5935e09c0a12658cceaabe6f11bf35187291ec27e32518f3"
     }
   }
 }
