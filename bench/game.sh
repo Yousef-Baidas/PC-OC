@@ -30,7 +30,7 @@ setup() {
   cat <<TXT
 input.log_dir=$LOG_DIR
 Steam launch options for Cyberpunk 2077 (app $APP_ID, /mnt/games/SteamLibrary):
-  MANGOHUD_CONFIGFILE=$ROOT/bench/mangohud.conf MANGOHUD_CONFIG=output_folder=$LOG_DIR mangohud %command%
+  MANGOHUD_CONFIGFILE=$ROOT/bench/mangohud.conf MANGOHUD_CONFIG=read_cfg,output_folder=$LOG_DIR mangohud %command%
 In game: Settings > Graphics > Run Benchmark. Press Shift_L+F2 when the benchmark starts and again when it ends
 one log per run; do 3 runs, then:
   $ROOT/bench/game.sh parse $LOG_DIR/*.csv
@@ -40,10 +40,12 @@ TXT
 # parse_one <n> <csv>: print "<frames> <avg_fps> <low1_fps> <version>" for one log.
 parse_one() {
   awk -F, '
+    NR == 1 && $0 != "v1" { bad = 1 }
     NR == 2 { ver = $0 }
     body && NF >= 2 && $2 + 0 > 0 { n++; ft[n] = $2 + 0; sum += $2 }
     $1 == "fps" && $2 == "frametime" { body = 1 }
     END {
+      if (bad) exit 4
       if (n == 0) exit 3
       for (i = 1; i <= n; i++) idx[i] = i
       # sort slowest first (insertion sort on ft)
@@ -65,7 +67,7 @@ parse() {
     [ -r "$f" ] || die bench "cannot read $f"
     src+="${src:+,}$(realpath "$f")"
     bytes=$((bytes + $(wc -c <"$f")))
-    res="$(parse_one "$f")" || die bench "no frames in $f"
+    res="$(parse_one "$f")" || die bench "no v1 header or no frames in $f"
     read -r n avg low v <<<"$res"
     [ -z "$ver" ] && ver="$v"
     [ "$v" = "$ver" ] || die bench "mixed MangoHud versions: $ver and $v"

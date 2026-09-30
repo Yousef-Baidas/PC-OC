@@ -85,6 +85,12 @@ contract_order() {
   [[ "$stderr" != *"not implemented"* ]]
 }
 
+@test "parse exits 1 with pc-oc: bench: on a log without the v1 version header" {
+  run --separate-stderr bash "$SCRIPT" parse "$FIX/no-version.csv"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: bench: "* ]]
+}
+
 @test "parse with no files exits 2" {
   run --separate-stderr bash "$SCRIPT" parse
   [ "$status" -eq 2 ]
