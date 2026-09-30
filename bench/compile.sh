@@ -21,6 +21,21 @@ pin_get() {
   printf '%s\n' "$v"
 }
 
+# need <tool> <install hint>: die unless <tool> is on PATH
+need() {
+  command -v "$1" >/dev/null || die bench "$1 not found ($2)"
+}
+
+# the kernel build's own tools; checked before any download
+need make "pacman -S make"
+need gcc "pacman -S gcc"
+need bc "pacman -S bc"
+need flex "pacman -S flex"
+need bison "pacman -S bison"
+need perl "pacman -S perl"
+need cpio "pacman -S cpio"
+need openssl "pacman -S openssl"
+
 version="$(pin_get version)"
 url="$(pin_get url)"
 sha256="$(pin_get sha256)"
@@ -56,12 +71,12 @@ printf 'input.make=%s\n' "$(make --version | head -1)"
 printf 'input.nproc=%s\n' "$jobs"
 printf 'input.runs=%s\n' "$runs"
 
-make defconfig >/dev/null
+make defconfig >/dev/null || die bench "make defconfig failed"
 times=()
 for ((i = 1; i <= runs; i++)); do
-  make clean >/dev/null
+  make clean >/dev/null || die bench "make clean failed"
   start="${EPOCHREALTIME/[.,]/}"
-  make -j"$jobs" >/dev/null
+  make -j"$jobs" >/dev/null || die bench "make -j$jobs failed"
   end="${EPOCHREALTIME/[.,]/}"
   t="$(awk -v d="$((end - start))" 'BEGIN { printf "%.3f", d / 1e6 }')"
   times+=("$t")

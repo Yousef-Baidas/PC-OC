@@ -19,7 +19,15 @@ setup() {
   STUB_DIR="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$STUB_DIR"
   write_stubs
-  export PATH="$STUB_DIR:$PATH"
+  # build tools the script checks for; fallbacks after the real PATH so the
+  # suite runs on a box without them (the bc-missing case replaces PATH)
+  TOOLS_DIR="$BATS_TEST_TMPDIR/tools"
+  mkdir -p "$TOOLS_DIR"
+  for t in bc flex bison perl cpio openssl; do
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$TOOLS_DIR/$t"
+  done
+  chmod +x "$TOOLS_DIR"/*
+  export PATH="$STUB_DIR:$PATH:$TOOLS_DIR"
 }
 
 # write_stubs: curl copies the fixture tarball; make logs args and cwd, sleeps
@@ -157,7 +165,6 @@ contract_order() {
 }
 
 @test "compile exits 1 with pc-oc: bench: make defconfig/clean/build failed when make fails" {
-  skip "contract #21 pending"
   for t in bc flex bison perl cpio openssl; do
     printf '#!/usr/bin/env bash\nexit 0\n' >"$STUB_DIR/$t"
   done
@@ -175,7 +182,6 @@ STUB
 }
 
 @test "compile exits 1 naming bc when bc is missing, before any download" {
-  skip "contract #21 pending"
   mkdir -p "$BATS_TEST_TMPDIR/nobc"
   for f in /usr/bin/*; do
     [ "${f##*/}" = bc ] || ln -s "$f" "$BATS_TEST_TMPDIR/nobc/"
