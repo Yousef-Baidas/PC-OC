@@ -68,3 +68,19 @@ STUB
   [[ "$stderr" == "pc-oc: gpu: "* ]]
   [[ "$stderr" != *"not implemented"* ]]
 }
+
+@test "probe gpu exits 1 with pc-oc: gpu: when nvidia-smi prints two GPU rows" {
+  write_stub 0 "$FIELDS"$'\n'"$FIELDS"
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 1 ]
+  [ "$output" = "" ]
+  [[ "$stderr" == "pc-oc: gpu: "* ]]
+}
+
+@test "probe gpu exits 1 with pc-oc: gpu: when power.limit is [N/A]" {
+  write_stub 0 'NVIDIA GeForce RTX 4060 Ti, 615.71.09, 95.06.1A.00.01, [N/A], 160.00, 100.00, 216.00, 3105, 9001'
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 1 ]
+  [ "$output" = "" ]
+  [[ "$stderr" == "pc-oc: gpu: "* ]]
+}
