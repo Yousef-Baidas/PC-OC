@@ -76,3 +76,17 @@ EOF
   [ "$output" = "" ]
   [ "$stderr" = "pc-oc: cpu: apply.sh failed" ]
 }
+
+@test "a bash earlier on the caller's PATH never runs, for pc-oc or a component" {
+  fake_component cpu probe
+  fake_component cpu apply
+  mkdir -p "$BATS_TEST_TMPDIR/evil"
+  printf '#!/bin/sh\necho "fake bash ran: $*"\nexit 99\n' >"$BATS_TEST_TMPDIR/evil/bash"
+  chmod +x "$BATS_TEST_TMPDIR/evil/bash"
+  PATH="$BATS_TEST_TMPDIR/evil:$PATH" run "$root/pc-oc" probe cpu
+  [ "$status" -eq 0 ]
+  [ "$output" = "probe cpu SYSFS_ROOT=$SYSFS_ROOT" ]
+  PATH="$BATS_TEST_TMPDIR/evil:$PATH" run "$root/pc-oc" apply all
+  [ "$status" -eq 0 ]
+  [ "$output" = "apply cpu SYSFS_ROOT=$SYSFS_ROOT" ]
+}

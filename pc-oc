@@ -1,8 +1,12 @@
-#!/usr/bin/env bash
+#!/usr/bin/bash
 set -euo pipefail
 # pc-oc apply|revert|probe <component>|all
 # Runs <component>/<verb>.sh next to this file. Only names in the list below run,
 # so an argument can never point sudo at a path outside the install.
+
+# sudo can pass the caller's PATH through; look commands up only in root-owned
+# /usr/bin, so a user-writable dir on PATH cannot supply bash (docs/adr/0001)
+export PATH=/usr/bin
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
