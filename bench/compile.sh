@@ -13,10 +13,13 @@ if [[ ! "$runs" =~ ^[0-9]+$ ]] || [ "$runs" -lt 1 ]; then
   exit 2
 fi
 
+# read here, not in pin_get: its $(…) callers run it without errexit
+pin="$(<"$here/kernel.pin")" || die bench "kernel.pin: unreadable"
+
 # pin_get <key>: value of key= in kernel.pin
 pin_get() {
   local v
-  v="$(sed -n "s/^$1=//p" "$here/kernel.pin")" || die bench "kernel.pin: unreadable"
+  v="$(sed -n "s/^$1=//p" <<<"$pin")"
   [ -n "$v" ] || die bench "kernel.pin: missing $1"
   printf '%s\n' "$v"
 }
@@ -44,12 +47,12 @@ cache="${XDG_CACHE_HOME:-$HOME/.cache}/pc-oc"
 mkdir -p "$cache" || die bench "cannot create $cache"
 tarball="$cache/${url##*/}"
 [ -s "$tarball" ] || curl -fsSL -o "$tarball" "$url" || {
-  rm -f "$tarball"
+  rm -f "$tarball" || :
   die bench "download failed: $url"
 }
 got="$(sha256sum <"$tarball" | cut -d' ' -f1)" || die bench "sha256sum failed: $tarball"
 if [ "$got" != "$sha256" ]; then
-  rm -f "$tarball"
+  rm -f "$tarball" || :
   die bench "sha256 mismatch: want $sha256 got $got"
 fi
 
@@ -76,7 +79,7 @@ times=()
 for ((i = 1; i <= runs; i++)); do
   make clean >/dev/null || die bench "make clean failed"
   start="${EPOCHREALTIME/[.,]/}"
-  make -j"$jobs" >/dev/null || die bench "make -j$jobs failed"
+  make -j"$jobs" >/dev/null || die bench "make build failed: -j$jobs"
   end="${EPOCHREALTIME/[.,]/}"
   t="$(awk -v d="$((end - start))" 'BEGIN { printf "%.3f", d / 1e6 }')"
   times+=("$t")
