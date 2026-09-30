@@ -1,0 +1,8 @@
+2026-09-30T21:04:10+03:00 cachyos kernel: NVRM: loading NVIDIA UNIX Open Kernel Module for x86_64  580.95.05  Release Build  (archlinux@cachyos)
+2026-09-30T21:04:10+03:00 cachyos kernel: nvidia-modeset: Loading NVIDIA UNIX Open Kernel Mode Setting Driver for x86_64  580.95.05
+2026-09-30T21:04:11+03:00 cachyos kernel: NVRM: GPU at PCI:0000:01:00: GPU-3f2a6c1e-9b1d-4c55-a2f0-7d8e1b2c3a4f
+2026-09-30T21:05:02+03:00 cachyos kernel: NVRM: Xid (PCI:0000:01:00): 79, pid=1234, GPU has fallen off the bus.
+2026-09-30T21:05:03+03:00 cachyos kernel: NVRM: Xid (PCI:0000:01:00): 154, GPU recovery action changed from 0x0 (None) to 0x1 (GPU Reset Required)
+2026-09-30T21:05:04+03:00 cachyos kernel: mce: [Hardware Error]: Machine check events logged
+2026-09-30T21:04:15+03:00 cachyos kernel: nvidia 0000:01:00.0: vgaarb: VGA decodes changed: olddecodes=io+mem,decodes=none:owns=io+mem
+2026-09-30T21:04:16+03:00 cachyos kernel: x86/split lock detection: #AC: crashing the kernel on kernel split_locks and warning on user-space split_locks
