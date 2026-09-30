@@ -3,7 +3,6 @@
 bats_require_minimum_version 1.5.0
 
 setup() {
-  skip "contract #11 pending"
   FIX="$BATS_TEST_DIRNAME/fixtures/compile"
   TARBALL="$FIX/linux-6.12.1.tar.xz"
   SHA=a946d1c9838a530316717e3827dc1fc4f8d8a6b202316ae570c1282ee9574cfc
