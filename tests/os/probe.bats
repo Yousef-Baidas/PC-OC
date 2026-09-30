@@ -3,7 +3,6 @@
 bats_require_minimum_version 1.5.0
 
 setup() {
-  skip "contract #10 pending"
   export SYSFS_ROOT="$BATS_TEST_TMPDIR/root"
   PROBE="$BATS_TEST_DIRNAME/../../os/probe.sh"
   mkdir -p "$SYSFS_ROOT/proc/sys/kernel" "$SYSFS_ROOT/proc/sys/vm"
