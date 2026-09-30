@@ -14,12 +14,21 @@ setup() {
   cp "$FIX/kernel.pin" "$REPO/bench/"
   SCRIPT="$REPO/bench/compile.sh"
   export XDG_CACHE_HOME="$BATS_TEST_TMPDIR/cache"
+  CACHE="$XDG_CACHE_HOME/pc-oc"
   export TMPDIR="$BATS_TEST_TMPDIR/tmp"
   mkdir -p "$TMPDIR"
   STUB_DIR="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$STUB_DIR"
   write_stubs
-  export PATH="$STUB_DIR:$PATH"
+  # build tools the script only checks for: stubbed ahead of the real PATH so
+  # the suite is the same with or without them (the bc-missing case replaces PATH)
+  TOOLS_DIR="$BATS_TEST_TMPDIR/tools"
+  mkdir -p "$TOOLS_DIR"
+  for t in bc flex bison perl cpio openssl; do
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$TOOLS_DIR/$t"
+  done
+  chmod +x "$TOOLS_DIR"/*
+  export PATH="$STUB_DIR:$TOOLS_DIR:$PATH"
 }
 
 # write_stubs: curl copies the fixture tarball; make logs args and cwd, sleeps
@@ -157,7 +166,6 @@ contract_order() {
 }
 
 @test "compile exits 1 with pc-oc: bench: make defconfig/clean/build failed when make fails" {
-  skip "contract #21 pending"
   for t in bc flex bison perl cpio openssl; do
     printf '#!/usr/bin/env bash\nexit 0\n' >"$STUB_DIR/$t"
   done
@@ -175,7 +183,6 @@ STUB
 }
 
 @test "compile exits 1 naming bc when bc is missing, before any download" {
-  skip "contract #21 pending"
   mkdir -p "$BATS_TEST_TMPDIR/nobc"
   for f in /usr/bin/*; do
     [ "${f##*/}" = bc ] || ln -s "$f" "$BATS_TEST_TMPDIR/nobc/"
@@ -185,4 +192,181 @@ STUB
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"pc-oc: bench: bc"* ]]
   [ ! -e "$BATS_TEST_TMPDIR/calls-curl" ]
+}
+
+@test "compile names the failing make target for defconfig and clean too" {
+  for t in defconfig clean; do
+    cat >"$STUB_DIR/make" <<STUB
+#!/usr/bin/env bash
+if [ "\$1" = --version ]; then echo 'GNU Make 4.4.1'; exit 0; fi
+[ "\$1" = $t ] && exit 2
+exit 0
+STUB
+    run --separate-stderr bash "$SCRIPT" 1
+    [ "$status" -eq 1 ]
+    [[ "$stderr" == "pc-oc: bench: make $t failed"* ]]
+    [[ "$output" != *result.compile.* ]]
+  done
+}
+
+# stub_tar <fail-flag>: tar that exits 2 when its first argument is -<flag>f, else real tar
+stub_tar() {
+  cat >"$STUB_DIR/tar" <<STUB
+#!/usr/bin/env bash
+[ "\$1" = -$1f ] && exit 2
+exec /usr/bin/tar "\$@"
+STUB
+  chmod +x "$STUB_DIR/tar"
+}
+
+@test "compile exits 1 with pc-oc: bench: tar when extraction fails" {
+  stub_tar x
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: bench: tar"* ]]
+  [[ "$output" != *result.compile.* ]]
+  [ -z "$(find "$TMPDIR" -mindepth 1)" ]
+}
+
+@test "compile exits 1 with pc-oc: bench: tar when listing fails" {
+  stub_tar t
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: bench: tar"* ]]
+  [[ "$output" != *result.compile.* ]]
+}
+
+@test "compile exits 1 with pc-oc: bench: when the cache dir cannot be created" {
+  : >"$BATS_TEST_TMPDIR/file"
+  export XDG_CACHE_HOME="$BATS_TEST_TMPDIR/file"
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: bench: cannot create"* ]]
+  [ ! -e "$BATS_TEST_TMPDIR/calls-curl" ]
+}
+
+@test "compile exits 1 with pc-oc: bench: mktemp when TMPDIR is missing" {
+  export TMPDIR="$BATS_TEST_TMPDIR/nonexistent"
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: bench: mktemp"* ]]
+  [[ "$output" != *result.compile.* ]]
+}
+
+@test "compile exits 1 with pc-oc: bench: when kernel.pin is missing" {
+  rm "$REPO/bench/kernel.pin"
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [ "${stderr_lines[-1]}" = "pc-oc: bench: kernel.pin: unreadable" ]
+}
+
+# the cases below chmod dirs read-only; hand them back so bats can clean up
+teardown() {
+  chmod -R u+rwX "$BATS_TEST_TMPDIR" 2>/dev/null || :
+}
+
+# need_non_root: root ignores the dir permissions these cases rely on
+need_non_root() {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores dir permissions"
+}
+
+# seed_tarball <dir> <entry> [tar-opt...]: cache a tarball of <dir>/<entry>
+# under the pinned name and pin its sha256
+seed_tarball() {
+  local cached="$CACHE/linux-6.12.1.tar.xz"
+  mkdir -p "${cached%/*}"
+  tar -C "$1" "${@:3}" -cJf "$cached" "$2"
+  sed -i "s/^sha256=.*/sha256=$(sha256sum <"$cached" | cut -d' ' -f1)/" "$REPO/bench/kernel.pin"
+}
+
+@test "compile exits 1 naming the key when kernel.pin lacks one, before any download" {
+  sed -i '/^sha256=/d' "$REPO/bench/kernel.pin"
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [ "$stderr" = "pc-oc: bench: kernel.pin: missing sha256" ]
+  [ ! -e "$BATS_TEST_TMPDIR/calls-curl" ]
+}
+
+@test "compile exits 1 with pc-oc: bench: make build failed when the build fails" {
+  cat >"$STUB_DIR/make" <<'STUB'
+#!/usr/bin/env bash
+if [ "$1" = --version ]; then echo 'GNU Make 4.4.1'; exit 0; fi
+case "$1" in -j*) exit 2 ;; esac
+exit 0
+STUB
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: bench: make build failed"* ]]
+  [[ "$output" != *result.compile.* ]]
+}
+
+@test "compile exits 1 with pc-oc: bench: download failed when the partial file cannot be removed" {
+  need_non_root
+  cat >"$STUB_DIR/curl" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"$BATS_TEST_TMPDIR/calls-curl"
+echo partial >"$CACHE/linux-6.12.1.tar.xz"
+chmod 555 "$CACHE"
+exit 22
+STUB
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [ "${stderr_lines[-1]}" = "pc-oc: bench: download failed: https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.xz" ]
+  [ ! -e "$BATS_TEST_TMPDIR/calls-make" ]
+}
+
+@test "compile exits 1 with pc-oc: bench: sha256 mismatch when the cache dir is read-only" {
+  need_non_root
+  mkdir -p "$CACHE"
+  echo wrong >"$CACHE/linux-6.12.1.tar.xz"
+  chmod 555 "$CACHE"
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "${stderr_lines[-1]}" == "pc-oc: bench: sha256 mismatch"* ]]
+  [ ! -e "$BATS_TEST_TMPDIR/calls-curl" ]
+  [ ! -e "$BATS_TEST_TMPDIR/calls-make" ]
+}
+
+@test "compile exits 1 with pc-oc: bench: sha256sum failed when the cached tarball is unreadable" {
+  need_non_root
+  mkdir -p "$CACHE"
+  cp "$TARBALL" "$CACHE/"
+  chmod 000 "$CACHE/linux-6.12.1.tar.xz"
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "${stderr_lines[-1]}" == "pc-oc: bench: sha256sum failed"* ]]
+  [ ! -e "$BATS_TEST_TMPDIR/calls-make" ]
+}
+
+@test "compile exits 1 with pc-oc: bench: cannot read when the tarball size fails" {
+  cat >"$STUB_DIR/wc" <<'STUB'
+#!/usr/bin/env bash
+[ "$1" = -c ] && exit 1
+exec /usr/bin/wc "$@"
+STUB
+  chmod +x "$STUB_DIR/wc"
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: bench: cannot read"* ]]
+  [[ "$output" != *result.compile.* ]]
+}
+
+@test "compile exits 1 with pc-oc: bench: when the tarball has no top directory" {
+  mkdir -p "$BATS_TEST_TMPDIR/flat"
+  : >"$BATS_TEST_TMPDIR/flat/Makefile"
+  seed_tarball "$BATS_TEST_TMPDIR/flat" Makefile
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [ "$stderr" = "pc-oc: bench: tarball has no top directory" ]
+  [ ! -e "$BATS_TEST_TMPDIR/calls-make" ]
+}
+
+@test "compile exits 1 with pc-oc: bench: cannot enter when the top directory is closed" {
+  need_non_root
+  mkdir -p "$BATS_TEST_TMPDIR/closed/linux-6.12.1"
+  seed_tarball "$BATS_TEST_TMPDIR/closed" linux-6.12.1 --mode=000
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "${stderr_lines[-1]}" == "pc-oc: bench: cannot enter"* ]]
+  [ ! -e "$BATS_TEST_TMPDIR/calls-make" ]
 }
