@@ -207,3 +207,54 @@ STUB
     [[ "$output" != *result.compile.* ]]
   done
 }
+
+# stub_tar <fail-flag>: tar that exits 2 when its first argument is -<flag>f, else real tar
+stub_tar() {
+  cat >"$STUB_DIR/tar" <<STUB
+#!/usr/bin/env bash
+[ "\$1" = -$1f ] && exit 2
+exec /usr/bin/tar "\$@"
+STUB
+  chmod +x "$STUB_DIR/tar"
+}
+
+@test "compile exits 1 with pc-oc: bench: tar when extraction fails" {
+  stub_tar x
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: bench: tar"* ]]
+  [[ "$output" != *result.compile.* ]]
+  [ -z "$(find "$TMPDIR" -mindepth 1)" ]
+}
+
+@test "compile exits 1 with pc-oc: bench: tar when listing fails" {
+  stub_tar t
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: bench: tar"* ]]
+  [[ "$output" != *result.compile.* ]]
+}
+
+@test "compile exits 1 with pc-oc: bench: when the cache dir cannot be created" {
+  : >"$BATS_TEST_TMPDIR/file"
+  export XDG_CACHE_HOME="$BATS_TEST_TMPDIR/file"
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: bench: cannot create"* ]]
+  [ ! -e "$BATS_TEST_TMPDIR/calls-curl" ]
+}
+
+@test "compile exits 1 with pc-oc: bench: mktemp when TMPDIR is missing" {
+  export TMPDIR="$BATS_TEST_TMPDIR/nonexistent"
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: bench: mktemp"* ]]
+  [[ "$output" != *result.compile.* ]]
+}
+
+@test "compile exits 1 with pc-oc: bench: when kernel.pin is missing" {
+  rm "$REPO/bench/kernel.pin"
+  run --separate-stderr bash "$SCRIPT" 1
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: bench: kernel.pin"* ]]
+}

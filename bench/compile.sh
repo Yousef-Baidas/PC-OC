@@ -16,7 +16,7 @@ fi
 # pin_get <key>: value of key= in kernel.pin
 pin_get() {
   local v
-  v="$(sed -n "s/^$1=//p" "$here/kernel.pin")"
+  v="$(sed -n "s/^$1=//p" "$here/kernel.pin")" || die bench "kernel.pin: unreadable"
   [ -n "$v" ] || die bench "kernel.pin: missing $1"
   printf '%s\n' "$v"
 }
@@ -41,26 +41,26 @@ url="$(pin_get url)"
 sha256="$(pin_get sha256)"
 
 cache="${XDG_CACHE_HOME:-$HOME/.cache}/pc-oc"
-mkdir -p "$cache"
+mkdir -p "$cache" || die bench "cannot create $cache"
 tarball="$cache/${url##*/}"
 [ -s "$tarball" ] || curl -fsSL -o "$tarball" "$url" || {
   rm -f "$tarball"
   die bench "download failed: $url"
 }
-got="$(sha256sum <"$tarball" | cut -d' ' -f1)"
+got="$(sha256sum <"$tarball" | cut -d' ' -f1)" || die bench "sha256sum failed: $tarball"
 if [ "$got" != "$sha256" ]; then
   rm -f "$tarball"
   die bench "sha256 mismatch: want $sha256 got $got"
 fi
 
-work="$(mktemp -d)"
+work="$(mktemp -d)" || die bench "mktemp failed"
 trap 'rm -rf "$work"' EXIT
-items="$(tar -tf "$tarball" | wc -l)"
-bytes="$(wc -c <"$tarball")"
-tar -xf "$tarball" -C "$work"
+items="$(tar -tf "$tarball" | wc -l)" || die bench "tar list failed: $tarball"
+bytes="$(wc -c <"$tarball")" || die bench "cannot read $tarball"
+tar -xf "$tarball" -C "$work" || die bench "tar extract failed: $tarball"
 srcdir="$(find "$work" -mindepth 1 -maxdepth 1 -type d | head -1)"
 [ -n "$srcdir" ] || die bench "tarball has no top directory"
-cd "$srcdir"
+cd "$srcdir" || die bench "cannot enter $srcdir"
 
 jobs="$(nproc)"
 printf 'input.source=%s bytes=%s items=%s\n' "$tarball" "$bytes" "$items"
