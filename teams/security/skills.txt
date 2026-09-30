@@ -1,0 +1,4 @@
+# <owner/repo> <skill-name> per line; human-approved roster, run oc-max.
+addyosmani/agent-skills security-and-hardening
+trailofbits/skills sharp-edges
+wshobson/agents bash-defensive-patterns

@@ -1,0 +1,3 @@
+# skill links are machine-local; each teammate runs install.sh --project
+*/.claude/skills/
+*/.agents/skills/

@@ -1,0 +1,3 @@
+# <owner/repo> <skill-name> per line; human-approved roster, run oc-max.
+wshobson/agents shellcheck-configuration
+wshobson/agents bats-testing-patterns

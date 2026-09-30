@@ -1,0 +1,2 @@
+# pipeline-required; not the scout's to change. <owner/repo> <skill-name> per line.
+cursor/plugins thermo-nuclear-code-quality-review

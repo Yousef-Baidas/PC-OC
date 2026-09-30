@@ -1,0 +1,5 @@
+# <owner/repo> <skill-name> per line; human-approved roster, run oc-max.
+wshobson/agents bash-defensive-patterns
+wshobson/agents bats-testing-patterns
+github/awesome-copilot arch-linux-triage
+bagelhole/devops-security-agent-skills systemd-services

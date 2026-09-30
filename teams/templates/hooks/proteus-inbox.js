@@ -1,0 +1,25 @@
+#!/usr/bin/env node
+// The human's inbox: open needs-human issues, split into questions (proteus-question) and
+// reviews (proteus-review), cached in <git-common-dir>/proteus/inbox.json.
+//   node .claude/hooks/proteus-inbox.js            one line per item, from the cache
+//   node .claude/hooks/proteus-inbox.js --refresh  query gh, rewrite the cache, then print
+//   node .claude/hooks/proteus-inbox.js --count    "<questions> <reviews>"
+// gh failing keeps the old cache; always exits 0.
+"use strict";
+const path = require("path");
+const lib = require(path.join(__dirname, "proteus-lib.js"));
+
+try {
+  const args = process.argv.slice(2);
+  // run from anywhere: the repo is the one this script is installed in, else the cwd
+  const here = path.resolve(__dirname, "..", "..");
+  const root = lib.gitCommonDir(here) ? here : path.resolve(lib.projectRoot());
+  const common = lib.gitCommonDir(root);
+  if (!common) return;
+  const inbox = (args.includes("--refresh") && lib.refreshInbox(root, common)) || lib.readInbox(common);
+  if (args.includes("--count")) console.log(inbox ? `${inbox.questions.length} ${inbox.reviews.length}` : "0 0");
+  else if (!inbox) console.log("inbox: no cache (gh unreachable?)");
+  else if (!inbox.questions.length && !inbox.reviews.length) console.log(`inbox: empty (as of ${inbox.at})`);
+  else for (const [tag, list] of [["question", inbox.questions], ["review", inbox.reviews]]) for (const i of list) console.log(`${tag} #${i.n} ${i.title}`);
+} catch {}
+// no process.exit: it can drop a piped stdout that has not drained yet

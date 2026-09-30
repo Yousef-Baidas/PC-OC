@@ -1,0 +1,20 @@
+# lefthook (https://lefthook.dev). Installed by the Proteus scaffold ticket.
+# Replace the EDIT lines with the gate commands recorded in AGENTS.md ## Learned.
+commit-msg:
+  commands:
+    conventional:
+      # committed with teams/, so every CLI and every clone has it (.claude/ and .codex/ hooks are machine-local)
+      run: node teams/templates/hooks/commit-msg.js {1}
+
+pre-commit:
+  parallel: true
+  commands:
+    typecheck:
+      run: echo EDIT-typecheck   # e.g. npx tsc --noEmit | uv run mypy . | cargo check
+    lint:
+      run: echo EDIT-lint        # e.g. npx eslint {staged_files} | ruff check | cargo clippy -- -D warnings
+
+pre-push:
+  commands:
+    test:
+      run: echo EDIT-test        # e.g. npx vitest run | uv run pytest -q | cargo test

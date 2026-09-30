@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "skills": {
+    "modern-javascript-patterns": {
+      "source": "wshobson/agents",
+      "hash": "c7fdc3071f8b7c77e6426ba15da48829a738df126d2228b8e14cb64d374156fb"
+    },
+    "sql-optimization": {
+      "source": "github/awesome-copilot",
+      "hash": "284631f7bf93644857fc1ccbc93d8df6562469f2956d68cd6e925661a2a19f4f"
+    },
+    "sql-code-review": {
+      "source": "github/awesome-copilot",
+      "hash": "990fbcb6d3808c98985656ff984e57d607091f98af30e7c495cc6f7baf1f1ce4"
+    },
+    "better-auth-best-practices": {
+      "source": "better-auth/skills",
+      "hash": "f24979a54cb652529c17534616633a531208e5edac32144d15dfece3595b6e37"
+    },
+    "email-and-password-best-practices": {
+      "source": "better-auth/skills",
+      "hash": "2e3b0091004db30c068b3895fd4929e30c9d71cb3f0f598fa340b7b4cc29d1ee"
+    },
+    "organization-best-practices": {
+      "source": "better-auth/skills",
+      "hash": "dccf074369d44b7f9ffc5b375589f4ca9557dd96fc393353e9f6efdb5c97ca9f"
+    },
+    "rust-best-practices": {
+      "source": "apollographql/skills",
+      "hash": "b5b059b980e1bfbc6e8c23041b2503da303a718b6d9a254b170d65bd7549ddbf"
+    },
+    "rust-async-patterns": {
+      "source": "wshobson/agents",
+      "hash": "97d31d6afc0b28839afd8758e54c2ea3223ad94d15af223c431715f2ffe8989f"
+    },
+    "m15-anti-pattern": {
+      "source": "actionbook/rust-skills",
+      "hash": "e1c4faa0dee92f4334306fa07c0dfaa5708e735ecfdb7678118fd4df1ebba211"
+    },
+    "python-performance-optimization": {
+      "source": "wshobson/agents",
+      "hash": "68702104c6aa371ba28af165db1ab14d95dce320334ed337d0057dbfa8c40251"
+    },
+    "install-anti-slop": {
+      "source": "dmmulroy/anti-slop",
+      "hash": "3d130483265111efd1464bff63d03ad451ff813cc157d185374cdbedb4f9607d"
+    },
+    "multi-stage-dockerfile": {
+      "source": "github/awesome-copilot",
+      "hash": "6ab1ed0d7a7b94ccfa5fcbad4aff631383f178c783d0e647becd1e8ac0fad78d"
+    },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "hash": "537c1df9d0c694ecf9139a911f9ad0bd111a7ebc173a55457568459e543fe75b"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "hash": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474"
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "hash": "e3f2294574b469c7c198373a443a86571012769d0bbeed68854bd55642ec0d7b"
+    },
+    "impeccable": {
+      "source": "pbakaus/impeccable",
+      "hash": "74699d36f61ff178fd8d8eee7618797ab4c2daf9b801ccb876705f7c37c2efde"
+    },
+    "ui-ux-pro-max": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "hash": "cd1c41ddbed193e2722b9f61438bdf9d0c1fc3c290a07129c1b2b7f86a71e47d"
+    },
+    "shadcn": {
+      "source": "shadcn/ui",
+      "hash": "cedbd043df26eca8883859bd2da673e2192ab8c24ed0d41b944fd4819aa8a970"
+    },
+    "gsap-core": {
+      "source": "greensock/gsap-skills",
+      "hash": "54ea04b61bcdfe19bf09620f032a801c3ff11fdde2fd9270e7f7a5f484cdd8f5"
+    },
+    "gsap-react": {
+      "source": "greensock/gsap-skills",
+      "hash": "462bf98687e2e404b99e6eb319c389427e91261b02887a2e99989d58c94dfe5f"
+    },
+    "svelte-code-writer": {
+      "source": "sveltejs/ai-tools",
+      "hash": "9de149d0962f92a69d113860abb15e90121aac6b5cf36f172c7fbc9ec434fbde"
+    },
+    "astro": {
+      "source": "astrolicious/agent-skills",
+      "hash": "5740d97b167c9359771d56ca98bc31956f9264286a7fe6a64c24f6619ae27d26"
+    },
+    "thermo-nuclear-code-quality-review": {
+      "source": "cursor/plugins",
+      "hash": "1bb59994582195f4e209546efe5f9fc5d05d6f19c91d5b18048d0f2186a4fbd2"
+    },
+    "playwright-cli": {
+      "source": "microsoft/playwright-cli",
+      "hash": "657677c0087f56488b3773c0c8744cfba5ffab483be02337c1434b798081fcb6"
+    },
+    "playwright-best-practices": {
+      "source": "currents-dev/playwright-best-practices-skill",
+      "hash": "1c0a686422dfa63861fbcf36145c3df18e8e5b1694711cb8123be99603dda0b1"
+    },
+    "javascript-typescript-jest": {
+      "source": "github/awesome-copilot",
+      "hash": "bc2f026724127b395e5fe517a45bd415d810f1cdc43a700563d297cee74e2309"
+    },
+    "python-testing-patterns": {
+      "source": "wshobson/agents",
+      "hash": "22d53be9812ee5f69e91bf38dd0a9605245294a1c4dff8aec37c42ba23310f71"
+    },
+    "rust-testing": {
+      "source": "affaan-m/ecc",
+      "hash": "6443f1c19686397ae9e85ae2cb4e527cf049085538a50bc12e78c3c67e73807d"
+    },
+    "two-factor-authentication-best-practices": {
+      "source": "better-auth/skills",
+      "hash": "1d24faf3ab1f8caf1fc0e461f76a1d414cf330b1eb2d1ffcb90ab45db02ddae9"
+    }
+  }
+}
