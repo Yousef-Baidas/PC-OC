@@ -16,5 +16,6 @@ Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agent
 - Work to CONVENTIONS.md. Verifier fails the ticket on a deviation.
 - Tracker: github. labels: created. labels: proteus. (profile:<team> labels added once the roster is approved.)
 - Gate commands: `checks/gates.sh` (shellcheck, shfmt -d -i 2 -ci, bats -r tests/). Set by the scaffold ticket #3.
-- protection: none. GitHub Actions does not run on this repo (billing failure on 2026-09-30), so the `gates` check never reports. Gates are prompt-enforced: every verifier runs `checks/gates.sh` itself.
+- CI runs on the PC, never GitHub Actions (ADR 0002). `checks/ci.sh <pr>` runs the gates on the PR head and posts the `gates` commit status that `gh pr checks` shows. Run it after every worker push and before every verdict; no `gates` status on a PR means CI has not run, never green.
+- protection: none. Private repo on a free plan, so GitHub cannot require the `gates` check; the lead merges only when `gates` is `success` on the PR head.
 - BIOS changes are made by the human from `bios/` runbooks; agents never claim a BIOS setting is applied without a human-reported reading.
