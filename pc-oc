@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# pc-oc apply|revert|probe <component>|all
+# Runs <component>/<verb>.sh next to this file. Only names in the list below run,
+# so an argument can never point sudo at a path outside the install.
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+components=(cpu ram gpu os toolchain)
+
+usage() {
+  echo "usage: pc-oc apply|revert|probe <component>|all (components: ${components[*]})" >&2
+  exit 2
+}
+
+[[ $# -eq 2 ]] || usage
+verb="$1"
+target="$2"
+case "$verb" in
+  apply | revert | probe) ;;
+  *) usage ;;
+esac
+
+if [[ "$target" == all ]]; then
+  for c in "${components[@]}"; do
+    if [[ -f "$here/$c/$verb.sh" ]]; then
+      bash "$here/$c/$verb.sh"
+    fi
+  done
+  exit 0
+fi
+
+for c in "${components[@]}"; do
+  if [[ "$c" == "$target" && -f "$here/$c/$verb.sh" ]]; then
+    exec bash "$here/$c/$verb.sh"
+  fi
+done
+usage

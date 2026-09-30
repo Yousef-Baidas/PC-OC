@@ -1,0 +1,11 @@
+# lefthook (https://lefthook.dev). Installed by the Proteus scaffold ticket.
+commit-msg:
+  commands:
+    conventional:
+      # committed with teams/, so every CLI and every clone has it (.claude/ and .codex/ hooks are machine-local)
+      run: node teams/templates/hooks/commit-msg.js {1}
+
+pre-commit:
+  commands:
+    gates:
+      run: checks/gates.sh
