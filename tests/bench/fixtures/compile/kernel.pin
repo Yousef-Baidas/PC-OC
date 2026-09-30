@@ -1,0 +1,4 @@
+version=6.12.1
+url=https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.xz
+sha256=a946d1c9838a530316717e3827dc1fc4f8d8a6b202316ae570c1282ee9574cfc
+source=https://cdn.kernel.org/pub/linux/kernel/v6.x/sha256sums.asc
