@@ -1,0 +1,3 @@
+# Default severity (style): every finding fails the gate.
+# Resolve `source` paths relative to the sourcing script.
+source-path=SCRIPTDIR
