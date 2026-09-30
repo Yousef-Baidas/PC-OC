@@ -100,3 +100,52 @@ DMI
   [ "$status" -eq 0 ]
   [[ "$output" == *$'\nram.dmi=needs-root' ]]
 }
+
+# stub_dmi: make the dmidecode stub print stdin.
+stub_dmi() {
+  {
+    printf '#!/bin/sh\ncat <<'"'"'OUT'"'"'\n'
+    cat
+    printf 'OUT\n'
+  } >"$BATS_TEST_TMPDIR/bin/dmidecode"
+}
+
+@test "probe ram as root exits 1 when a populated slot has Unknown speed and voltage" {
+  stub_root 0
+  stub_dmi <<'DMI'
+Memory Device
+	Size: 16 GB
+	Speed: Unknown
+	Part Number: KF560C40-16
+	Configured Memory Speed: Unknown
+	Configured Voltage: Unknown
+DMI
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 1 ]
+  [ "$output" = "" ]
+  [[ "$stderr" == "pc-oc: ram: "*ram.dimm0.speed_mts* ]]
+}
+
+@test "probe ram as root exits 1 when a populated slot lacks a part number" {
+  stub_root 0
+  stub_dmi <<'DMI'
+Memory Device
+	Size: 16 GB
+	Speed: 5600 MT/s
+	Configured Memory Speed: 5600 MT/s
+	Configured Voltage: 1.250 V
+DMI
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: ram: "*ram.dimm0.part ]]
+}
+
+@test "probe ram as root exits 1 when dmidecode lists no populated DIMM" {
+  stub_root 0
+  stub_dmi <<'DMI'
+# dmidecode 3.6
+DMI
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 1 ]
+  [ "$stderr" = "pc-oc: ram: no populated DIMM in dmidecode -t 17" ]
+}
