@@ -30,7 +30,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
         if (size != "" && size !~ /No Module/) {
           if (speed !~ /^[0-9]+$/) bad("speed_mts")
           else if (cfg !~ /^[0-9]+$/) bad("configured_mts")
-          else if (part == "" || part == "Unknown") bad("part")
+          else if (part == "" || part == "Unknown" || part == "Not Specified") bad("part")
           else if (mv !~ /^[0-9]+$/) bad("configured_mv")
           printf "ram.dimm%d.speed_mts=%s\nram.dimm%d.configured_mts=%s\nram.dimm%d.part=%s\nram.dimm%d.configured_mv=%s\n",
             n, speed, n, cfg, n, part, n, mv
@@ -46,9 +46,8 @@ if [[ "$(id -u)" -eq 0 ]]; then
       $1 ~ /^\tConfigured Voltage$/ { mv = num($2) == "" ? "" : int(num($2) * 1000 + 0.5) }
       END { if (!failed) flush() }
     ' <<<"$dump"
-  )" || true
+  )" || die ram "populated slot has a missing or non-numeric value: ${dimms##*ERR }"
   [[ -n "$dimms" ]] || die ram "no populated DIMM in dmidecode -t 17"
-  [[ "$dimms" != ERR* ]] || die ram "populated slot has a missing or non-numeric value: ${dimms#ERR }"
   out="$out"$'\n'"$dimms"
 else
   out="$out"$'\nram.dmi=needs-root'

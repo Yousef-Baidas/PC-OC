@@ -126,18 +126,43 @@ DMI
   [[ "$stderr" == "pc-oc: ram: "*ram.dimm0.speed_mts* ]]
 }
 
-@test "probe ram as root exits 1 when a populated slot lacks a part number" {
+@test "probe ram as root exits 1 when a populated slot's part number is Not Specified" {
   stub_root 0
   stub_dmi <<'DMI'
 Memory Device
 	Size: 16 GB
 	Speed: 5600 MT/s
+	Part Number: Not Specified
 	Configured Memory Speed: 5600 MT/s
 	Configured Voltage: 1.250 V
 DMI
   run --separate-stderr bash "$PROBE"
   [ "$status" -eq 1 ]
+  [ "$output" = "" ]
   [[ "$stderr" == "pc-oc: ram: "*ram.dimm0.part ]]
+}
+
+@test "probe ram as root exits 1 when a slot after a valid one has Unknown values" {
+  stub_root 0
+  stub_dmi <<'DMI'
+Memory Device
+	Size: 16 GB
+	Speed: 5600 MT/s
+	Part Number: KF560C40-16
+	Configured Memory Speed: 5600 MT/s
+	Configured Voltage: 1.250 V
+
+Memory Device
+	Size: 16 GB
+	Speed: Unknown
+	Part Number: KF560C40-16
+	Configured Memory Speed: Unknown
+	Configured Voltage: Unknown
+DMI
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 1 ]
+  [ "$output" = "" ]
+  [[ "$stderr" == "pc-oc: ram: "*ram.dimm1.speed_mts ]]
 }
 
 @test "probe ram as root exits 1 when dmidecode lists no populated DIMM" {
