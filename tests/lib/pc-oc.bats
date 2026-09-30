@@ -2,11 +2,12 @@
 
 bats_require_minimum_version 1.5.0
 
-# Each test runs a copy of pc-oc so fake component folders stay out of the repo.
+# Each test runs a copy of pc-oc and lib/ so fake component folders stay out of the repo.
 setup() {
   root="$BATS_TEST_TMPDIR/root"
   mkdir -p "$root"
   cp "$BATS_TEST_DIRNAME/../../pc-oc" "$root/"
+  cp -r "$BATS_TEST_DIRNAME/../../lib" "$root/"
   export SYSFS_ROOT="$BATS_TEST_TMPDIR/sys"
 }
 
@@ -66,9 +67,12 @@ EOF
   [ "${lines[1]}" = "apply os SYSFS_ROOT=$SYSFS_ROOT" ]
 }
 
-@test "a failing component script fails pc-oc" {
+@test "a failing component under all stops pc-oc and names the component" {
+  fake_component os apply
   mkdir -p "$root/cpu"
   printf '#!/usr/bin/env bash\nexit 3\n' >"$root/cpu/apply.sh"
-  run "$root/pc-oc" apply all
-  [ "$status" -ne 0 ]
+  run --separate-stderr "$root/pc-oc" apply all
+  [ "$status" -eq 1 ]
+  [ "$output" = "" ]
+  [ "$stderr" = "pc-oc: cpu: apply.sh failed" ]
 }

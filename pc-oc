@@ -5,6 +5,8 @@ set -euo pipefail
 # so an argument can never point sudo at a path outside the install.
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$here/lib/common.sh"
 components=(cpu ram gpu os toolchain)
 
 usage() {
@@ -23,7 +25,7 @@ esac
 if [[ "$target" == all ]]; then
   for c in "${components[@]}"; do
     if [[ -f "$here/$c/$verb.sh" ]]; then
-      bash "$here/$c/$verb.sh"
+      bash "$here/$c/$verb.sh" || die "$c" "$verb.sh failed"
     fi
   done
   exit 0
