@@ -12,6 +12,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 #   one row per frame; frametime is in ms.
 # - MangoHud v0.8.x src/logging.cpp calculate_benchmark_data: frametimes sorted
 #   slowest first, 1% low is the frametime at index 0.01 * n - 1, as fps.
+# - MangoHud v0.8.x src/logging.cpp writeSummary: stopping a log also writes
+#   <log>_summary.csv beside it, with no v1 line and no frames; parse skips those.
 # - Cyberpunk 2077: the benchmark is started from Settings > Graphics > Run
 #   Benchmark; no launch option starts it.
 
@@ -61,9 +63,15 @@ parse_one() {
 
 parse() {
   [ "$#" -ge 1 ] || usage
-  local f src="" bytes=0 items=0 run=0 ver="" res n avg low v
+  local f src="" skipped="" bytes=0 items=0 run=0 ver="" res n avg low v
   local sum_avg=0 sum_low=0 out=""
   for f in "$@"; do
+    case "$f" in
+      *_summary.csv)
+        skipped+="${skipped:+,}$(realpath "$f")"
+        continue
+        ;;
+    esac
     [ -r "$f" ] || die bench "cannot read $f"
     src+="${src:+,}$(realpath "$f")"
     bytes=$((bytes + $(wc -c <"$f")))
@@ -77,7 +85,9 @@ parse() {
     sum_avg="$(awk -v a="$sum_avg" -v b="$avg" 'BEGIN { printf "%.6f", a + b }')"
     sum_low="$(awk -v a="$sum_low" -v b="$low" 'BEGIN { printf "%.6f", a + b }')"
   done
+  [ "$run" -ge 1 ] || die bench "no frame logs, only summaries: $skipped"
   printf 'input.source=%s bytes=%d items=%d\n' "$src" "$bytes" "$items"
+  printf 'input.skipped=%s\n' "$skipped"
   printf 'input.mangohud=%s\ninput.files=%d\ninput.low1_definition=%s\n' "$ver" "$run" "$LOW1_DEF"
   printf '%s' "$out"
   awk -v a="$sum_avg" -v l="$sum_low" -v r="$run" \
