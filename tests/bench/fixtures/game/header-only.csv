@@ -1,0 +1,7 @@
+v1
+v0.8.4
+---------------------SYSTEM INFO---------------------
+os,cpu,gpu,ram,kernel,driver,cpuscheduler
+CachyOS,Intel(R) Core(TM) i7-14700,NVIDIA GeForce RTX 4060 Ti,32 GB,6.17.0-1-cachyos,NVIDIA 580.95.05,
+--------------------FRAME METRICS--------------------
+fps,frametime,cpu_load,cpu_power,gpu_load,cpu_temp,gpu_temp,gpu_core_clock,gpu_mem_clock,gpu_vram_used,gpu_power,ram_used,swap_used,process_rss,cpu_mhz,elapsed
