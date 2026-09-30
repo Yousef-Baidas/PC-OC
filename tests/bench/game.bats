@@ -3,7 +3,6 @@
 bats_require_minimum_version 1.5.0
 
 setup() {
-  skip "contract #12 pending"
   SCRIPT="$BATS_TEST_DIRNAME/../../bench/game.sh"
   FIX="$BATS_TEST_DIRNAME/fixtures/game"
   # run-100.csv: 99 frames at 10.0 ms, then 1 at 40.0 ms
