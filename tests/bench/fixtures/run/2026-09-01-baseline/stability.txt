@@ -1,0 +1,5 @@
+input.minutes=10
+result.stability.ycruncher=PASS
+result.stability.stressng=PASS
+result.stability.journal=PASS
+result.stability=PASS

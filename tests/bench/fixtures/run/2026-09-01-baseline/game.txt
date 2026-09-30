@@ -1,0 +1,4 @@
+input.mangohud=v0.8.4
+input.files=3
+result.game.avg_fps=100.0
+result.game.low1_fps=75.0

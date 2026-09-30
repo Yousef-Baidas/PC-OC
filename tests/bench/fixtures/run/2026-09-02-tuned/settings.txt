@@ -1,0 +1,4 @@
+cpu.model=Intel(R) Core(TM) i7-14700
+cpu.pl1_uw=125000000
+gpu.pl_w=160.00
+os.governor=performance

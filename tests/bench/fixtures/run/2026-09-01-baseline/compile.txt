@@ -1,0 +1,5 @@
+input.kernel_version=6.12.1
+input.gcc=gcc (GCC) 15.2.1 20250813
+input.nproc=28
+input.runs=3
+result.compile.median_s=200.0
