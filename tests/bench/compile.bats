@@ -192,3 +192,18 @@ STUB
   [[ "$stderr" == *"pc-oc: bench: bc"* ]]
   [ ! -e "$BATS_TEST_TMPDIR/calls-curl" ]
 }
+
+@test "compile names the failing make target for defconfig and clean too" {
+  for t in defconfig clean; do
+    cat >"$STUB_DIR/make" <<STUB
+#!/usr/bin/env bash
+if [ "\$1" = --version ]; then echo 'GNU Make 4.4.1'; exit 0; fi
+[ "\$1" = $t ] && exit 2
+exit 0
+STUB
+    run --separate-stderr bash "$SCRIPT" 1
+    [ "$status" -eq 1 ]
+    [[ "$stderr" == "pc-oc: bench: make $t failed"* ]]
+    [[ "$output" != *result.compile.* ]]
+  done
+}
