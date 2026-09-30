@@ -3,7 +3,6 @@
 bats_require_minimum_version 1.5.0
 
 setup() {
-  skip "contract #13 pending"
   SCRIPT="$BATS_TEST_DIRNAME/../../bench/stability.sh"
   FIX="$BATS_TEST_DIRNAME/fixtures/stability"
   XID='NVRM: Xid (PCI:0000:01:00): 79, pid=1234, GPU has fallen off the bus.'
