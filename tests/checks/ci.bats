@@ -6,7 +6,8 @@ bats_require_minimum_version 1.5.0
 # refs/pull/1/head, with a stub gh that logs its arguments to $GH_LOG.
 setup() {
   # lefthook runs this suite inside a git hook; its GIT_* vars would point git at the real repo
-  unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX
+  # and checks/ci.sh runs it too, maybe under CI_NO_POST=1
+  unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX CI_NO_POST
   export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
   export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
   ci="$BATS_TEST_DIRNAME/../../checks/ci.sh"

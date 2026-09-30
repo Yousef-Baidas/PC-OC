@@ -29,7 +29,7 @@ post() {
 }
 
 if [[ "$fork" != false ]]; then
-  echo "ci: PR #$pr head is a fork; not running its code here" >&2
+  echo "pc-oc: ci: PR #$pr head is a fork; not running its code here" >&2
   post failure "head is a fork; not run"
   exit 2
 fi
