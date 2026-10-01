@@ -31,6 +31,7 @@ setup() {
   done
   chmod +x "$TOOLS_DIR"/*
   export PATH="$STUB_DIR:$TOOLS_DIR:$PATH"
+  BASE_PATH="$PATH"
 }
 
 # write_stubs: curl copies the fixture tarball; make logs args and cwd, sleeps
@@ -68,6 +69,16 @@ STUB
   printf '#!/usr/bin/env bash\necho 7\n' >"$STUB_DIR/nproc"
   printf '#!/usr/bin/env bash\necho "gcc (GCC) 15.2.1 20250813"\n' >"$STUB_DIR/gcc"
   chmod +x "$STUB_DIR"/*
+}
+
+# wired_refused: status 1, one stderr line naming what was wired, and no
+# download or build step ran (#118); callers set the environment first
+wired_refused() {
+  [ "$status" -eq 1 ]
+  [ "${#stderr_lines[@]}" -eq 1 ]
+  [[ "$stderr" == "pc-oc: bench: wired build environment: "* ]]
+  [ ! -e "$BATS_TEST_TMPDIR/calls-curl" ]
+  [ ! -e "$BATS_TEST_TMPDIR/calls-make" ]
 }
 
 # in_range <x> <lo> <hi>: lo <= x < hi
@@ -350,4 +361,53 @@ STUB
   [ "$status" -eq 1 ]
   [[ "${stderr_lines[-1]}" == "pc-oc: bench: cannot enter"* ]]
   [ ! -e "$BATS_TEST_TMPDIR/calls-make" ]
+}
+
+@test "compile refuses each wired variable, naming it, before any download or build" {
+  skip "contract #118 pending"
+  local v
+  for v in CC CXX LDFLAGS RUSTC_WRAPPER CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER; do
+    rm -f "$BATS_TEST_TMPDIR/calls-curl" "$BATS_TEST_TMPDIR/calls-make"
+    run --separate-stderr env "$v=wired" bash "$SCRIPT" 1
+    wired_refused || {
+      echo "$v: status $status, stderr: $stderr" >&2
+      return 1
+    }
+    [ "$stderr" = "pc-oc: bench: wired build environment: $v" ] || {
+      echo "$v: stderr: $stderr" >&2
+      return 1
+    }
+  done
+}
+
+@test "compile refuses a compiler-wrapper dir on PATH, first or mid-PATH, trailing slash or not" {
+  skip "contract #118 pending"
+  run --separate-stderr env "PATH=/usr/lib/sccache/bin:$BASE_PATH" bash "$SCRIPT" 1
+  wired_refused
+  [[ "$stderr" == *"/usr/lib/sccache/bin"* ]]
+  rm -f "$BATS_TEST_TMPDIR/calls-curl" "$BATS_TEST_TMPDIR/calls-make"
+  run --separate-stderr env "PATH=$STUB_DIR:/usr/lib/ccache/bin/:$BASE_PATH" bash "$SCRIPT" 1
+  wired_refused
+  [[ "$stderr" == *"/usr/lib/ccache/bin"* ]]
+}
+
+@test "compile lists every offender on the one line" {
+  skip "contract #118 pending"
+  run --separate-stderr env RUSTC_WRAPPER=sccache LDFLAGS=-fuse-ld=mold \
+    "PATH=/usr/lib/ccache/bin:$BASE_PATH" bash "$SCRIPT" 1
+  wired_refused
+  [[ "$stderr" == *RUSTC_WRAPPER* ]]
+  [[ "$stderr" == *LDFLAGS* ]]
+  [[ "$stderr" == *"/usr/lib/ccache/bin"* ]]
+}
+
+@test "compile ignores empty wired variables and a clean PATH" {
+  skip "contract #118 pending"
+  clean="$(printf '%s' "$BASE_PATH" | tr ':' '\n' | grep -vxE '/usr/lib/(sccache|ccache)/bin/?' | paste -sd:)"
+  run --separate-stderr env -u CC -u CXX -u LDFLAGS -u RUSTC_WRAPPER \
+    -u CMAKE_C_COMPILER_LAUNCHER -u CMAKE_CXX_COMPILER_LAUNCHER \
+    CC= LDFLAGS= "PATH=$clean" bash "$SCRIPT" 1
+  [ "$status" -eq 0 ]
+  [ "$(value input.runs)" = 1 ]
+  [ -s "$BATS_TEST_TMPDIR/calls-make" ]
 }
