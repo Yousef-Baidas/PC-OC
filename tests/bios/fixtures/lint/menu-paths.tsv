@@ -1,0 +1,7 @@
+key	path	doc	page	note
+cpu.pl1	Tweaker > Advanced CPU Settings > Turbo Power Limits > Power Limit TDP (Watts)	gb-bios700	13	
+cpu.pl2	-	gb-bios700	13	confirm-on-screen
+cpu.ac_ll	Tweaker > Advanced Voltage Settings	gb-bios700	16	confirm-on-screen
+mem.freq	-	gb-bios700	13	confirm-on-screen
+mem.vdd	Tweaker > DDR5 Voltage Control	gb-bios700	16	
+mem.vddq	Tweaker > DDR5 Voltage Control	gb-bios700	16	
