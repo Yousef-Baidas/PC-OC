@@ -13,8 +13,8 @@ Note: keys are Del (open setup), F2 (Advanced Mode), Alt+F (search), F10 (save a
    - Revert: none, read-only.
    - Report: both values, and whether they match; a missing file or a VERSION ending in -dirty counts as not matching.
 3. Run `sudo os/install.sh` from the root of that checkout when step 2 shows no match, a missing file or a VERSION ending in -dirty, then read /usr/local/lib/pc-oc/VERSION again and continue only when it matches the checkout; skip this step when step 2 matched.
-   - Revert: none, the installer only replaces the installed copy.
-   - Report: the installer output and the VERSION line read after it.
+   - Revert: none; the installer replaces /usr/local/lib/pc-oc and /etc/sudoers.d/pc-oc and writes nothing else.
+   - Report: the installer output and the VERSION line read after it; when the file is missing, differs from the checkout or ends in -dirty, stop and send both with the output of `git status --porcelain` run in the checkout.
 4. Run `sudo /usr/local/lib/pc-oc/pc-oc probe cpu` in Linux and save the output as the stock record.
    - Revert: none, read-only.
    - Report: the full probe output.
