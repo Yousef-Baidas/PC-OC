@@ -6,7 +6,7 @@ Note: kit is Kingston FURY Beast KF556C40BB-16, two modules (kingston-kf556c40).
 ## Prerequisite
 
 - Note: bios/undervolt.md is complete and its final value passed its soak.
-- Run: sudo pc-oc probe ram
+- Run: sudo /usr/local/lib/pc-oc/pc-oc probe ram
 - Record: ram.dimm0.part, ram.dimm1.part, ram.dimm0.configured_mv, ram.dimm1.configured_mv (stock DRAM rail), ram.spd0.dram_mfr, ram.spd1.dram_mfr
 - Read: ram.dimm0.configured_mts = 5600 means XMP Profile1 is active.
 - Note: any other configured_mts means stop here and report it.
@@ -97,7 +97,7 @@ Memory Boot Mode
 - SET mem.tras = 96  # src: kingston-kf556c40
 - SET mem.trfc = 885  # src: kingston-kf556c40
 - Read: each key above on screen shows the value of its line, before the exit.
-- Run: sudo pc-oc probe ram
+- Run: sudo /usr/local/lib/pc-oc/pc-oc probe ram
 - Run: bench/stability.sh cpu 10
 - Report: ram.dimm0.configured_mts, ram.dimm0.configured_mv, result.stability and every result.stability.* line.
 - Record: reading row: step 3, every mem key as seen, result.stability.
@@ -112,7 +112,7 @@ Memory Boot Mode
 - SET mem.tras = 103  # src: kingston-kf556c40
 - SET mem.trfc = 944  # src: kingston-kf556c40
 - Read: each key above on screen shows the value of its line, before the exit.
-- Run: sudo pc-oc probe ram
+- Run: sudo /usr/local/lib/pc-oc/pc-oc probe ram
 - Run: bench/stability.sh cpu 10
 - Report: ram.dimm0.configured_mts, result.stability and every result.stability.* line.
 - Record: reading row: step 4, every mem key as seen, result.stability.
@@ -335,7 +335,7 @@ refresh:    944 -> 903, 862, 821, 780; back-off 985, 944, 903, 862
 
 - Revert: the step 1 slot by the profile-return path in the menu fence (gb-bios700 p29).
 - Read: mem.xmp = Profile1 and mem.freq = 5600 on screen.
-- Run: sudo pc-oc probe ram
+- Run: sudo /usr/local/lib/pc-oc/pc-oc probe ram
 - Report: ram.dimm0.configured_mts and ram.dimm0.configured_mv.
 - Record: reading row: rollback, every mem key as seen.
 

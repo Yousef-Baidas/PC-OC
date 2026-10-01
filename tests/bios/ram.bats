@@ -73,7 +73,6 @@ sets() {
 }
 
 @test "ram.md runs pc-oc by its installed path" {
-  skip "contract #101 pending"
   local n
   n="$(grep -c 'pc-oc probe' "$RUNBOOK" || true)"
   echo "lines with pc-oc probe: $n"
