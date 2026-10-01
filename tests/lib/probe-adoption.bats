@@ -39,7 +39,6 @@ assert_adopted() {
 }
 
 @test "no component file calls probe_source or counts command output itself" {
-  skip "adopted in #49/#50"
   local f bad=""
   for f in "$ROOT"/{cpu,ram,gpu,os}/*; do
     [[ -f "$f" ]] || continue
