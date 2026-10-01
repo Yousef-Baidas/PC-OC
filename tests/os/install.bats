@@ -211,3 +211,40 @@ install_version() {
   install_version
   [ "$version" = "$(git -C "$repo" rev-parse HEAD)-dirty" ]
 }
+
+# Amendment 1 of #107: an ignored file inside an installed path is copied, so it counts.
+@test "an untracked root .gitignore hiding cpu/extra.sh still makes VERSION -dirty" {
+  echo 'cpu/extra.sh' >"$repo/.gitignore"
+  echo '# new' >"$repo/cpu/extra.sh"
+  install_version
+  [ "$version" = "$(git -C "$repo" rev-parse HEAD)-dirty" ]
+}
+
+@test "a file hidden by .git/info/exclude inside a component dir makes VERSION -dirty" {
+  skip "contract #107 pending"
+  echo 'cpu/extra.sh' >"$repo/.git/info/exclude"
+  echo '# new' >"$repo/cpu/extra.sh"
+  install_version
+  [ "$version" = "$(git -C "$repo" rev-parse HEAD)-dirty" ]
+}
+
+@test "a file under lib hidden by a committed .gitignore is installed and makes VERSION -dirty" {
+  skip "contract #107 pending"
+  echo 'lib/sub/' >"$repo/.gitignore"
+  git -C "$repo" add .gitignore
+  git -C "$repo" -c user.name=t -c user.email=t@t -c commit.gpgsign=false -c core.hooksPath=/dev/null \
+    commit -q -m ignore
+  mkdir -p "$repo/lib/sub"
+  echo '# hidden' >"$repo/lib/sub/x.sh"
+  install_version
+  [ -f "$dest/usr/local/lib/pc-oc/lib/sub/x.sh" ]
+  [ "$version" = "$(git -C "$repo" rev-parse HEAD)-dirty" ]
+}
+
+@test "status.showUntrackedFiles=no in the repo does not hide an untracked file in a component dir" {
+  skip "contract #107 pending"
+  git -C "$repo" config status.showUntrackedFiles no
+  echo '# new' >"$repo/cpu/extra.sh"
+  install_version
+  [ "$version" = "$(git -C "$repo" rev-parse HEAD)-dirty" ]
+}
