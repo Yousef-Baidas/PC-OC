@@ -31,7 +31,12 @@ sets() {
 }
 
 @test "ram.md SETs mem.vdd and mem.vddq at 1.35 or below" {
-  sets
+  local k missing=()
+  for k in mem.vdd mem.vddq; do
+    sets | awk -v k="$k" '$1 == k { f = 1 } END { exit !f }' || missing+=("$k")
+  done
+  echo "no SET line for: ${missing[*]}"
+  [ "${#missing[@]}" -eq 0 ]
   bad="$(sets | awk '($1 == "mem.vdd" || $1 == "mem.vddq") && $2 + 0 > 1.35')"
   echo "above 1.35: $bad"
   [ -z "$bad" ]
