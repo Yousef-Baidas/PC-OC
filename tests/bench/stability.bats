@@ -11,7 +11,7 @@ setup() {
   XID='NVRM: Xid (PCI:0000:01:00): 79, pid=1234, GPU has fallen off the bus.'
   STUB_DIR="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$STUB_DIR"
-  export JOURNAL="$FIX/journal-clean.txt" YC_EXIT=0 YC_SLEEP=0
+  export JOURNAL="$FIX/journal-clean.txt" YC_EXIT=0 YC_SLEEP=0 SNG_EXIT=0
   write_stubs
   export PATH="$STUB_DIR:$PATH"
 }
@@ -33,7 +33,7 @@ STUB
 #!/usr/bin/env bash
 if [ "\$*" = --version ]; then echo 'stress-ng, version 0.22.01'; exit 0; fi
 (IFS=\$'\t'; printf '%s\n' "\$*") >>"$BATS_TEST_TMPDIR/calls-stress-ng"
-exit 0
+exit "\$SNG_EXIT"
 STUB
   cat >"$STUB_DIR/journalctl" <<STUB
 #!/usr/bin/env bash
@@ -238,4 +238,45 @@ run_sampled() {
   [ "$n" -ge 2 ]
   sleep 2.2
   [ "$(wc -l <"$BATS_TEST_TMPDIR/calls-probe")" -eq "$n" ]
+}
+
+@test "soak 1 with passing mocks is PASS, runs stress-ng --verify at 85% then y-cruncher" {
+  skip "contract #76 pending"
+  run --separate-stderr bash "$SCRIPT" soak 1
+  [ "$status" -eq 0 ]
+  [ "$(value result.stability.soak_minutes)" = 1 ]
+  [ "$(value result.stability.stressng)" = PASS ]
+  [ "$(value result.stability.ycruncher)" = PASS ]
+  [ "$(value result.stability.journal)" = PASS ]
+  [ "${lines[-1]}" = result.stability=PASS ]
+  sng="$(tr '\t' ' ' <"$BATS_TEST_TMPDIR/calls-stress-ng")"
+  [[ "$sng " == *" --verify "* ]]
+  [[ "$sng " == *" --vm-bytes 85% "* ]]
+  [[ "$sng " == *" --vm-method all "* ]]
+  [[ "$sng " =~ (-t|--timeout)[\ =](60s?|1m)\  ]]
+  [ -e "$BATS_TEST_TMPDIR/calls-y-cruncher" ]
+}
+
+@test "soak with a stress-ng that exits 1 is stressng=FAIL, overall FAIL, exit 1" {
+  skip "contract #76 pending"
+  export SNG_EXIT=1
+  run --separate-stderr bash "$SCRIPT" soak 1
+  [ "$status" -eq 1 ]
+  [ "$(value result.stability.stressng)" = FAIL ]
+  [ "${lines[-1]}" = result.stability=FAIL ]
+}
+
+@test "soak 0 prints usage naming soak and exits 2" {
+  skip "contract #76 pending"
+  run --separate-stderr bash "$SCRIPT" soak 0
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *soak* ]]
+}
+
+@test "soak runs the telemetry sampler too" {
+  skip "contract #76 pending"
+  write_probe 1250 1310
+  run_sampled soak 1
+  [ "$status" -eq 0 ]
+  [ "$(value result.stability.vcore_max_mv)" = 1310 ]
 }
