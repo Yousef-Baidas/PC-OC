@@ -15,7 +15,9 @@ pairs=(total_kb="$total_kb")
 # Root only: dmidecode reads the SMBIOS table. Units: MT/s and V become bare numbers.
 if [[ "$(id -u)" -eq 0 ]]; then
   dmi="$(command -v dmidecode)" || die ram "dmidecode not found"
-  dump="$("$dmi" -t 17)" || die ram "dmidecode failed"
+  # The sentinel keeps the trailing newlines that $(...) would strip from the count.
+  dump="$("$dmi" -t 17 && echo .)" || die ram "dmidecode failed"
+  dump="${dump%.}"
   probe_source "$dmi" "$(
     LC_ALL=C
     echo "${#dump}"
