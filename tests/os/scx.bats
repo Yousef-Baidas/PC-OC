@@ -33,7 +33,6 @@ state_files() {
 }
 
 @test "apply loads the config and scx_lavd, revert puts stock back" {
-  skip "contract #29 pending"
   run --separate-stderr bash "$OS/apply.sh"
   [ "$status" -eq 0 ]
   cmp "$OS/scx_loader.toml" "$CONF"
@@ -49,7 +48,6 @@ state_files() {
 }
 
 @test "systemctl calls come in the contract order" {
-  skip "contract #29 pending"
   bash "$OS/apply.sh"
   bash "$OS/revert.sh"
   run cat "$MOCK_LOG"
@@ -61,13 +59,11 @@ disable scx_loader" ]
 }
 
 @test "apply records the stock enabled state" {
-  skip "contract #29 pending"
   bash "$OS/apply.sh"
   [ "$(cat "$PC_OC_STATE/os/scx_loader.enabled")" = disabled ]
 }
 
 @test "a loader that never loads makes apply exit 1 and undo itself" {
-  skip "contract #29 pending"
   MOCK_SCX_MODE=never run --separate-stderr bash "$OS/apply.sh"
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"pc-oc: os: scx_lavd did not load"* ]]
@@ -77,7 +73,6 @@ disable scx_loader" ]
 }
 
 @test "a bpfland ops counts as a failed load" {
-  skip "contract #29 pending"
   MOCK_SCX_MODE=bpfland run --separate-stderr bash "$OS/apply.sh"
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"pc-oc: os: scx_lavd did not load"* ]]
@@ -87,7 +82,6 @@ disable scx_loader" ]
 }
 
 @test "revert with no apply record exits 1" {
-  skip "contract #29 pending"
   run --separate-stderr bash "$OS/revert.sh"
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"pc-oc: os: nothing to revert"* ]]
@@ -95,7 +89,6 @@ disable scx_loader" ]
 }
 
 @test "a second apply keeps the first stock record" {
-  skip "contract #29 pending"
   bash "$OS/apply.sh"
   [ "$(cat "$MOCK_ENABLED")" = enabled ]
   bash "$OS/apply.sh"
