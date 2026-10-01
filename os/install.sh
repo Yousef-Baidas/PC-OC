@@ -30,7 +30,8 @@ git_user() {
   "${as_user[@]}" env GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -C "$here" "$@"
 }
 head="$(git_user rev-parse HEAD)" || die os "git rev-parse HEAD failed in $here"
-changes="$(git_user status --porcelain)" || die os "git status failed in $here"
+# only the paths copied below decide -dirty; local tool dirs and other files do not
+changes="$(git_user status --porcelain -- pc-oc "${components[@]}" lib etc/sudoers.d/pc-oc)" || die os "git status failed in $here"
 
 stage="$(mktemp -d /tmp/pc-oc-install.XXXXXX)" || die os "mktemp failed"
 trap 'rm -rf "$stage" || true' EXIT
