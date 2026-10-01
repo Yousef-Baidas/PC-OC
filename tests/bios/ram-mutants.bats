@@ -28,7 +28,6 @@ run_ram() {
 }
 
 @test "ram.bats goes red when ram.md has no mem.vdd SET line" {
-  skip "contract #96 pending"
   mutant_without mem.vdd
   run_ram
   [ "$status" -ne 0 ]
@@ -36,7 +35,6 @@ run_ram() {
 }
 
 @test "ram.bats goes red when ram.md has no mem.vddq SET line" {
-  skip "contract #96 pending"
   mutant_without mem.vddq
   run_ram
   [ "$status" -ne 0 ]
