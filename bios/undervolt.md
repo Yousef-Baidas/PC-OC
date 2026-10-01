@@ -7,6 +7,7 @@ Note: the human does every BIOS step at the firmware screen; a value is in effec
 - Read: bios/power-limits.md finished, with its reading in bios/readings/.
 - Record: the BIOS version that System Info. shows; this runbook is written for F17a.
 - Record: the state Intel Default Settings shows; the stock loadline below holds with it on (intel-ll).
+- Report: when Intel Default Settings reads anything but on, or is not found, stop here and report it, with the on-screen path as printed; Alt+F opens Option Search to look for it (gb-bios700 p4).
 - Run: before every gate, in Linux, so the gate can read the voltage telemetry after each boot; every gate block below starts with it:
 
 ```bash

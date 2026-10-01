@@ -29,7 +29,6 @@ run_undervolt() {
 }
 
 @test "undervolt.bats goes red when the Intel Default Settings Report line is deleted" {
-  skip "contract #102 pending"
   local ln
   ln="$(report_line)"
   echo "deleted line: $ln"
@@ -40,7 +39,6 @@ run_undervolt() {
 }
 
 @test "undervolt.bats goes red when the Report line moves after the last SET" {
-  skip "contract #102 pending"
   local ln line
   ln="$(report_line)"
   echo "moved line: $ln"
@@ -53,7 +51,6 @@ run_undervolt() {
 }
 
 @test "undervolt.bats stays green on an unmodified copy of bios/" {
-  skip "contract #102 pending"
   run_undervolt
   [ "$status" -eq 0 ]
 }
