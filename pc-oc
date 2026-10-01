@@ -3,6 +3,8 @@ set -euo pipefail
 # pc-oc apply|revert|probe <component>|all
 # Runs <component>/<verb>.sh next to this file. Only names in the list below run,
 # so an argument can never point sudo at a path outside the install.
+# toolchain scripts never run as root: without root they run directly, as root pc-oc
+# drops to the calling user first (SUDO_UID, SUDO_GID).
 
 # As root, the test seams must not redirect writes: real /sys and /var/lib/pc-oc only
 uid="$(/usr/bin/id -u)"
@@ -33,19 +35,44 @@ case "$verb" in
   *) usage ;;
 esac
 
-# the incident on run log #1: a non-root apply/revert reached the real systemctl; refuse before any component runs
-if [[ "$verb" != probe && "$uid" != 0 ]]; then
+# the incident on run log #1: a non-root apply/revert reached the real systemctl; refuse before any component runs.
+# toolchain alone is let through: its scripts write in the caller's home and run as the caller (#117)
+if [[ "$verb" != probe && "$uid" != 0 && "$target" != toolchain ]]; then
   echo "pc-oc: $verb needs root: sudo $here/pc-oc $verb $target" >&2
   exit 1
 fi
 
+# run_component <component>: run its <verb>.sh. toolchain writes files in the human's home, so as
+# root its script runs as the calling user and sees nothing of the caller's environment (#117)
+run_component() {
+  local c="$1" id entry home
+  local no_caller="needs the calling user: run it without sudo, or through sudo from your own account"
+  if [[ "$c" != toolchain || "$uid" != 0 ]]; then
+    bash "$here/$c/$verb.sh"
+    return
+  fi
+  # ASCII digits, written out: a [0-9] range also matches other digits in a UTF-8 locale. At most ten and
+  # below 2^32-1: setpriv and getent wrap a larger number (4294967296 is uid 0), and 2^32-1 means "keep"
+  for id in "${SUDO_UID-}" "${SUDO_GID-}"; do
+    [[ -n "$id" && ${#id} -le 10 && "$id" != *[!0123456789]* ]] || die toolchain "$no_caller"
+    ((10#$id < 4294967295)) || die toolchain "$no_caller"
+  done
+  ((10#$SUDO_UID != 0)) || die toolchain "$no_caller"
+  entry="$(/usr/bin/getent passwd "$SUDO_UID")" || die toolchain "$no_caller"
+  IFS=: read -r _ _ _ _ _ home _ <<<"$entry"
+  [[ "$home" == /* ]] || die toolchain "$no_caller"
+  /usr/bin/setpriv --reuid="$SUDO_UID" --regid="$SUDO_GID" --clear-groups \
+    /usr/bin/env -i HOME="$home" PATH=/usr/bin /usr/bin/bash "$here/toolchain/$verb.sh"
+}
+
 if [[ "$target" == all && "$verb" == revert ]]; then
-  # keep going: stopping at a failure would leave the later components tuned
+  # keep going: stopping at a failure would leave the later components tuned.
+  # The subshell turns run_component's die into a collected failure
   failed=()
   for ((i = ${#components[@]} - 1; i >= 0; i--)); do
     c="${components[i]}"
     if [[ -f "$here/$c/revert.sh" ]]; then
-      bash "$here/$c/revert.sh" || failed+=("$c")
+      (run_component "$c") || failed+=("$c")
     fi
   done
   [[ ${#failed[@]} -eq 0 ]] || die all "revert.sh failed: ${failed[*]}"
@@ -55,7 +82,7 @@ fi
 if [[ "$target" == all ]]; then
   for c in "${components[@]}"; do
     if [[ -f "$here/$c/$verb.sh" ]]; then
-      bash "$here/$c/$verb.sh" || die "$c" "$verb.sh failed"
+      run_component "$c" || die "$c" "$verb.sh failed"
     fi
   done
   exit 0
@@ -63,7 +90,7 @@ fi
 
 for c in "${components[@]}"; do
   if [[ "$c" == "$target" && -f "$here/$c/$verb.sh" ]]; then
-    bash "$here/$c/$verb.sh" || die "$c" "$verb.sh failed"
+    run_component "$c" || die "$c" "$verb.sh failed"
     exit 0
   fi
 done
