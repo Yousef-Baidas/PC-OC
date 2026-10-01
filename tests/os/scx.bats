@@ -159,3 +159,28 @@ fail_verb() {
   bash "$OS/revert.sh"
   [ ! -e "$SYSFS_ROOT/etc/scx_loader" ]
 }
+
+@test "an is-enabled that fails makes apply exit 1 with nothing changed" {
+  fail_verb is-enabled
+  PATH="$FAIL_BIN:$PATH" run --separate-stderr bash "$OS/apply.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: os: cannot read scx_loader enabled state"* ]]
+  [ -z "$(state_files)" ]
+  [ "$(cat "$MOCK_ENABLED")" = disabled ]
+  [ ! -e "$CONF" ]
+  run --separate-stderr bash "$OS/revert.sh"
+  [[ "$stderr" == *"pc-oc: os: nothing to revert"* ]]
+}
+
+@test "an enable or restart that fails makes apply exit 1 and undo itself" {
+  local verb
+  for verb in enable restart; do
+    fail_verb "$verb"
+    PATH="$FAIL_BIN:$PATH" run --separate-stderr bash "$OS/apply.sh"
+    [ "$status" -eq 1 ]
+    [[ "$stderr" == *"pc-oc: os: systemctl $verb scx_loader failed"* ]]
+    [ ! -e "$CONF" ]
+    [ "$(cat "$MOCK_ENABLED")" = disabled ]
+    [ -z "$(state_files)" ]
+  done
+}
