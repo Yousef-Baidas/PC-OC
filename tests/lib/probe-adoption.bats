@@ -38,6 +38,5 @@ assert_adopted() {
 }
 
 @test "os probe uses probe_emit and no own header or byte counter" {
-  skip "contract #36 pending"
   assert_adopted os
 }
