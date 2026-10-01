@@ -65,3 +65,83 @@ write_constraint() {
   [[ "$stderr" == "pc-oc: cpu: "* ]]
   [[ "$stderr" != *"not implemented"* ]]
 }
+
+# Contract #73. The root branch is reached with unshare -r: is_root reads /usr/bin/id -u, so
+# a PATH stub cannot reach it. Nothing outside $SYSFS_ROOT is read; the msr is a fixture file.
+
+# root_fixture: msr file with PERF_STATUS at offset 0x198; 0x2666 (9830) at bits 47:32, other
+# bits set so a wrong shift or mask changes the value. energy_uj beside the rapl constraints.
+root_fixture() {
+  unshare -r true 2>/dev/null || skip "unshare -r unavailable"
+  msr="$SYSFS_ROOT/dev/cpu/0/msr"
+  mkdir -p "${msr%/*}"
+  {
+    head -c 408 /dev/zero
+    printf '\x00\x1e\x07\x00\x66\x26\x01\x00'
+    head -c 64 /dev/zero
+  } >"$msr"
+  echo 123456789 >"$rapl/energy_uj"
+}
+
+run_root_probe() {
+  run --separate-stderr unshare -r bash "$PROBE"
+}
+
+@test "probe cpu as root reports vcore_mv from PERF_STATUS bits 47:32" {
+  skip "contract #73 pending"
+  root_fixture
+  run_root_probe
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'\ncpu.vcore_mv=1200'* ]]
+  [[ "$output" != *vcore=* ]]
+}
+
+@test "probe cpu as root reports pkg_energy_uj from energy_uj" {
+  skip "contract #73 pending"
+  root_fixture
+  run_root_probe
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'\ncpu.pkg_energy_uj=123456789'* ]]
+}
+
+@test "probe cpu as root line 1 counts the new keys and names msr and energy_uj" {
+  skip "contract #73 pending"
+  root_fixture
+  run_root_probe
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" =~ ^source=/[^\ ]+\ bytes=[0-9]+\ items=([0-9]+)$ ]]
+  [ "${BASH_REMATCH[1]}" -eq "$((${#lines[@]} - 1))" ]
+  [[ "${lines[0]}" == *"$msr"* ]]
+  [[ "${lines[0]}" == *"$rapl/energy_uj"* ]]
+}
+
+@test "probe cpu as root without an msr device prints vcore=no-msr and exits 0" {
+  skip "contract #73 pending"
+  root_fixture
+  rm "$msr"
+  run_root_probe
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'\ncpu.vcore=no-msr'* ]]
+  [[ "$output" != *vcore_mv* ]]
+}
+
+@test "probe cpu as root exits 1 when the msr file is 4 bytes" {
+  skip "contract #73 pending"
+  root_fixture
+  head -c 4 /dev/zero >"$msr"
+  run_root_probe
+  [ "$status" -eq 1 ]
+  [ "$output" = "" ]
+  [[ "$stderr" == "pc-oc: cpu: cannot read"* ]]
+}
+
+@test "probe cpu without root prints vcore=needs-root and no energy key" {
+  skip "contract #73 pending"
+  [ "$(id -u)" -ne 0 ] || skip "runs as root"
+  echo 123456789 >"$rapl/energy_uj"
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'\ncpu.vcore=needs-root'* ]]
+  [[ "$output" != *pkg_energy_uj* ]]
+  [[ "$output" != *vcore_mv* ]]
+}
