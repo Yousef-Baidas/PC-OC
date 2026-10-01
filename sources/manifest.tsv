@@ -41,3 +41,9 @@ kernel-spd5118	Kernel driver spd5118 (hwmon, SPD eeprom)	https://docs.kernel.org
 jep106	JEDEC JEP106 Standard Manufacturer Identification Code	https://www.jedec.org/standards-documents/docs/jep-106ab	JEP106BP, published Sep 2026
 kingston-kf556c40	Kingston FURY Beast DDR5 KF556C40BB-16 datasheet	https://www.kingston.com/datasheets/KF556C40BB-16.pdf	Doc 4810324B, 08/10/22
 ddr5-vdd	JEDEC JESD79-5 DDR5 SDRAM standard	https://www.jedec.org/standards-documents/docs/jesd79-5c01	JESD79-5D v1.41, Nov 2025
+cargo-config	Cargo book: Configuration	https://doc.rust-lang.org/cargo/reference/config.html	page last-modified 2026-10-01
+sccache-rust	sccache docs/Rust.md	https://github.com/mozilla/sccache/blob/main/docs/Rust.md	main, last commit 7166a21 2026-04-23
+cmake-launcher-env	CMake: CMAKE_<LANG>_COMPILER_LAUNCHER environment variable	https://cmake.org/cmake/help/latest/envvar/CMAKE_LANG_COMPILER_LAUNCHER.html	CMake 4.4.3 docs, 2026-08-25
+cmake-ldflags-env	CMake: LDFLAGS environment variable	https://cmake.org/cmake/help/latest/envvar/LDFLAGS.html	CMake 4.4.3 docs, 2026-08-25
+makepkg-conf-5	makepkg.conf(5)	https://man.archlinux.org/man/makepkg.conf.5	pacman 7.1.0
+rust-lld-default	Rust blog: Faster linking times with 1.90.0 stable on Linux using the LLD linker (PR rust-lang/rust#140525)	https://blog.rust-lang.org/2025/09/01/rust-lld-on-1.90.0-stable	Rust 1.90.0, post 2025-09-01
