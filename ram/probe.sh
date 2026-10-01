@@ -1,23 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Print current ram values: line 1 source= bytes= items=, then ram.<key>=<value>.
+# Print current ram values: the probe_emit header, then ram.<key>=<value>.
 # shellcheck source=../lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 
+PROBE_COMPONENT=ram
+
 meminfo="$(sysfs_path /proc/meminfo)"
-[[ -r "$meminfo" ]] || die ram "cannot read $meminfo"
-total_kb="$(awk '/^MemTotal:/ {print $2}' "$meminfo")"
+probe_read "$meminfo"
+total_kb="$(awk '/^MemTotal:/ {print $2}' <<<"$PROBE_CONTENT")"
 [[ -n "$total_kb" ]] || die ram "no MemTotal in $meminfo"
-sources="$meminfo"
-bytes="$(wc -c <"$meminfo")"
-out="ram.total_kb=$total_kb"
+pairs=(total_kb="$total_kb")
 
 # Root only: dmidecode reads the SMBIOS table. Units: MT/s and V become bare numbers.
 if [[ "$(id -u)" -eq 0 ]]; then
   dmi="$(command -v dmidecode)" || die ram "dmidecode not found"
   dump="$("$dmi" -t 17)" || die ram "dmidecode failed"
-  sources="$sources,$dmi"
-  bytes=$((bytes + ${#dump}))
+  probe_source "$dmi" "$(
+    LC_ALL=C
+    echo "${#dump}"
+  )"
   dimms="$(
     awk -F': ' '
       function bad(f) {
@@ -48,9 +50,9 @@ if [[ "$(id -u)" -eq 0 ]]; then
     ' <<<"$dump"
   )" || die ram "populated slot has a missing or non-numeric value: ${dimms##*ERR }"
   [[ -n "$dimms" ]] || die ram "no populated DIMM in dmidecode -t 17"
-  out="$out"$'\n'"$dimms"
+  while IFS= read -r line; do pairs+=("${line#ram.}"); done <<<"$dimms"
 else
-  out="$out"$'\nram.dmi=needs-root'
+  pairs+=(dmi=needs-root)
 fi
 
-printf 'source=%s bytes=%s items=%s\n%s\n' "$sources" "$bytes" "$(wc -l <<<"$out")" "$out"
+probe_emit "${pairs[@]}"
