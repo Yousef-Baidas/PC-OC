@@ -1,0 +1,13 @@
+input.source=/home/user/PC-OC/tests/bench/fixtures/game/run-100.csv,/home/user/PC-OC/tests/bench/fixtures/game/run-100.csv,/home/user/PC-OC/tests/bench/fixtures/game/run-200.csv bytes=29344 items=400
+input.skipped=
+input.mangohud=v0.8.4
+input.files=3
+input.low1_definition=MangoHud: frametime at index 0.01*n-1 of frametimes sorted slowest first, as fps
+result.game.run1.avg_fps=97.1
+result.game.run1.low1_fps=25.0
+result.game.run2.avg_fps=97.1
+result.game.run2.low1_fps=25.0
+result.game.run3.avg_fps=96.9
+result.game.run3.low1_fps=40.0
+result.game.avg_fps=97.0
+result.game.low1_fps=30.0

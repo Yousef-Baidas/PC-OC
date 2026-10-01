@@ -1,0 +1,7 @@
+input.source=/usr/bin/journalctl bytes=17 items=1
+input.journalctl=systemd 262 (262-1-arch)
+input.since=1 minute ago
+result.stability.ycruncher=SKIP
+result.stability.stressng=SKIP
+result.stability.journal=PASS
+result.stability=PASS

@@ -124,3 +124,64 @@ STUB
   [ "$status" -eq 0 ]
   cmp "$BATS_TEST_TMPDIR/first.md" "$md"
 }
+
+# real_md: run report.sh on the real-output fixture; sets MD to the one report written
+real_md() {
+  bash "$R/bench/report.sh" "$FIX/real" >/dev/null
+  [ "$(find "$R/reports" -name '*.md' | wc -l)" -eq 1 ]
+  MD="$(find "$R/reports" -name '*.md')"
+}
+
+# has_row <md> <key> <value>: a table row with a cell equal to <key> and a cell equal to <value>
+has_row() {
+  awk -F'|' -v k="$2" -v v="$3" '
+    /^[[:space:]]*\|/ {
+      hk = 0; hv = 0
+      for (i = 1; i <= NF; i++) {
+        c = $i; gsub(/^[[:space:]]+|[[:space:]]+$/, "", c)
+        if (c == k) hk = 1
+        if (c == v) hv = 1
+      }
+      if (hk && hv) found = 1
+    }
+    END { exit !found }' "$1"
+}
+
+@test "report on real output has a row per result key with the exact value" {
+  skip "contract #14 pending"
+  real_md
+  n=0
+  while IFS= read -r line; do
+    has_row "$MD" "${line%%=*}" "${line#*=}"
+    n=$((n + 1))
+  done < <(grep -h '^result\.' "$FIX"/real/*.txt)
+  [ "$n" -gt 0 ]
+}
+
+@test "report on real output has no row for source= or input.* header lines" {
+  skip "contract #14 pending"
+  real_md
+  # a split on every '=' turns "bytes=N items=N" into cells of their own
+  run ! grep -E '^[[:space:]]*\|[[:space:]]*(source|input\.[a-z0-9_]+|bytes|items)[[:space:]]*\|' "$MD"
+  [ "$(grep -cE '^[[:space:]]*\|[[:space:]]*result\.' "$MD")" -gt 0 ]
+}
+
+@test "report on real output keeps cpu, gpu, os and ram settings with exact values" {
+  skip "contract #14 pending"
+  real_md
+  for p in cpu gpu os ram; do
+    [ "$(grep -c "^$p\." "$FIX/real/settings.txt")" -gt 0 ]
+  done
+  while IFS= read -r line; do
+    has_row "$MD" "${line%%=*}" "${line#*=}"
+  done < <(grep -E '^(cpu|gpu|os|ram)\.' "$FIX/real/settings.txt")
+}
+
+@test "report on real output has as many result rows as result lines" {
+  skip "contract #14 pending"
+  real_md
+  want="$(cat "$FIX"/real/*.txt | grep -c '^result\.')"
+  got="$(grep -cE '^[[:space:]]*\|[[:space:]]*result\.' "$MD")"
+  [ "$want" -gt 0 ]
+  [ "$got" -eq "$want" ]
+}

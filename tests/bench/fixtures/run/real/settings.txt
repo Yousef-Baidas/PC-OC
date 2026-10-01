@@ -1,0 +1,29 @@
+source=/proc/cpuinfo,/sys/class/powercap/intel-rapl:0/constraint_0_name,/sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw,/sys/class/powercap/intel-rapl:0/constraint_0_time_window_us,/sys/class/powercap/intel-rapl:0/constraint_1_name,/sys/class/powercap/intel-rapl:0/constraint_1_power_limit_uw,/sys/class/powercap/intel-rapl:0/constraint_2_name bytes=48835 items=5
+cpu.model=Intel(R) Core(TM) i7-14700
+cpu.microcode=0x137
+cpu.pl1_uw=65000000
+cpu.pl1_tau_us=27983872
+cpu.pl2_uw=219000000
+source=/proc/meminfo bytes=1671 items=2
+ram.total_kb=32610596
+ram.dmi=needs-root
+source=/usr/bin/nvidia-smi bytes=98 items=9
+gpu.name=NVIDIA GeForce RTX 4060 Ti
+gpu.driver=615.71.09
+gpu.vbios=95.06.2B.00.CC
+gpu.pl_w=160.00
+gpu.pl_default_w=160.00
+gpu.pl_min_w=100.00
+gpu.pl_max_w=216.00
+gpu.clock_max_mhz=3120
+gpu.mem_clock_max_mhz=9001
+source=/proc/sys/kernel/osrelease,/sys/devices/system/cpu/intel_pstate/status,/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu10/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu10/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu11/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu11/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu12/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu12/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu13/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu13/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu14/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu14/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu15/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu15/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu16/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu16/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu17/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu17/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu18/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu18/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu19/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu19/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu1/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu1/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu20/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu20/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu21/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu21/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu22/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu22/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu23/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu23/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu24/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu24/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu25/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu25/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu26/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu26/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu27/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu27/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu2/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu2/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu3/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu3/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu4/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu4/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu5/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu5/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu6/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu6/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu7/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu7/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu8/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu8/cpufreq/energy_performance_preference,/sys/devices/system/cpu/cpu9/cpufreq/scaling_governor,/sys/devices/system/cpu/cpu9/cpufreq/energy_performance_preference,/sys/kernel/sched_ext/state,/proc/sys/vm/swappiness,/sys/kernel/mm/transparent_hugepage/enabled bytes=675 items=9
+os.kernel=7.2.8-1-cachyos
+os.pstate_status=active
+os.governor=powersave
+os.epp=performance
+os.governors_uniform=yes
+os.scx_state=disabled
+os.scx_ops=none
+os.swappiness=150
+os.thp=always
