@@ -9,7 +9,7 @@ source "$here/../lib/write.sh"
 # shellcheck source=pl.sh
 source "$here/pl.sh"
 
-[[ "$EUID" -ne 0 ]] || export PATH=/usr/bin
+! is_root || export PATH=/usr/bin
 
 stock="$(pc_oc_state)/gpu/stock"
 if [[ ! -f "$stock" ]]; then
