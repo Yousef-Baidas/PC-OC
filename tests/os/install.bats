@@ -40,7 +40,6 @@ setup() {
 }
 
 @test "a DESTDIR install produces the tree, modes, VERSION and the sudoers drop-in" {
-  skip "contract #47 pending"
   run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
   [ "$status" -eq 0 ]
   lib_entries="$(cd "$repo" && find lib -type f -printf '644 ./%p\n')"
@@ -83,7 +82,6 @@ add_real() {
 }
 
 @test "install copies data files at 0644, byte-identical, and verb scripts at 0755" {
-  skip "contract #47 pending"
   add_real
   printf 'notes\n' >"$repo/cpu/notes.txt"
   chmod 755 "$repo/cpu/notes.txt" "$repo/os/scx_loader.toml"
@@ -103,7 +101,6 @@ add_real() {
 }
 
 @test "install copies nothing outside the component dirs, lib and pc-oc" {
-  skip "contract #47 pending"
   add_real
   mkdir -p "$repo/tests/os/fixtures" "$repo/docs"
   echo x >"$repo/tests/os/fixtures/f" && echo x >"$repo/docs/a.md" && echo x >"$repo/stray.txt"
@@ -119,7 +116,6 @@ add_real() {
 }
 
 @test "the installed tree's os apply then revert round-trips to stock under the scx mocks" {
-  skip "contract #47 pending"
   add_real
   run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
   [ "$status" -eq 0 ]
@@ -146,7 +142,6 @@ add_real() {
 }
 
 @test "a symlink in a component dir makes install exit 1 naming it, installing nothing" {
-  skip "contract #47 pending"
   add_real
   ln -s /etc/passwd "$repo/cpu/sneaky-link"
   run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
@@ -156,7 +151,6 @@ add_real() {
 }
 
 @test "a subdirectory in a component dir makes install exit 1 naming it, installing nothing" {
-  skip "contract #47 pending"
   add_real
   mkdir -p "$repo/gpu/nested-dir"
   echo x >"$repo/gpu/nested-dir/f"

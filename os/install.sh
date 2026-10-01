@@ -37,16 +37,24 @@ trap 'rm -rf "$stage" || true' EXIT
 tree="$stage/pc-oc"
 mkdir "$tree" || die os "mkdir $tree failed"
 
-# -RP copies a symlink as a symlink, so the check below sees it instead of its target
+# every regular file directly under a component dir is copied: verb scripts run, the rest
+# (scx_loader.toml, gpu/values) is data they read. -RP copies a symlink as a symlink, so
+# the check below sees it instead of its target
 scripts=(pc-oc)
+files=(pc-oc)
 for c in "${components[@]}"; do
-  for v in apply revert probe; do
-    if [[ -e "$here/$c/$v.sh" || -L "$here/$c/$v.sh" ]]; then
-      scripts+=("$c/$v.sh")
+  [[ -d "$here/$c" ]] || continue
+  while IFS= read -r -d '' name; do
+    if [[ -d "$here/$c/$name" && ! -L "$here/$c/$name" ]]; then
+      die os "subdirectory in component dir: $c/$name"
     fi
-  done
+    files+=("$c/$name")
+    case "$name" in
+      apply.sh | revert.sh | probe.sh) scripts+=("$c/$name") ;;
+    esac
+  done < <(find "$here/$c" -mindepth 1 -maxdepth 1 -printf '%f\0' | LC_ALL=C sort -z)
 done
-for f in "${scripts[@]}"; do
+for f in "${files[@]}"; do
   mkdir -p "$tree/$(dirname "$f")" || die os "mkdir for $f failed"
   cp -RP "$here/$f" "$tree/$f" || die os "copy $f failed"
 done
