@@ -13,18 +13,18 @@ source "$here/../lib/write.sh"
 pl_w=""
 [[ -r "$here/values" ]] || die gpu "cannot read $here/values"
 while IFS= read -r line || [[ -n "$line" ]]; do
-  if [[ "$line" =~ ^pl_w=([0-9]+)([[:space:]]|$) ]]; then pl_w="${BASH_REMATCH[1]}"; fi
+  if [[ "$line" =~ ^pl_w=([1-9][0-9]{0,3})([[:space:]]|$) ]]; then pl_w="${BASH_REMATCH[1]}"; fi
 done <"$here/values"
 [[ -n "$pl_w" ]] || die gpu "no pl_w in $here/values"
 
 power="$(nvidia-smi -q -d POWER)" || die gpu "nvidia-smi -q -d POWER failed"
 min_w="" max_w=""
 while IFS= read -r line; do
-  if [[ "$line" =~ ^[[:space:]]*Min\ Power\ Limit[[:space:]]*:[[:space:]]*([0-9]+)(\.[0-9]+)?\ W ]]; then min_w="${BASH_REMATCH[1]}"; fi
-  if [[ "$line" =~ ^[[:space:]]*Max\ Power\ Limit[[:space:]]*:[[:space:]]*([0-9]+)(\.[0-9]+)?\ W ]]; then max_w="${BASH_REMATCH[1]}"; fi
+  if [[ "$line" =~ ^[[:space:]]*Min\ Power\ Limit[[:space:]]*:[[:space:]]*([1-9][0-9]{0,3}|0)(\.[0-9]+)?\ W ]]; then min_w="${BASH_REMATCH[1]}"; fi
+  if [[ "$line" =~ ^[[:space:]]*Max\ Power\ Limit[[:space:]]*:[[:space:]]*([1-9][0-9]{0,3}|0)(\.[0-9]+)?\ W ]]; then max_w="${BASH_REMATCH[1]}"; fi
 done <<<"$power"
 [[ -n "$min_w" && -n "$max_w" ]] || die gpu "cannot parse Min/Max Power Limit"
-if ((pl_w < min_w || pl_w > max_w)); then
+if ((10#$pl_w < 10#$min_w || 10#$pl_w > 10#$max_w)); then
   die gpu "pl_w $pl_w outside [$min_w, $max_w]"
 fi
 

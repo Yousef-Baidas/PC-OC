@@ -13,7 +13,7 @@ stock="$(pc_oc_state)/gpu/stock"
 [[ -f "$stock" ]] || die gpu "no stock snapshot"
 pl_w=""
 while IFS= read -r line || [[ -n "$line" ]]; do
-  if [[ "$line" =~ ^gpu\.pl_w=([0-9]+)(\.[0-9]+)?$ ]]; then pl_w="${BASH_REMATCH[1]}"; fi
+  if [[ "$line" =~ ^gpu\.pl_w=([1-9][0-9]{0,3})(\.[0-9]+)?$ ]]; then pl_w="${BASH_REMATCH[1]}"; fi
 done <"$stock"
 [[ -n "$pl_w" ]] || die gpu "no gpu.pl_w in $stock"
 
