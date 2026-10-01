@@ -131,3 +131,31 @@ cpu_ram_errors() {
     return 1
   }
 }
+
+# toolchain_errors FILE: one line per toolchain id that is missing, repeated,
+# or has a non-https url or an empty revision; status 1 if any (#115)
+toolchain_errors() {
+  local id
+  for id in cargo-config sccache-readme sccache-rust mold-readme \
+    cmake-launcher-env cmake-ldflags-env makepkg-conf-5 rust-lld-default; do
+    awk -F'\t' -v id="$id" '
+      $1 == id { n++; url = $3; rev = $4 }
+      END {
+        if (n != 1) print id ": " n + 0 " rows, want 1"
+        else if (url !~ /^https:\/\//) print id ": non-https url " url
+        else if (rev == "") print id ": empty revision"
+      }
+    ' "$1"
+  done >"$BATS_TEST_TMPDIR/errors"
+  cat "$BATS_TEST_TMPDIR/errors"
+  [ ! -s "$BATS_TEST_TMPDIR/errors" ]
+}
+
+@test "manifest has the toolchain rows" {
+  skip "contract #115 pending"
+  run toolchain_errors "$M"
+  [ "$status" -eq 0 ] || {
+    echo "$output" >&2
+    return 1
+  }
+}
