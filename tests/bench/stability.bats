@@ -18,7 +18,8 @@ setup() {
 
 # write_stubs: y-cruncher and stress-ng log each non-version call (tab-joined
 # args); y-cruncher also records when its run starts, sleeps $YC_SLEEP and
-# exits $YC_EXIT; journalctl logs its args and prints $JOURNAL
+# exits $YC_EXIT; journalctl logs its args and prints $JOURNAL; sudo logs its
+# args to calls-sudo and exits 1, so no case can reach the real sudo
 write_stubs() {
   cat >"$STUB_DIR/y-cruncher" <<STUB
 #!/usr/bin/env bash
@@ -40,6 +41,11 @@ STUB
 if [ "\$*" = --version ]; then echo 'systemd 258 (258.1-1-arch)'; exit 0; fi
 (IFS=\$'\t'; printf '%s\n' "\$*") >>"$BATS_TEST_TMPDIR/calls-journalctl"
 cat "\$JOURNAL"
+STUB
+  cat >"$STUB_DIR/sudo" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >>"$BATS_TEST_TMPDIR/calls-sudo"
+exit 1
 STUB
   chmod +x "$STUB_DIR"/*
 }
@@ -201,6 +207,19 @@ run_sampled() {
   # nominal 20.0 W; the mock reads the clock a little off the sampler's
   awk -v w="$(value result.stability.pkg_w_avg)" 'BEGIN { exit !(w ~ /^[0-9]+\.[0-9]$/ && w >= 18 && w <= 22) }'
   [ "$(value result.stability.mhz_avg)" = 4000 ]
+  [ "${lines[-1]}" = result.stability=PASS ]
+}
+
+@test "default probe argv" {
+  skip "contract #75 pending"
+  unset PC_OC_PROBE
+  run_sampled cpu 1
+  [ "$status" -eq 0 ]
+  [[ "$(value input.telemetry.source)" == "sudo -n /usr/local/lib/pc-oc/pc-oc probe cpu samples="[1-9]* ]]
+  [ -s "$BATS_TEST_TMPDIR/calls-sudo" ]
+  [ "$(sort -u "$BATS_TEST_TMPDIR/calls-sudo")" = "-n /usr/local/lib/pc-oc/pc-oc probe cpu" ]
+  [ "$(value result.stability.vcore_max_mv)" = n/a ]
+  [ "$(value result.stability.pkg_w_avg)" = n/a ]
   [ "${lines[-1]}" = result.stability=PASS ]
 }
 
