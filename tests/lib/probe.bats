@@ -18,7 +18,6 @@ run_probe() {
 }
 
 @test "probe_emit counts and sums over two fixture files" {
-  skip "contract #36 pending"
   run_probe 'probe_read "$TWO"; first=$REPLY; probe_read "$NONL"; probe_emit first="$first" second="$REPLY"'
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "source=$TWO,$NONL bytes=24 items=2" ]
@@ -28,14 +27,12 @@ run_probe() {
 }
 
 @test "probe_read counts a file with no trailing newline by its real size" {
-  skip "contract #36 pending"
   run_probe 'probe_read "$NONL"; probe_emit v="$REPLY"'
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "source=$NONL bytes=4 items=1" ]
 }
 
 @test "probe_read sets PROBE_CONTENT to every line, and bytes= is its size" {
-  skip "contract #36 pending"
   run_probe 'probe_read "$TWO"; want=$(printf "alpha  \nsecond line\n"; echo x); [ "${PROBE_CONTENT}x" = "$want" ] && probe_emit same=yes'
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "source=$TWO bytes=20 items=1" ]
@@ -43,7 +40,6 @@ run_probe() {
 }
 
 @test "adding a key bumps items=" {
-  skip "contract #36 pending"
   run_probe 'probe_read "$NONL"; probe_emit a=1 b=2 c=3'
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "source=$NONL bytes=4 items=3" ]
@@ -52,7 +48,6 @@ run_probe() {
 }
 
 @test "an unreadable path exits 1 naming the component" {
-  skip "contract #36 pending"
   run_probe 'probe_read "$FIX/missing.txt"; probe_emit v="$REPLY"'
   [ "$status" -eq 1 ]
   [ "$output" = "" ]
@@ -60,7 +55,6 @@ run_probe() {
 }
 
 @test "probe_source records a non-file source" {
-  skip "contract #36 pending"
   run_probe 'probe_source nvidia-smi 120; probe_read "$NONL"; probe_emit v="$REPLY"'
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "source=nvidia-smi,$NONL bytes=124 items=1" ]

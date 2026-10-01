@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Print current gpu values: line 1 source= bytes= items=, then gpu.<key>=<value>.
+# Print current gpu values: the probe_emit header, then gpu.<key>=<value>.
 # shellcheck source=../lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+
+PROBE_COMPONENT=gpu
 
 # Fields per `nvidia-smi --query-gpu` (smi); units are W and MHz, unit-free via nounits.
 keys=(name driver vbios pl_w pl_default_w pl_min_w pl_max_w clock_max_mhz mem_clock_max_mhz)
@@ -25,7 +27,14 @@ for i in "${!keys[@]}"; do
   values+=("$v")
 done
 
-printf 'source=%s bytes=%s items=%s\n' "$smi" "$(printf '%s\n' "$out" | LC_ALL=C wc -c | tr -d ' ')" "${#keys[@]}"
+# the command substitution stripped one newline; count it back
+n=$(
+  LC_ALL=C
+  echo $((${#out} + 1))
+)
+probe_source "$smi" "$n"
+args=()
 for i in "${!keys[@]}"; do
-  printf 'gpu.%s=%s\n' "${keys[i]}" "${values[i]}"
+  args+=("${keys[i]}=${values[i]}")
 done
+probe_emit "${args[@]}"

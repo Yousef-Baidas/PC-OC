@@ -93,6 +93,15 @@ DMI
   [[ "${lines[0]}" == *"$BATS_TEST_TMPDIR/bin/dmidecode"* ]]
 }
 
+@test "probe ram as root counts every dmidecode byte, trailing newlines included" {
+  stub_root 0
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" =~ \ bytes=([0-9]+)\ items= ]]
+  want=$(($(wc -c <"$SYSFS_ROOT/proc/meminfo") + $("$BATS_TEST_TMPDIR/bin/dmidecode" -t 17 | wc -c)))
+  [ "${BASH_REMATCH[1]}" -eq "$want" ]
+}
+
 @test "probe ram as non-root never calls dmidecode" {
   stub_root 1000
   printf '#!/bin/sh\nexit 9\n' >"$BATS_TEST_TMPDIR/bin/dmidecode"

@@ -23,21 +23,17 @@ assert_adopted() {
 }
 
 @test "cpu probe uses probe_emit and no own header or byte counter" {
-  skip "adopted in #37"
   assert_adopted cpu
 }
 
 @test "ram probe uses probe_emit and no own header or byte counter" {
-  skip "adopted in #37"
   assert_adopted ram
 }
 
 @test "gpu probe uses probe_emit and no own header or byte counter" {
-  skip "adopted in #38"
   assert_adopted gpu
 }
 
 @test "os probe uses probe_emit and no own header or byte counter" {
-  skip "contract #36 pending"
   assert_adopted os
 }
