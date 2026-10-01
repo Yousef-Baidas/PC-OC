@@ -9,6 +9,28 @@ setup() {
   cp "$BATS_TEST_DIRNAME/../../pc-oc" "$root/"
   cp -r "$BATS_TEST_DIRNAME/../../lib" "$root/"
   export SYSFS_ROOT="$BATS_TEST_TMPDIR/sys"
+  mkdir -p "$BATS_TEST_TMPDIR/mocks" "$BATS_TEST_TMPDIR/varlib"
+  local m
+  for m in systemctl nvidia-smi; do
+    printf '#!/usr/bin/bash\n# pc-oc-test-mock\n' >"$BATS_TEST_TMPDIR/mocks/$m"
+    chmod +x "$BATS_TEST_TMPDIR/mocks/$m"
+  done
+  echo pc-oc-test-scratch >"$BATS_TEST_TMPDIR/varlib/marker"
+  cat >"$BATS_TEST_TMPDIR/guard.sh" <<EOF
+#!/usr/bin/bash
+mount --bind "$BATS_TEST_TMPDIR/mocks/systemctl" /usr/bin/systemctl || exit 97
+mount --bind "$BATS_TEST_TMPDIR/mocks/nvidia-smi" /usr/bin/nvidia-smi || exit 97
+mount --bind "$BATS_TEST_TMPDIR/varlib" /var/lib || exit 97
+[[ "\$(sed -n 2p /usr/bin/systemctl)" == "# pc-oc-test-mock" ]] || exit 97
+[[ "\$(sed -n 2p /usr/bin/nvidia-smi)" == "# pc-oc-test-mock" ]] || exit 97
+[[ "\$(cat /var/lib/marker)" == pc-oc-test-scratch ]] || exit 97
+exec "\$@"
+EOF
+}
+
+# as_root <cmd...>: EUID 0 in a namespace where the system tools are mocks; never real root (#56)
+as_root() {
+  /usr/bin/unshare -rm /usr/bin/bash "$BATS_TEST_TMPDIR/guard.sh" "$@"
 }
 
 fake_component() {
@@ -53,7 +75,7 @@ EOF
 }
 
 @test "all with no component folders does nothing and exits 0" {
-  run "$root/pc-oc" apply all
+  run as_root "$root/pc-oc" apply all
   [ "$status" -eq 0 ]
   [ "$output" = "" ]
 }
@@ -61,17 +83,17 @@ EOF
 @test "all runs every present component in order" {
   fake_component os apply
   fake_component cpu apply
-  run "$root/pc-oc" apply all
+  run as_root "$root/pc-oc" apply all
   [ "$status" -eq 0 ]
-  [ "${lines[0]}" = "apply cpu SYSFS_ROOT=$SYSFS_ROOT" ]
-  [ "${lines[1]}" = "apply os SYSFS_ROOT=$SYSFS_ROOT" ]
+  [ "${lines[0]}" = "apply cpu SYSFS_ROOT=" ]
+  [ "${lines[1]}" = "apply os SYSFS_ROOT=" ]
 }
 
 @test "a failing component under all stops pc-oc and names the component" {
   fake_component os apply
   mkdir -p "$root/cpu"
   printf '#!/usr/bin/env bash\nexit 3\n' >"$root/cpu/apply.sh"
-  run --separate-stderr "$root/pc-oc" apply all
+  run --separate-stderr as_root "$root/pc-oc" apply all
   [ "$status" -eq 1 ]
   [ "$output" = "" ]
   [ "$stderr" = "pc-oc: cpu: apply.sh failed" ]
@@ -86,7 +108,7 @@ EOF
   PATH="$BATS_TEST_TMPDIR/evil:$PATH" run "$root/pc-oc" probe cpu
   [ "$status" -eq 0 ]
   [ "$output" = "probe cpu SYSFS_ROOT=$SYSFS_ROOT" ]
-  PATH="$BATS_TEST_TMPDIR/evil:$PATH" run "$root/pc-oc" apply all
+  PATH="$BATS_TEST_TMPDIR/evil:$PATH" run as_root "$root/pc-oc" apply all
   [ "$status" -eq 0 ]
-  [ "$output" = "apply cpu SYSFS_ROOT=$SYSFS_ROOT" ]
+  [ "$output" = "apply cpu SYSFS_ROOT=" ]
 }
