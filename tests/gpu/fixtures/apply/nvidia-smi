@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Mock nvidia-smi. Env: MOCK_DIR (fixture dir), MOCK_STATE (dir holding pl and calls), MOCK_IGNORE_PL=1 to drop -pl.
+set -euo pipefail
+case "$*" in
+  "-q -d POWER") cat "$MOCK_DIR/power.txt" ;;
+  "--query-gpu=power.limit --format=csv,noheader,nounits") cat "$MOCK_STATE/pl" ;;
+  "--query-gpu=name,"*)
+    printf 'NVIDIA GeForce RTX 4060 Ti, 615.71.09, 95.06.1A.00.01, %s, 160.00, 100.00, 216.00, 3105, 9001\n' "$(cat "$MOCK_STATE/pl")"
+    ;;
+  "-pl "*)
+    printf '%s\n' "$*" >>"$MOCK_STATE/calls"
+    [[ -n "${MOCK_IGNORE_PL:-}" ]] || printf '%s.00\n' "$2" >"$MOCK_STATE/pl"
+    ;;
+  *)
+    echo "mock nvidia-smi: unexpected args: $*" >&2
+    exit 2
+    ;;
+esac
