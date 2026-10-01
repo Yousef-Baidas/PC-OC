@@ -17,6 +17,8 @@ pc_oc_state() {
 # _w_key <path>: print the backup file name for <path>; dies unless <path> is absolute.
 _w_key() {
   [[ "$1" == /* ]] || die lib "not an absolute path: $1"
+  # / maps to %, so a % in the path would make two paths share one backup
+  [[ "$1" != *%* ]] || die lib "path contains %: $1"
   local key="${1//\//%}"
   printf '%s\n' "$key"
 }
@@ -64,19 +66,21 @@ sys_restore() {
 }
 
 # _w_place <src> <real>: copy <src> over <real> via a temp file in the same dir, then compare bytes.
+# Returns 1 when <real> is untouched, 2 when the mv ran but the compare did not pass.
 _w_place() {
   local tmp
-  tmp="$(mktemp -- "$2.XXXXXX" 2>/dev/null)" || die lib "cannot create temp file beside $2"
-  if ! { cp -p -- "$1" "$tmp" && mv -f -- "$tmp" "$2" && cmp -s -- "$1" "$2"; } 2>/dev/null; then
+  tmp="$(mktemp -- "$2.XXXXXX" 2>/dev/null)" || return 1
+  if ! { cp -p -- "$1" "$tmp" && mv -f -- "$tmp" "$2"; } 2>/dev/null; then
     rm -f -- "$tmp" || :
     return 1
   fi
+  cmp -s -- "$1" "$2" 2>/dev/null || return 2
 }
 
 # file_install <src> <dest>: back up <dest> (or record it absent), install <src> atomically.
 file_install() {
   [[ $# -eq 2 ]] || die lib "usage: file_install <src> <dest>"
-  local src="$1" dest="$2" real state key made=""
+  local src="$1" dest="$2" real state key made="" rc
   [[ -f "$src" ]] || die lib "no such file: $src"
   real="$(sysfs_path "$dest")" || die lib "sysfs_path $dest failed"
   state="$(pc_oc_state)" || die lib "pc_oc_state failed"
@@ -95,9 +99,14 @@ file_install() {
     fi
   fi
   # a second install keeps the first record, so restore still gives stock
-  if ! _w_place "$src" "$real"; then
+  rc=0
+  _w_place "$src" "$real" || rc=$?
+  if [[ "$rc" -eq 1 ]]; then
     [[ -z "$made" ]] || rm -f -- "$made" || :
     die lib "cannot install $src to $dest"
+  elif [[ "$rc" -ne 0 ]]; then
+    # dest was replaced, so the backup is the only stock left: keep it
+    die lib "installed $dest but verify failed; backup kept"
   fi
 }
 
