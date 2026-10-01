@@ -84,3 +84,17 @@ STUB
   [ "$output" = "" ]
   [[ "$stderr" == "pc-oc: gpu: "* ]]
 }
+
+@test "probe gpu with nvidia-smi output lacking a trailing newline gives bytes= equal to its real wc -c" {
+  skip "contract #50 pending"
+  cat >"$STUB_DIR/nvidia-smi" <<STUB
+#!/usr/bin/env bash
+printf '%s' '$FIELDS'
+STUB
+  real=$("$STUB_DIR/nvidia-smi" | wc -c)
+  [ "$real" -eq "${#FIELDS}" ]
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" =~ ^source=[^\ ]*nvidia-smi[^\ ]*\ bytes=([0-9]+)\ items=9$ ]]
+  [ "${BASH_REMATCH[1]}" -eq "$real" ]
+}
