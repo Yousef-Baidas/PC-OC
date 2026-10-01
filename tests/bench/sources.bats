@@ -60,7 +60,6 @@ craft_ids() {
 }
 
 @test "manifest parses: header, unique ids, https urls" {
-  skip "contract #27 pending"
   run manifest_errors "$M"
   [ "$status" -eq 0 ] || {
     echo "$output" >&2
@@ -69,7 +68,6 @@ craft_ids() {
 }
 
 @test "manifest holds every id in the os and gpu CRAFT Sources tables" {
-  skip "contract #27 pending"
   missing="$(craft_ids | grep -vxFf <(cut -f1 "$M" | tail -n +2) || true)"
   [ -z "$missing" ] || {
     echo "ids missing from manifest: $missing" >&2
@@ -78,7 +76,6 @@ craft_ids() {
 }
 
 @test "every # src: id cited in the repo resolves in the manifest" {
-  skip "contract #27 pending"
   unresolved="$(unresolved_ids "$SCAN_ROOT" "$M")"
   [ -z "$unresolved" ] || {
     echo "unknown source ids: $unresolved" >&2
@@ -87,25 +84,21 @@ craft_ids() {
 }
 
 @test "red: duplicate id in manifest fails and names the id" {
-  skip "contract #27 pending"
   run -1 manifest_errors "$FIX/dup-id.tsv"
   [[ "$output" == *"duplicate id k-one"* ]]
 }
 
 @test "red: http url in manifest fails and names the id" {
-  skip "contract #27 pending"
   run -1 manifest_errors "$FIX/http-url.tsv"
   [[ "$output" == *"non-https url for k-three"* ]]
 }
 
 @test "red: script citing an unknown id fails and names the id" {
-  skip "contract #27 pending"
   run unresolved_ids "$FIX/unknown-cite" "$FIX/good.tsv"
   [ "$output" = "k-nope" ]
 }
 
 @test "good fixtures are accepted" {
-  skip "contract #27 pending"
   run manifest_errors "$FIX/good.tsv"
   [ "$status" -eq 0 ]
   run unresolved_ids "$FIX/known-cite" "$FIX/good.tsv"
