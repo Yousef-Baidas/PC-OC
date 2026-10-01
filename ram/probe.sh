@@ -14,14 +14,7 @@ pairs=(total_kb="$total_kb")
 
 # Root only: dmidecode reads the SMBIOS table. Units: MT/s and V become bare numbers.
 if [[ "$(id -u)" -eq 0 ]]; then
-  dmi="$(command -v dmidecode)" || die ram "dmidecode not found"
-  # The sentinel keeps the trailing newlines that $(...) would strip from the count.
-  dump="$("$dmi" -t 17 && echo .)" || die ram "dmidecode failed"
-  dump="${dump%.}"
-  probe_source "$dmi" "$(
-    LC_ALL=C
-    echo "${#dump}"
-  )"
+  probe_run dmidecode -t 17
   dimms="$(
     awk -F': ' '
       function bad(f) {
@@ -49,7 +42,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
       $1 ~ /^\tPart Number$/ { part = $2; sub(/[ \t]+$/, "", part) }
       $1 ~ /^\tConfigured Voltage$/ { mv = num($2) == "" ? "" : int(num($2) * 1000 + 0.5) }
       END { if (!failed) flush() }
-    ' <<<"$dump"
+    ' <<<"$PROBE_CONTENT"
   )" || die ram "populated slot has a missing or non-numeric value: ${dimms##*ERR }"
   [[ -n "$dimms" ]] || die ram "no populated DIMM in dmidecode -t 17"
   while IFS= read -r line; do pairs+=("${line#ram.}"); done <<<"$dimms"
