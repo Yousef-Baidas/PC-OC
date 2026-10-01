@@ -83,6 +83,9 @@
 #     line: prose (`Disable C-States.`), a table row, `> Report ...`,
 #     `- Leave ...`. Rule 7 does not run on it; rules 3 and 8 do (rule 8
 #     first, as above)
+#  10. a SET cite id is not the first column of the sources manifest
+#     (`BIOS_MANIFEST`, default `<table dir>/../sources/manifest.tsv`); an
+#     unreadable manifest is one finding on line 0 per runbook
 bios_lint() {
   [ "$#" -gt 0 ] || {
     echo "pc-oc: bios: usage: bios_lint <menu-paths.tsv> [<runbook.md>...]" >&2
@@ -97,7 +100,16 @@ bios_lint() {
     }
   done
   [ "$#" -gt 0 ] || return 0
-  LC_ALL=C awk -v keys="$(tail -n +2 "$table" | cut -f1)" -v paths="$(tail -n +2 "$table" | cut -f2)" '
+  # an unset BIOS_MANIFEST with no manifest beside the table (the lint
+  # fixtures) skips rule 10; a set one that is unreadable is red
+  local manifest="${BIOS_MANIFEST:-$(dirname "$table")/../sources/manifest.tsv}" ids="" skip10=""
+  if [ -r "$manifest" ]; then
+    ids="$(cut -f1 "$manifest" | grep -vx id || true)"
+  else
+    manifest=""
+    [ -n "${BIOS_MANIFEST:-}" ] || skip10=1
+  fi
+  LC_ALL=C awk -v have_manifest="${manifest:+1}" -v skip10="$skip10" -v ids="$ids" -v keys="$(tail -n +2 "$table" | cut -f1)" -v paths="$(tail -n +2 "$table" | cut -f2)" '
     function hit(rule, what) { print FILENAME ":" FNR ": rule " rule ": " what; bad = 1 }
     # word(s, re): re is a whole word of s; a-z, 0-9 and _ make up words
     function word(s, re) { return s ~ ("(^|[^a-z0-9_])(" re ")([^a-z0-9_]|$)") }
@@ -127,6 +139,8 @@ bios_lint() {
       fence = ""
     }
     BEGIN {
+      n = split(ids, k, "\n")
+      for (i = 1; i <= n; i++) src[k[i]] = 1
       n = split(keys, k, "\n")
       for (i = 1; i <= n; i++) known[k[i]] = 1
       n = split(paths, p, "\n")
@@ -160,6 +174,7 @@ bios_lint() {
       unit = num "([.][0-9]+)? ?(v|mv|w|kw|mohms?|mhz|ghz|mt/s|volts?|millivolts?|watts?|milliohms?)([^a-z0-9]|$)"
       value = "auto|enabled|disabled|unlimited|max|on|off"
     }
+    FNR == 1 && !have_manifest && !skip10 { print FILENAME ":0: rule 10: manifest missing or unreadable"; bad = 1 }
     FNR == 1 { unclosed(); ll = 1.1; ll_was = "stock 1.1 mOhm (intel-14-pl Table 77 p191)" }
     /[\200-\377]|<[A-Za-z\/!]|&#?[A-Za-z0-9]+;/ {
       hit(8, "not plain ASCII Markdown (non-ASCII byte, HTML tag or comment, or entity)")
@@ -190,6 +205,11 @@ bios_lint() {
         if (nset > 1 || s !~ /^- SET [^ ]+ = [^ #]+( [^ #]+)*( # src: [a-z0-9-]+(,[a-z0-9-]+)*)?$/) {
           hit(1, "not a SET line: want - SET <key> = <value> # src: <id>[,<id>]")
           next
+        }
+        if (have_manifest && match(s, / # src: .*/)) {
+          nc = split(substr(s, RSTART + 8), cite, ",")
+          for (i = 1; i <= nc; i++)
+            if (!(cite[i] in src)) { hit(10, "src " cite[i] " not in manifest"); break }
         }
         split(s, f, " ")
         key = f[3]
