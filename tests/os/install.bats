@@ -38,7 +38,6 @@ setup() {
 }
 
 @test "a DESTDIR install produces the tree, modes, VERSION and the sudoers drop-in" {
-  skip "contract #26 pending"
   run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
   [ "$status" -eq 0 ]
   lib_entries="$(cd "$repo" && find lib -type f -printf '644 ./%p\n')"
@@ -56,7 +55,6 @@ setup() {
 }
 
 @test "install as a non-root user without DESTDIR exits 1 naming root" {
-  skip "contract #26 pending"
   [[ "$EUID" -ne 0 ]] || skip "needs a non-root user"
   run --separate-stderr env -u DESTDIR "$repo/os/install.sh"
   [ "$status" -eq 1 ]
@@ -64,7 +62,6 @@ setup() {
 }
 
 @test "a sudoers file that fails visudo stops install before anything is copied" {
-  skip "contract #26 pending"
   echo 'not sudoers' >>"$repo/etc/sudoers.d/pc-oc"
   run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
   [ "$status" -eq 1 ]

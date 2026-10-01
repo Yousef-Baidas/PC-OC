@@ -1,3 +1,21 @@
-# Placeholder: contract #26. Deliberately not valid sudoers, so visudo, the lint
-# and os/install.sh all refuse it until the real rules land.
-not implemented (#26)
+# pc-oc: the installed entry point only, exact verb and component per line (docs/adr/0001).
+# Installed at 0440 by os/install.sh after visudo -cf; no SETENV, no env_keep, so env_reset
+# drops SYSFS_ROOT and PC_OC_STATE. The file name has no dot: sudoers.d skips dotted names.
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc apply cpu
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc apply ram
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc apply gpu
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc apply os
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc apply toolchain
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc apply all
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc revert cpu
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc revert ram
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc revert gpu
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc revert os
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc revert toolchain
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc revert all
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc probe cpu
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc probe ram
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc probe gpu
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc probe os
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc probe toolchain
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc probe all

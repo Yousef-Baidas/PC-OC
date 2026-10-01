@@ -67,55 +67,47 @@ sudoers_lint() {
 }
 
 @test "etc/sudoers.d/pc-oc passes visudo -cf" {
-  skip "contract #26 pending"
   run visudo -cf "$SUDOERS"
   [ "$status" -eq 0 ]
 }
 
 @test "etc/sudoers.d/pc-oc passes the lint" {
-  skip "contract #26 pending"
   run sudoers_lint "$SUDOERS"
   [ "$status" -eq 0 ]
   [ "$output" = "" ]
 }
 
 @test "the lint passes the good fixture" {
-  skip "contract #26 pending"
   run sudoers_lint "$FIX/good"
   [ "$status" -eq 0 ]
   [ "$output" = "" ]
 }
 
 @test "the lint is red on a wildcard" {
-  skip "contract #26 pending"
   run sudoers_lint "$FIX/wildcard"
   [ "$status" -eq 1 ]
   [ "$output" = "$FIX/wildcard:2: wildcard: tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc apply *" ]
 }
 
 @test "the lint is red on a relative path" {
-  skip "contract #26 pending"
   run sudoers_lint "$FIX/relative"
   [ "$status" -eq 1 ]
   [ "$output" = "$FIX/relative:4: relative path: tuff ALL=(root) NOPASSWD: pc-oc probe cpu" ]
 }
 
 @test "the lint is red on a path outside /usr/local/lib/pc-oc/" {
-  skip "contract #26 pending"
   run sudoers_lint "$FIX/outside"
   [ "$status" -eq 1 ]
   [ "$output" = "$FIX/outside:4: path outside /usr/local/lib/pc-oc/: tuff ALL=(root) NOPASSWD: /usr/local/bin/pc-oc probe cpu" ]
 }
 
 @test "the lint is red on SETENV" {
-  skip "contract #26 pending"
   run sudoers_lint "$FIX/setenv"
   [ "$status" -eq 1 ]
   [ "$output" = "$FIX/setenv:4: SETENV: tuff ALL=(root) NOPASSWD:SETENV: /usr/local/lib/pc-oc/pc-oc probe cpu" ]
 }
 
 @test "the lint is red on env_keep" {
-  skip "contract #26 pending"
   run sudoers_lint "$FIX/env-keep"
   [ "$status" -eq 1 ]
   [ "$output" = "$FIX/env-keep:2: env_keep: Defaults!/usr/local/lib/pc-oc/pc-oc env_keep += \"SYSFS_ROOT PC_OC_STATE\"" ]

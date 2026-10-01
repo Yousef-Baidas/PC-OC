@@ -31,7 +31,6 @@ EOF
 }
 
 @test "as EUID 0 pc-oc unsets SYSFS_ROOT and PC_OC_STATE before running a component" {
-  skip "contract #26 pending"
   fake_component cpu probe
   run --separate-stderr "$root/pc-oc" probe cpu
   [ "$status" -eq 0 ]
@@ -42,7 +41,6 @@ EOF
 }
 
 @test "revert all runs every component in reverse order past a failure, then exits 1 naming it" {
-  skip "contract #26 pending"
   for c in cpu ram os toolchain; do
     fake_component "$c" revert
   done
