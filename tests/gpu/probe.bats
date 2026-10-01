@@ -86,7 +86,6 @@ STUB
 }
 
 @test "probe gpu with nvidia-smi output lacking a trailing newline gives bytes= equal to its real wc -c" {
-  skip "contract #50 pending"
   cat >"$STUB_DIR/nvidia-smi" <<STUB
 #!/usr/bin/env bash
 printf '%s' '$FIELDS'
