@@ -1,4 +1,4 @@
-# shellcheck shell=bash disable=SC2154
+# shellcheck shell=bash disable=SC2154 # lines is set by bats run
 # Shared helpers for tests/bench/*.bats.
 
 # value <key>: print the value of stdout line <key>=
