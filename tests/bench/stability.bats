@@ -192,7 +192,6 @@ run_sampled() {
 }
 
 @test "cpu telemetry gives peak vcore, average watts and average mhz from the samples" {
-  skip "contract #75 pending"
   write_probe 1250 1310 1280
   run_sampled cpu 1
   [ "$status" -eq 0 ]
@@ -205,7 +204,6 @@ run_sampled() {
 }
 
 @test "cpu with a probe that exits 1 gives n/a for vcore and watts and still PASS" {
-  skip "contract #75 pending"
   printf '#!/usr/bin/env bash\nexit 1\n' >"$STUB_DIR/mock-probe"
   chmod +x "$STUB_DIR/mock-probe"
   export PC_OC_PROBE="$STUB_DIR/mock-probe"
@@ -218,7 +216,6 @@ run_sampled() {
 }
 
 @test "cpu with a probe printing cpu.vcore=needs-root gives vcore_max_mv=n/a and PASS" {
-  skip "contract #75 pending"
   printf '#!/usr/bin/env bash\necho source=/mock bytes=1 items=1\necho cpu.vcore=needs-root\n' >"$STUB_DIR/mock-probe"
   chmod +x "$STUB_DIR/mock-probe"
   export PC_OC_PROBE="$STUB_DIR/mock-probe"
@@ -229,7 +226,6 @@ run_sampled() {
 }
 
 @test "cpu leaves no sampler running after the run" {
-  skip "contract #75 pending"
   write_probe 1250
   run_sampled cpu 1
   [ "$status" -eq 0 ]

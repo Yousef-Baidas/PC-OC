@@ -24,7 +24,58 @@ usage() {
 inputs=()
 results=()
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+sampler=""
+
+# stop_sampler: kill the sampler and its sleep, reap it; safe to call twice
+stop_sampler() {
+  [ -n "$sampler" ] || return 0
+  pkill -P "$sampler" 2>/dev/null || true
+  kill "$sampler" 2>/dev/null || true
+  wait "$sampler" 2>/dev/null || true
+  sampler=""
+}
+cleanup() {
+  stop_sampler
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# sample_loop <out>: every STABILITY_SAMPLE_S seconds append "<ns> <vcore_mv|-> <energy_uj|-> <mhz|->"
+# (probe keys cpu.vcore_mv, cpu.pkg_energy_uj from pc-oc probe cpu; clock from cpufreq, in kHz)
+sample_loop() {
+  local probe out vcore energy mhz now
+  read -ra probe <<<"${PC_OC_PROBE:-sudo -n /usr/local/lib/pc-oc/pc-oc probe cpu}"
+  while :; do
+    out="$("${probe[@]}" 2>/dev/null </dev/null || true)"
+    now="$(date +%s%N)"
+    vcore="$(sed -n 's/^cpu\.vcore_mv=\([0-9][0-9]*\)$/\1/p' <<<"$out" | head -1)"
+    energy="$(sed -n 's/^cpu\.pkg_energy_uj=\([0-9][0-9]*\)$/\1/p' <<<"$out" | head -1)"
+    mhz="$(cat "${SYSFS_ROOT:-}"/sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq 2>/dev/null |
+      awk '{ s += $1; n++ } END { if (n) printf "%d", s / n / 1000 }' || true)"
+    echo "$now ${vcore:--} ${energy:--} ${mhz:--}" >>"$1"
+    sleep "${STABILITY_SAMPLE_S:-5}"
+  done
+}
+
+# summarize_samples <file>: print vcore_max_mv, pkg_w_avg, mhz_avg, samples (n/a when unknown).
+# Energy delta over the sampler's own clock; a negative delta (counter wrap) drops that interval.
+summarize_samples() {
+  awk '
+    $2 != "-" && (vmax == "" || $2 + 0 > vmax) { vmax = $2 + 0 }
+    $4 != "-" { ms += $4; mn++ }
+    $3 != "-" {
+      if (have && $3 >= pe && $1 > pt) { de += $3 - pe; dt += ($1 - pt) / 1e9 }
+      pe = $3; pt = $1; have = 1
+    }
+    END {
+      printf "%s\n", (vmax == "" ? "n/a" : vmax)
+      if (dt > 0) printf "%.1f\n", de / 1e6 / dt; else print "n/a"
+      printf "%s\n", (mn ? sprintf("%d", ms / mn) : "n/a")
+      print NR
+    }' "$1"
+}
 
 # scan_journal <since>: kernel lines since <since> into results; their source goes first in inputs
 scan_journal() {
@@ -58,6 +109,9 @@ case "${1:-}" in
     since="$(date '+%Y-%m-%d %H:%M:%S')"
     # stdout is held until the end, so a crash would lose the window; name it now
     echo "pc-oc: bench: window starts $since; after a crash: stability.sh scan \"$since\"" >&2
+    : >"$tmp/samples"
+    sample_loop "$tmp/samples" >/dev/null 2>&1 &
+    sampler=$!
     rc=0
     y-cruncher "${yc_args[@]}" </dev/null 2>&1 | tee "$tmp/ycruncher.log" >&2 || rc=$?
     if [ "$rc" -eq 0 ] && ! grep -q 'Stress test failed' "$tmp/ycruncher.log"; then
@@ -70,6 +124,10 @@ case "${1:-}" in
     else
       results+=(result.stability.stressng=FAIL)
     fi
+    stop_sampler
+    mapfile -t tel < <(summarize_samples "$tmp/samples")
+    inputs+=("input.telemetry.source=${PC_OC_PROBE:-sudo -n /usr/local/lib/pc-oc/pc-oc probe cpu} samples=${tel[3]}")
+    results+=("result.stability.vcore_max_mv=${tel[0]}" "result.stability.pkg_w_avg=${tel[1]}" "result.stability.mhz_avg=${tel[2]}")
     scan_journal "$since"
     ;;
   scan)
