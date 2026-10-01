@@ -13,7 +13,6 @@ setup_file() {
 }
 
 setup() {
-  skip "contract #77 pending"
   load lint
   RUNBOOK="$BIOS_ROOT/power-limits.md"
   echo "runbook: $RUNBOOK"
