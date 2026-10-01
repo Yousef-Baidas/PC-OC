@@ -136,7 +136,7 @@ cpu_ram_errors() {
 # or has a non-https url or an empty revision; status 1 if any (#115)
 toolchain_errors() {
   local id
-  for id in cargo-config sccache-readme sccache-rust mold-readme \
+  for id in cargo-config sccache-rust mold sccache \
     cmake-launcher-env cmake-ldflags-env makepkg-conf-5 rust-lld-default; do
     awk -F'\t' -v id="$id" '
       $1 == id { n++; url = $3; rev = $4 }
