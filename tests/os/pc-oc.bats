@@ -220,13 +220,11 @@ refused_env_euid() { # refused_env_euid <EUID value> <verb> <target>
 }
 
 @test "non-root env EUID=0 pc-oc apply os and revert all still refuse and run no component" {
-  skip "contract #56 pending"
   refused_env_euid 0 apply os
   refused_env_euid 0 revert all
 }
 
 @test "as_root env EUID=1000 pc-oc apply os still runs with SYSFS_ROOT and PC_OC_STATE unset" {
-  skip "contract #56 pending"
   fake_component os apply
   run --separate-stderr as_root env EUID=1000 "$root/pc-oc" apply os
   [ "$status" -eq 0 ] || {
@@ -238,7 +236,6 @@ refused_env_euid() { # refused_env_euid <EUID value> <verb> <target>
 }
 
 @test "non-root env EUID with a command substitution refuses and never evaluates it" {
-  skip "contract #56 pending"
   local marker="$BATS_TEST_TMPDIR/eval-marker"
   refused_env_euid "a[\$(touch $marker)]" apply os
   [ ! -e "$marker" ] || {
