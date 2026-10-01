@@ -13,7 +13,6 @@ setup_file() {
 }
 
 setup() {
-  skip "contract #78 pending"
   load lint
   RUNBOOK="$BIOS_ROOT/undervolt.md"
   echo "runbook: $RUNBOOK"
