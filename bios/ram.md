@@ -9,6 +9,7 @@ Note: kit is Kingston FURY Beast KF556C40BB-16, two modules (kingston-kf556c40).
 - Run: sudo pc-oc probe ram
 - Record: ram.dimm0.part, ram.dimm1.part, ram.dimm0.configured_mv, ram.dimm1.configured_mv (stock DRAM rail), ram.spd0.dram_mfr, ram.spd1.dram_mfr
 - Read: ram.dimm0.configured_mts = 5600 means XMP Profile1 is active.
+- Note: any other configured_mts means stop here and report it.
 - Note: the chip maker is recorded only; no value below depends on it (human decision on #79, 2026-10-01).
 - Note: a dram_mfr of unknown, or spd=no-spd5118, is a valid reading.
 
@@ -64,8 +65,7 @@ refresh:    at 6000: 295 x 6000 / 2000 = 885.0 -> 885
 ## XMP check
 
 2. Read: mem.xmp on screen, BIOS version in System Info. (gb-bios700 p25).
-- Note: at Profile1 already, skip the next line.
-- SET mem.xmp = Profile1  # src: kingston-kf556c40,gb-bios700
+- Note: any value other than Profile1 means stop here and report it.
 - Note: the fence below names items with no row in bios/menu-paths.tsv; find each with Alt+F (gb-bios700 p4).
 
 ```text
@@ -79,7 +79,7 @@ Memory Boot Mode
 - Note: no step here alters those three items.
 - Save: Save & Exit Setup by the exit path in the menu fence.
 - Report: mem.xmp as seen, BIOS version, the three items as seen.
-- Revert: mem.xmp = the value read at the start of this step.
+- Revert: none; this step only reads.
 
 ## Frequency
 
@@ -100,7 +100,7 @@ Memory Boot Mode
 - Run: sudo pc-oc probe ram
 - Run: bench/stability.sh cpu 10
 - Report: ram.dimm0.configured_mts, ram.dimm0.configured_mv, result.stability and every result.stability.* line.
-- Record: reading row: step 3, each key as seen, result.stability.
+- Record: reading row: step 3, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: the step 1 slot by the profile-return path in the menu fence; XMP 5600 is final, step 21 next.
 
 4. Note: second frequency rung.
@@ -115,7 +115,7 @@ Memory Boot Mode
 - Run: sudo pc-oc probe ram
 - Run: bench/stability.sh cpu 10
 - Report: ram.dimm0.configured_mts, result.stability and every result.stability.* line.
-- Record: reading row: step 4, each key as seen, result.stability.
+- Record: reading row: step 4, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: the pass slot, which holds mem.freq = 6000, mem.tcl = 44, mem.trcd = 44, mem.trp = 44, mem.tras = 96, mem.trfc = 885; step 21 next.
 
 ## Timing ladders at 6400
@@ -147,32 +147,40 @@ refresh:    944 -> 903, 862, 821, 780; back-off 985, 944, 903, 862
 - SET mem.tcl = 44  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 5, mem.tcl as seen, result.stability.
+- Record: reading row: step 5, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.tcl = 48, then the gate again, then step 9.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 5 back-off, every mem key as seen, result.stability.
 
 6. Note: CAS ladder, rung two of four.
 - Save: the pass slot first.
 - SET mem.tcl = 42  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 6, mem.tcl as seen, result.stability.
+- Record: reading row: step 6, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.tcl = 46, then the gate again, then step 9.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 6 back-off, every mem key as seen, result.stability.
 
 7. Note: CAS ladder, rung three of four.
 - Save: the pass slot first.
 - SET mem.tcl = 40  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 7, mem.tcl as seen, result.stability.
+- Record: reading row: step 7, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.tcl = 44, then the gate again, then step 9.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 7 back-off, every mem key as seen, result.stability.
 
 8. Note: CAS ladder, rung four of four.
 - Save: the pass slot first.
 - SET mem.tcl = 38  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 8, mem.tcl as seen, result.stability.
+- Record: reading row: step 8, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.tcl = 42, then the gate again, then step 9.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 8 back-off, every mem key as seen, result.stability.
 
 9. Note: RAS-to-CAS and precharge ladder, rung one of four.
 - Save: the pass slot first.
@@ -180,8 +188,10 @@ refresh:    944 -> 903, 862, 821, 780; back-off 985, 944, 903, 862
 - SET mem.trp = 44  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 9, mem.trcd and mem.trp as seen, result.stability.
+- Record: reading row: step 9, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.trcd = 48 and mem.trp = 48, then the gate again, then step 13.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 9 back-off, every mem key as seen, result.stability.
 
 10. Note: RAS-to-CAS and precharge ladder, rung two of four.
 - Save: the pass slot first.
@@ -189,8 +199,10 @@ refresh:    944 -> 903, 862, 821, 780; back-off 985, 944, 903, 862
 - SET mem.trp = 42  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 10, mem.trcd and mem.trp as seen, result.stability.
+- Record: reading row: step 10, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.trcd = 46 and mem.trp = 46, then the gate again, then step 13.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 10 back-off, every mem key as seen, result.stability.
 
 11. Note: RAS-to-CAS and precharge ladder, rung three of four.
 - Save: the pass slot first.
@@ -198,8 +210,10 @@ refresh:    944 -> 903, 862, 821, 780; back-off 985, 944, 903, 862
 - SET mem.trp = 40  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 11, mem.trcd and mem.trp as seen, result.stability.
+- Record: reading row: step 11, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.trcd = 44 and mem.trp = 44, then the gate again, then step 13.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 11 back-off, every mem key as seen, result.stability.
 
 12. Note: RAS-to-CAS and precharge ladder, rung four of four.
 - Save: the pass slot first.
@@ -207,79 +221,97 @@ refresh:    944 -> 903, 862, 821, 780; back-off 985, 944, 903, 862
 - SET mem.trp = 38  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 12, mem.trcd and mem.trp as seen, result.stability.
+- Record: reading row: step 12, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.trcd = 42 and mem.trp = 42, then the gate again, then step 13.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 12 back-off, every mem key as seen, result.stability.
 
 13. Note: row active ladder, rung one of four.
 - Save: the pass slot first.
 - SET mem.tras = 99  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 13, mem.tras as seen, result.stability.
+- Record: reading row: step 13, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.tras = 107, then the gate again, then step 17.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 13 back-off, every mem key as seen, result.stability.
 
 14. Note: row active ladder, rung two of four.
 - Save: the pass slot first.
 - SET mem.tras = 95  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 14, mem.tras as seen, result.stability.
+- Record: reading row: step 14, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.tras = 103, then the gate again, then step 17.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 14 back-off, every mem key as seen, result.stability.
 
 15. Note: row active ladder, rung three of four.
 - Save: the pass slot first.
 - SET mem.tras = 91  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 15, mem.tras as seen, result.stability.
+- Record: reading row: step 15, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.tras = 99, then the gate again, then step 17.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 15 back-off, every mem key as seen, result.stability.
 
 16. Note: row active ladder, rung four of four.
 - Save: the pass slot first.
 - SET mem.tras = 87  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 16, mem.tras as seen, result.stability.
+- Record: reading row: step 16, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.tras = 95, then the gate again, then step 17.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 16 back-off, every mem key as seen, result.stability.
 
 17. Note: refresh ladder, rung one of four.
 - Save: the pass slot first.
 - SET mem.trfc = 903  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 17, mem.trfc as seen, result.stability.
+- Record: reading row: step 17, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.trfc = 985, then the gate again, then step 21.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 17 back-off, every mem key as seen, result.stability.
 
 18. Note: refresh ladder, rung two of four.
 - Save: the pass slot first.
 - SET mem.trfc = 862  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 18, mem.trfc as seen, result.stability.
+- Record: reading row: step 18, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.trfc = 944, then the gate again, then step 21.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 18 back-off, every mem key as seen, result.stability.
 
 19. Note: refresh ladder, rung three of four.
 - Save: the pass slot first.
 - SET mem.trfc = 821  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 19, mem.trfc as seen, result.stability.
+- Record: reading row: step 19, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.trfc = 903, then the gate again, then step 21.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 19 back-off, every mem key as seen, result.stability.
 
 20. Note: refresh ladder, rung four of four.
 - Save: the pass slot first.
 - SET mem.trfc = 780  # src: kingston-kf556c40
 - Run: bench/stability.sh cpu 10
 - Report: result.stability and every result.stability.* line.
-- Record: reading row: step 20, mem.trfc as seen, result.stability.
+- Record: reading row: step 20, every mem key as seen, result.stability.
 - Revert on FAIL or no POST: mem.trfc = 862, then the gate again, then step 21.
+- Report: after a back-off, result.stability and every result.stability.* line of that gate.
+- Record: after a back-off, reading row: step 20 back-off, every mem key as seen, result.stability.
 
 ## Final soak
 
 21. Run: bench/stability.sh soak 60
 - Report: result.stability, result.stability.soak_minutes and every other result.stability.* line.
-- Record: reading row: step 21, each mem key as seen, result.stability.
-- Revert on FAIL: each mem key to the previous PASS row of the reading, then the soak again; a FAIL back at the step 3 row ends at the step 1 slot.
+- Record: reading row: step 21, every mem key as seen, result.stability.
+- Revert on FAIL: each mem key to the PASS row before the row the soak ran on, then the soak again; a FAIL back at the step 3 row ends at the step 1 slot.
 - Save: on PASS, the final values to a free slot, the final slot (gb-bios700 p29).
 - Report: the final slot number.
 
@@ -291,7 +323,9 @@ refresh:    944 -> 903, 862, 821, 780; back-off 985, 944, 903, 862
 - Short: the two CLR_CMOS pins with a metal object such as a screwdriver for a few seconds (gb-um p29).
 - Note: power cord back in, PSU on, Del at the logo for BIOS Setup (gb-bios700 p3).
 - Revert: the defaults path in the menu fence, as gb-um p29 asks after a CMOS clear.
-- Revert: the pass slot by the profile-return path in the menu fence; the step 1 slot when no pass slot exists yet; the USB file when the slots are empty.
+- Revert: the pass slot by the profile-return path in the menu fence; the step 1 slot when no pass slot exists yet.
+- Note: the USB file holds the step 1 state, not the pass slot.
+- Revert: when only the USB file returns, each mem key to the last PASS row of the reading, then the gate of that row again.
 - Revert: then the Revert line of the step that failed.
 - Read: each key on screen matches the reading row of that slot.
 - Report: BIOS version, retries seen, CMOS clear yes or no, which slot or file returned.
@@ -303,10 +337,11 @@ refresh:    944 -> 903, 862, 821, 780; back-off 985, 944, 903, 862
 - Read: mem.xmp = Profile1 and mem.freq = 5600 on screen.
 - Run: sudo pc-oc probe ram
 - Report: ram.dimm0.configured_mts and ram.dimm0.configured_mv.
-- Record: reading row: rollback, each mem key as seen.
+- Record: reading row: rollback, every mem key as seen.
 
 ## Reading
 
 - Record: copy bios/readings/TEMPLATE.md to bios/readings/YYYY-MM-DD-ram.md, one row per step in its Settings as seen table.
 - Record: the gate keys of each step under Gate, and the Prerequisite probe lines under Probe.
+- Note: a reading row holds mem.xmp, mem.freq, mem.vdd, mem.vddq, mem.tcl, mem.trcd, mem.trp, mem.tras and mem.trfc as seen.
 - Note: the lead commits the reading from the human's report; nobody invents a value.
