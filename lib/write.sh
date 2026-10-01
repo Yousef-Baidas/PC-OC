@@ -127,3 +127,8 @@ file_restore() {
     die lib "no backup for $dest"
   fi
 }
+
+# file_recorded <dest>: return 0 when a file_install record exists for <dest>, else 1. Contract #48.
+file_recorded() {
+  die lib "file_recorded not implemented"
+}

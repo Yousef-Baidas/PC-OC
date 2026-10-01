@@ -55,3 +55,23 @@ EOF
   [[ "${lines[4]}" == "revert cpu "* ]]
   [[ "${stderr_lines[-1]}" == "pc-oc: "*gpu* ]]
 }
+
+# Contract #48: os at stock must not fail revert all. cpu is the one applied component; the real
+# os/revert.sh runs against an empty state dir, the rest are fakes that exit 0.
+@test "revert all with one component applied and os at stock exits 0 and runs every revert" {
+  skip "contract #48 pending"
+  for c in cpu ram gpu toolchain; do
+    fake_component "$c" revert
+  done
+  mkdir -p "$root/os"
+  cp "$BATS_TEST_DIRNAME/../../os/revert.sh" "$root/os/"
+  echo "real os/revert.sh, $(wc -c <"$root/os/revert.sh") bytes, empty state $PC_OC_STATE" >&3
+  run --separate-stderr "$root/pc-oc" revert all
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 4 ]
+  [[ "${lines[0]}" == "revert toolchain "* ]]
+  [[ "${lines[1]}" == "revert gpu "* ]]
+  [[ "${lines[2]}" == "revert ram "* ]]
+  [[ "${lines[3]}" == "revert cpu "* ]]
+  [ "$stderr" = "pc-oc: os: nothing to revert" ]
+}
