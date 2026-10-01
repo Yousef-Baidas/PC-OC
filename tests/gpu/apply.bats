@@ -201,3 +201,11 @@ set_snapshot() {
   run grep -nE -e 'nvidia-smi -pl "|power\.limit|0\.5' "$gpu/apply.sh" "$gpu/revert.sh"
   [ "$status" -eq 1 ]
 }
+
+@test "no file under gpu/ contains EUID" {
+  skip "contract #61 pending"
+  run grep -rn -e EUID "$BATS_TEST_DIRNAME/../../gpu"
+  [ "$status" -eq 1 ] || printf '%s\n' "$output" >&2
+  [ "$status" -eq 1 ]
+  [ "$output" = "" ]
+}
