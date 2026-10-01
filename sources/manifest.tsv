@@ -32,3 +32,12 @@ drv-pd	Driver README: nvidia-persistenced	https://download.nvidia.com/XFree86/Li
 lact	LACT README and Hardware-Support wiki	https://github.com/ilya-zlobintsev/LACT/blob/master/README.md	v0.10.1, 2026-08-29
 nv-4060ti	NVIDIA RTX 4060 Ti product page	https://www.nvidia.com/en-us/geforce/graphics-cards/40-series/rtx-4060-4060ti/	undated, read 2026-09-30
 pynvml	nvidia-ml-py	https://pypi.org/project/nvidia-ml-py/	13.615.71, 2026-09-25
+gb-bios700	Gigabyte Intel 700 Series BIOS Setup manual	https://download.gigabyte.com/FileList/Manual/mb_manual_intel700series-bios_e.pdf	PDF last-modified 2022-09-27 (29 pages)
+intel-14-pl	Intel 13th/14th Gen Core Processors Datasheet Vol 1 (PL1/PL2/Tau, loadline)	https://cdrdv2.intel.com/v1/dl/getContent/743844	Doc 743844 Rev 015, May 2025
+intel-ll	Intel Community: AC/DC loadline for Intel Default Settings, 0x12B (Intel moderator reply)	https://community.intel.com/t5/Mobile-and-Desktop-Processors/Recommended-ACLL-DCLL-values-for-Intel-Defaults-Profile-for/td-p/1637870	reply 2024-11-07
+intel-sdm-perfstatus	Intel 64 and IA-32 SDM combined volumes, IA32_PERF_STATUS (MSR 198H)	https://cdrdv2.intel.com/v1/dl/getContent/671200	Order 325462-093US, September 2026
+kernel-rapl	Power Capping Framework (powercap/RAPL sysfs, energy_uj)	https://docs.kernel.org/power/powercap/powercap.html	7.3.0-rc5
+kernel-spd5118	Kernel driver spd5118 (hwmon, SPD eeprom)	https://docs.kernel.org/hwmon/spd5118.html	7.3.0-rc5
+jep106	JEDEC JEP106 Standard Manufacturer Identification Code	https://www.jedec.org/standards-documents/docs/jep-106ab	JEP106BP, published Sep 2026
+kingston-kf556c40	Kingston FURY Beast DDR5 KF556C40BB-16 datasheet	https://www.kingston.com/datasheets/KF556C40BB-16.pdf	Doc 4810324B, 08/10/22
+ddr5-vdd	JEDEC JESD79-5 DDR5 SDRAM standard	https://www.jedec.org/standards-documents/docs/jesd79-5c01	JESD79-5D v1.41, Nov 2025
