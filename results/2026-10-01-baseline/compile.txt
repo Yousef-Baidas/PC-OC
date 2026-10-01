@@ -1,0 +1,11 @@
+input.source=/home/tuff/.cache/pc-oc/linux-6.18.54.tar.xz bytes=154801608 items=97287
+input.kernel_version=6.18.54
+input.sha256=9df30b02dd8102bbd0be52556288ef6889ddbe7f1ddb96fbf847d0becf3eacac
+input.gcc=gcc (GCC) 16.2.1 20260810
+input.make=GNU Make 4.4.1
+input.nproc=28
+input.runs=3
+result.compile.run1_s=84.741
+result.compile.run2_s=87.302
+result.compile.run3_s=87.859
+result.compile.median_s=87.302
