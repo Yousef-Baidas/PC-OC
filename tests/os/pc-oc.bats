@@ -163,22 +163,18 @@ refused() { # refused <verb> <target>
 }
 
 @test "non-root pc-oc apply os refuses with the sudo hint and runs no component" {
-  skip "contract #56 pending"
   refused apply os
 }
 
 @test "non-root pc-oc revert gpu refuses with the sudo hint and runs no component" {
-  skip "contract #56 pending"
   refused revert gpu
 }
 
 @test "non-root pc-oc revert all refuses with the sudo hint and runs no component" {
-  skip "contract #56 pending"
   refused revert all
 }
 
 @test "non-root pc-oc apply all refuses with the sudo hint and runs no component" {
-  skip "contract #56 pending"
   refused apply all
 }
 
