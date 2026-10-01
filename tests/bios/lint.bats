@@ -14,6 +14,7 @@ setup() {
   FIX="$BATS_TEST_DIRNAME/fixtures/lint"
   TABLE="$BIOS_ROOT/menu-paths.tsv"
   MANIFEST="$BATS_TEST_DIRNAME/../../sources/manifest.tsv"
+  export BIOS_MANIFEST="$MANIFEST"
 }
 
 # lint_fails <fixture> <line> <rule>: the lint prints exactly one finding,
@@ -227,4 +228,14 @@ lint_fails() {
   echo "$output"
   [ "$status" -eq 1 ]
   [[ "$output" == *":0: rule 10: "* ]]
+}
+
+@test "lint reports a missing manifest on line 0 even for a zero-byte runbook" {
+  skip "contract #97 pending"
+  : >"$BATS_TEST_TMPDIR/empty.md"
+  BIOS_MANIFEST="$BATS_TEST_TMPDIR/no-such-manifest.tsv" run bios_lint "$FIX/menu-paths.tsv" "$BATS_TEST_TMPDIR/empty.md"
+  echo "$output"
+  [ "$status" -ne 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  [ "${lines[0]}" = "$BATS_TEST_TMPDIR/empty.md:0: rule 10: manifest missing or unreadable" ]
 }

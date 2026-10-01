@@ -14,6 +14,7 @@ setup() {
   SRC="$BATS_TEST_DIRNAME/../../bios"
   COPY="$BATS_TEST_TMPDIR/bios"
   cp -r "$SRC" "$COPY"
+  cp -r "$SRC/../sources" "$BATS_TEST_TMPDIR/sources"
 }
 
 # mutant_without <key>: drop every `- SET <key> = ...` line from the copy
