@@ -10,7 +10,8 @@ PROBE_COMPONENT=gpu
 keys=(name driver vbios pl_w pl_default_w pl_min_w pl_max_w clock_max_mhz mem_clock_max_mhz)
 
 probe_run nvidia-smi --query-gpu=name,driver_version,vbios_version,power.limit,power.default_limit,power.min_limit,power.max_limit,clocks.max.graphics,clocks.max.memory --format=csv,noheader,nounits
-out=${PROBE_CONTENT%$'\n'}
+# trailing blank lines are not rows
+out=${PROBE_CONTENT%"${PROBE_CONTENT##*[!$'\n']}"}
 [[ "$out" != *$'\n'* ]] || die gpu "expected one GPU row from nvidia-smi, got several"
 IFS=',' read -r -a fields <<<"$out"
 set -- "${keys[@]}"
