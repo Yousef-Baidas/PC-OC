@@ -41,9 +41,20 @@ probe_read() {
 # byte <offset> of <path>, in one read; set REPLY to them as lowercase hex in file
 # order (2*count chars, no separators, NUL bytes kept); record <path> and <count>
 # in the probe header. Dies "<component>: cannot read <path>" when <path> is not
-# readable or fewer than <count> bytes come back. Contract #82.
+# readable, <offset> or <count> is not a decimal number (leading zeros are decimal: 08 is 8)
+# or <count> is 0, or fewer than <count> bytes come back. Offset and count are decimal
+# (pass 408 for MSR 0x198). Contract #82.
 probe_read_bytes() {
-  die "${PROBE_COMPONENT:-lib}" "not implemented"
+  local LC_ALL=C hex off cnt
+  [[ -r "$1" && "$2" =~ ^[0-9]+$ && "$3" =~ ^[0-9]+$ ]] || die "${PROBE_COMPONENT:-lib}" "cannot read $1"
+  off=$((10#$2)) cnt=$((10#$3))
+  ((cnt >= 1)) || die "${PROBE_COMPONENT:-lib}" "cannot read $1"
+  hex=$(dd if="$1" bs="$cnt" skip="$off" count=1 iflag=skip_bytes,fullblock status=none 2>/dev/null |
+    od -An -v -tx1 | tr -d ' \n') || true
+  ((${#hex} == 2 * cnt)) || die "${PROBE_COMPONENT:-lib}" "cannot read $1"
+  _PROBE_SOURCES+=("$1")
+  _PROBE_BYTES=$((_PROBE_BYTES + cnt))
+  REPLY=$hex
 }
 
 # probe_source <label> <bytes>: record a source that is not a file.
