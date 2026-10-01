@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# stability.sh cpu [minutes] | scan <since>: y-cruncher, stress-ng, then a kernel journal scan; PASS or FAIL.
+# stability.sh cpu|soak [minutes] | scan <since>: y-cruncher, stress-ng, then a kernel journal scan; PASS or FAIL.
 # y-cruncher 0.8.7 CLI: /usr/share/doc/y-cruncher/USAGE, "Component Stress Tester"
 # (stress -TL:<s> = total time limit; pause:-2 never waits for a key, even on errors).
 # stress-ng(1): --cpu 0 = all CPUs, --cpu-method all, --vm-bytes as % of memory,
@@ -17,7 +17,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 ERROR_PATTERN='\[Hardware Error\]|Machine check|NVRM: Xid'
 
 usage() {
-  echo "pc-oc: bench: usage: stability.sh cpu [minutes>=1] | scan <since>" >&2
+  echo "pc-oc: bench: usage: stability.sh cpu|soak [minutes>=1] | scan <since>" >&2
   exit 2
 }
 
@@ -25,22 +25,48 @@ inputs=()
 results=()
 tmp="$(mktemp -d)"
 sampler=""
+tool=""
 
-# stop_sampler: kill the sampler and its sleep, reap it; safe to call twice
+# stop_tool: TERM the running tool's session (setsid made it the group leader), KILL after 1 s; reap
+stop_tool() {
+  [ -n "$tool" ] || return 0
+  kill -TERM -- "-$tool" 2>/dev/null || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    kill -0 "$tool" 2>/dev/null || break
+    sleep 0.1
+  done
+  kill -KILL -- "-$tool" 2>/dev/null || true
+  wait "$tool" 2>/dev/null || true
+  tool=""
+}
+
+# run_tool <cmd...>: run in its own session, in the background, so a signal to this script
+# reaches the trap while we wait; status in $rc
+run_tool() {
+  setsid "$@" &
+  tool=$!
+  rc=0
+  wait "$tool" || rc=$?
+  tool=""
+}
+
+# stop_sampler: kill the sampler (first, so it starts no new probe) and its sleep, reap it; safe to call twice
 stop_sampler() {
   [ -n "$sampler" ] || return 0
-  pkill -P "$sampler" 2>/dev/null || true
   kill "$sampler" 2>/dev/null || true
+  pkill -P "$sampler" 2>/dev/null || true
   wait "$sampler" 2>/dev/null || true
   sampler=""
 }
 cleanup() {
+  stop_tool
   stop_sampler
   rm -rf "$tmp"
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 # sample_loop <out>: every STABILITY_SAMPLE_S seconds append "<ns> <vcore_mv|-> <energy_uj|-> <mhz|->"
 # (probe keys cpu.vcore_mv, cpu.pkg_energy_uj from pc-oc probe cpu; clock from cpufreq, in kHz)
@@ -96,15 +122,25 @@ scan_journal() {
 }
 
 case "${1:-}" in
-  cpu)
-    minutes="${2:-10}"
-    [[ "$minutes" =~ ^[1-9][0-9]*$ ]] || usage
+  cpu | soak)
+    mode="$1"
+    minutes="${2:-$([ "$mode" = soak ] && echo 60 || echo 10)}"
+    # 1..1440 (24 h): bounds the arithmetic below; stress-ng reads -t 0 as forever
+    [[ "$minutes" =~ ^[1-9][0-9]{0,3}$ ]] && [ "$minutes" -le 1440 ] || usage
     need y-cruncher "yay -S y-cruncher"
     need stress-ng "pacman -S stress-ng"
     yc_args=(skip-warnings colors:0 pause:-2 stress "-TL:$((minutes * 60))")
     sng_args=(--cpu 0 --cpu-method all --vm 4 --vm-bytes 80% --verify -t "$((minutes * 60))s")
+    if [ "$mode" = soak ]; then
+      # soak: memory-heavy only. stress-ng --vm-method all --verify checks every pattern;
+      # y-cruncher stress components FFTv4, N63, VT3 are the large-memory ones (USAGE; the
+      # BBP and small in-cache SFTv4/SNT/SVT components stay out)
+      yc_args+=(FFTv4 N63 VT3)
+      sng_args=(--vm "$(nproc)" --vm-bytes 85% --vm-method all --verify -t "$((minutes * 60))s")
+    fi
     inputs+=("input.ycruncher=$(y-cruncher version </dev/null | sed -n '1s/\x1b\[[0-9;]*m//gp')")
     inputs+=("input.stressng=$(stress-ng --version)" "input.minutes=$minutes")
+    [ "$mode" = soak ] && inputs+=("input.mode=soak")
     inputs+=("input.ycruncher_args=${yc_args[*]}" "input.stressng_args=${sng_args[*]}")
     since="$(date '+%Y-%m-%d %H:%M:%S')"
     # stdout is held until the end, so a crash would lose the window; name it now
@@ -112,22 +148,35 @@ case "${1:-}" in
     : >"$tmp/samples"
     sample_loop "$tmp/samples" >/dev/null 2>&1 &
     sampler=$!
-    rc=0
-    y-cruncher "${yc_args[@]}" </dev/null 2>&1 | tee "$tmp/ycruncher.log" >&2 || rc=$?
-    if [ "$rc" -eq 0 ] && ! grep -q 'Stress test failed' "$tmp/ycruncher.log"; then
-      results+=(result.stability.ycruncher=PASS)
+    run_yc() {
+      # shellcheck disable=SC2016 # the script text is expanded by the child bash, not here
+      run_tool bash -c 'set -o pipefail; y-cruncher "${@:2}" </dev/null 2>&1 | tee "$1" >&2' _ "$tmp/ycruncher.log" "${yc_args[@]}"
+      if [ "$rc" -eq 0 ] && ! grep -q 'Stress test failed' "$tmp/ycruncher.log"; then
+        results+=(result.stability.ycruncher=PASS)
+      else
+        results+=(result.stability.ycruncher=FAIL)
+      fi
+    }
+    run_sng() {
+      run_tool stress-ng "${sng_args[@]}" >&2
+      if [ "$rc" -eq 0 ]; then
+        results+=(result.stability.stressng=PASS)
+      else
+        results+=(result.stability.stressng=FAIL)
+      fi
+    }
+    if [ "$mode" = soak ]; then
+      run_sng
+      run_yc
     else
-      results+=(result.stability.ycruncher=FAIL)
-    fi
-    if stress-ng "${sng_args[@]}" >&2; then
-      results+=(result.stability.stressng=PASS)
-    else
-      results+=(result.stability.stressng=FAIL)
+      run_yc
+      run_sng
     fi
     stop_sampler
     mapfile -t tel < <(summarize_samples "$tmp/samples")
     inputs+=("input.telemetry.source=${PC_OC_PROBE:-sudo -n /usr/local/lib/pc-oc/pc-oc probe cpu} samples=${tel[3]}")
     results+=("result.stability.vcore_max_mv=${tel[0]}" "result.stability.pkg_w_avg=${tel[1]}" "result.stability.mhz_avg=${tel[2]}")
+    [ "$mode" = soak ] && results+=("result.stability.soak_minutes=$minutes")
     scan_journal "$since"
     ;;
   scan)
