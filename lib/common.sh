@@ -37,6 +37,13 @@ probe_source() {
   _PROBE_BYTES=$((_PROBE_BYTES + $2))
 }
 
+# probe_run <cmd> [args...]: run <cmd> once; set PROBE_CONTENT to its stdout (trailing
+# newlines kept) and REPLY to the trimmed first line; record its absolute path and byte count.
+# Dies "<cmd> not found" when absent and "<cmd> failed" on a non-zero exit. Contract #46.
+probe_run() {
+  die "${PROBE_COMPONENT:-lib}" "probe_run not implemented"
+}
+
 # probe_emit <key=value>...: print the line-1 header, then <component>.<key>=<value>.
 probe_emit() {
   local IFS=,
