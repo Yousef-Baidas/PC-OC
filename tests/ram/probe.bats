@@ -183,3 +183,85 @@ DMI
   [ "$status" -eq 1 ]
   [ "$stderr" = "pc-oc: ram: no populated DIMM in dmidecode -t 17" ]
 }
+
+# Contract #74. Root seam: the stub_root id on PATH above. DDR5 SPD: module maker at bytes
+# 512-513, DRAM maker at bytes 552-553 (JESD400-5 layout; the implementer cites the source).
+# Bytes are the raw JEP-106 pair: 0x80AD hynix, 0x802C micron, 0x80CE samsung.
+
+# spd_eeprom <dev> <dram_hi> <dram_lo> [size]: fixture eeprom, module maker (Kingston) at 512.
+spd_eeprom() {
+  local dir="$SYSFS_ROOT/sys/bus/i2c/drivers/spd5118/$1"
+  mkdir -p "$dir"
+  {
+    head -c 512 /dev/zero
+    printf '\x98\x01'
+    head -c 38 /dev/zero
+    # shellcheck disable=SC2059 # hex escapes built from the args
+    printf "\\x$2\\x$3"
+    head -c 470 /dev/zero
+  } | head -c "${4:-1024}" >"$dir/eeprom"
+}
+
+@test "probe ram as root reports dram_mfr hynix and addr for two SPD eeproms" {
+  skip "contract #74 pending"
+  stub_root 0
+  spd_eeprom 0-0050 80 ad
+  spd_eeprom 0-0051 80 ad
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'\nram.spd0.addr=0-0050\nram.spd0.dram_mfr=hynix'* ]]
+  [[ "$output" == *$'\nram.spd1.addr=0-0051\nram.spd1.dram_mfr=hynix'* ]]
+  [[ "$output" != *spd2* ]]
+  [[ "${lines[0]}" =~ ^source=/[^\ ]+\ bytes=[0-9]+\ items=([0-9]+)$ ]]
+  [ "${BASH_REMATCH[1]}" -eq "$((${#lines[@]} - 1))" ]
+  [[ "${lines[0]}" == *"$SYSFS_ROOT/sys/bus/i2c/drivers/spd5118/0-0050/eeprom"* ]]
+}
+
+@test "probe ram as root maps micron and samsung, sorted by device name" {
+  skip "contract #74 pending"
+  stub_root 0
+  spd_eeprom 0-0051 80 ce
+  spd_eeprom 0-0050 80 2c
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'\nram.spd0.addr=0-0050\nram.spd0.dram_mfr=micron'* ]]
+  [[ "$output" == *$'\nram.spd1.addr=0-0051\nram.spd1.dram_mfr=samsung'* ]]
+}
+
+@test "probe ram as root prints unknown:0x plus the 4 hex digits for an unlisted ID" {
+  skip "contract #74 pending"
+  stub_root 0
+  spd_eeprom 0-0050 80 01
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'\nram.spd0.dram_mfr=unknown:0x8001'* ]]
+}
+
+@test "probe ram as root without the spd5118 driver dir prints spd=no-spd5118" {
+  skip "contract #74 pending"
+  stub_root 0
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'\nram.spd=no-spd5118'* ]]
+  [[ "$output" != *spd0* ]]
+}
+
+@test "probe ram as root exits 1 when an eeprom is shorter than the ID offset" {
+  skip "contract #74 pending"
+  stub_root 0
+  spd_eeprom 0-0050 80 ad 100
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 1 ]
+  [ "$output" = "" ]
+  [[ "$stderr" == "pc-oc: ram: cannot read"* ]]
+}
+
+@test "probe ram without root leaves the SPD keys out" {
+  skip "contract #74 pending"
+  stub_root 1000
+  spd_eeprom 0-0050 80 ad
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'\nram.dmi=needs-root' ]]
+  [[ "$output" != *spd* ]]
+}
