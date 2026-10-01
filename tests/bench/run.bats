@@ -3,7 +3,6 @@
 bats_require_minimum_version 1.5.0
 
 setup() {
-  skip "contract #14 pending"
   FIX="$BATS_TEST_DIRNAME/fixtures/run"
   # run.sh and report.sh write results/ and reports/ next to bench/: run copies
   # in a fake repo whose bench scripts and pc-oc are stubs
@@ -148,7 +147,6 @@ has_row() {
 }
 
 @test "report on real output has a row per result key with the exact value" {
-  skip "contract #14 pending"
   real_md
   n=0
   while IFS= read -r line; do
@@ -159,7 +157,6 @@ has_row() {
 }
 
 @test "report on real output has no row for source= or input.* header lines" {
-  skip "contract #14 pending"
   real_md
   # a split on every '=' turns "bytes=N items=N" into cells of their own
   run ! grep -E '^[[:space:]]*\|[[:space:]]*(source|input\.[a-z0-9_]+|bytes|items)[[:space:]]*\|' "$MD"
@@ -167,7 +164,6 @@ has_row() {
 }
 
 @test "report on real output keeps cpu, gpu, os and ram settings with exact values" {
-  skip "contract #14 pending"
   real_md
   for p in cpu gpu os ram; do
     [ "$(grep -c "^$p\." "$FIX/real/settings.txt")" -gt 0 ]
@@ -178,10 +174,49 @@ has_row() {
 }
 
 @test "report on real output has as many result rows as result lines" {
-  skip "contract #14 pending"
   real_md
   want="$(cat "$FIX"/real/*.txt | grep -c '^result\.')"
   got="$(grep -cE '^[[:space:]]*\|[[:space:]]*result\.' "$MD")"
   [ "$want" -gt 0 ]
   [ "$got" -eq "$want" ]
+}
+
+@test "run refuses to overwrite a finished results dir" {
+  mkdir -p "$R/results/$DAY-baseline"
+  echo keep >"$R/results/$DAY-baseline/settings.txt"
+  run --separate-stderr bash "$R/bench/run.sh" baseline
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: bench: "* ]]
+  [ "$(cat "$R/results/$DAY-baseline/settings.txt")" = keep ]
+}
+
+@test "run removes its results dir when any step fails" {
+  for step in pc-oc bench/stability.sh bench/game.sh; do
+    write_stub "$R/$step" 1 'x'
+    run --separate-stderr bash "$R/bench/run.sh" baseline
+    [ "$status" -eq 1 ]
+    [[ "$stderr" == "pc-oc: bench: "* ]]
+    [ ! -e "$R/results/$DAY-baseline" ]
+    write_stub "$R/pc-oc" 0 'cpu.pl1_uw=65000000'
+    write_stub "$R/bench/stability.sh" 0 'result.stability=PASS'
+    write_stub "$R/bench/game.sh" 0 'result.game.avg_fps=100.0'
+  done
+}
+
+@test "run and report exit 2 on bad usage" {
+  run --separate-stderr bash "$R/bench/run.sh"
+  [ "$status" -eq 2 ]
+  run --separate-stderr bash "$R/bench/run.sh" ../evil
+  [ "$status" -eq 2 ]
+  run --separate-stderr bash "$R/bench/report.sh"
+  [ "$status" -eq 2 ]
+}
+
+@test "report exits 1 on a results dir that lacks a file" {
+  cp -r "$FIX/2026-09-02-tuned" "$BATS_TEST_TMPDIR/2026-09-02-tuned"
+  rm "$BATS_TEST_TMPDIR/2026-09-02-tuned/game.txt"
+  run --separate-stderr bash "$R/bench/report.sh" "$BATS_TEST_TMPDIR/2026-09-02-tuned"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: bench: "* ]]
+  [ -z "$(find "$R/reports" -type f 2>/dev/null)" ]
 }
