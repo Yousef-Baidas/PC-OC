@@ -203,7 +203,6 @@ set_snapshot() {
 }
 
 @test "no file under gpu/ contains EUID" {
-  skip "contract #61 pending"
   run grep -rn -e EUID "$BATS_TEST_DIRNAME/../../gpu"
   [ "$status" -eq 1 ] || printf '%s\n' "$output" >&2
   [ "$status" -eq 1 ]

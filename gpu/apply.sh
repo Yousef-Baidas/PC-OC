@@ -9,8 +9,8 @@ source "$here/../lib/write.sh"
 # shellcheck source=pl.sh
 source "$here/pl.sh"
 
-# root runs with a fixed PATH, like pc_oc_state ignores PC_OC_STATE at EUID 0
-[[ "$EUID" -ne 0 ]] || export PATH=/usr/bin
+# root runs with a fixed PATH, like pc_oc_state ignores PC_OC_STATE as root
+! is_root || export PATH=/usr/bin
 
 pl_w=""
 [[ -r "$here/values" ]] || die gpu "cannot read $here/values"
