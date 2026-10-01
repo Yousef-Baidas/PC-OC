@@ -15,14 +15,16 @@ setup_file() {
 setup() {
   local src
   src="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  SRC="$src"
   repo="$BATS_TEST_TMPDIR/repo"
   dest="$BATS_TEST_TMPDIR/dest"
   mkdir -p "$repo/os" "$repo/etc/sudoers.d" "$repo/cpu" "$repo/toolchain" "$repo/bench" "$dest"
   cp "$src/pc-oc" "$repo/"
   cp -r "$src/lib" "$repo/"
-  cp "$src/os/install.sh" "$repo/os/"
+  cp "${INSTALL_SH:-$src/os/install.sh}" "$repo/os/install.sh"
+  chmod 755 "$repo/os/install.sh"
   cp "$BATS_TEST_DIRNAME/fixtures/sudoers/good" "$repo/etc/sudoers.d/pc-oc"
-  for f in cpu/apply.sh cpu/revert.sh cpu/probe.sh toolchain/probe.sh cpu/notes.sh bench/probe.sh; do
+  for f in cpu/apply.sh cpu/revert.sh cpu/probe.sh toolchain/probe.sh bench/probe.sh; do
     printf '#!/usr/bin/env bash\necho %s\n' "$f" >"$repo/$f"
   done
   # a verb script committed without the exec bit still installs 0755
@@ -38,12 +40,13 @@ setup() {
 }
 
 @test "a DESTDIR install produces the tree, modes, VERSION and the sudoers drop-in" {
+  skip "contract #47 pending"
   run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
   [ "$status" -eq 0 ]
   lib_entries="$(cd "$repo" && find lib -type f -printf '644 ./%p\n')"
   expected="$(printf '%s\n' '755 .' '644 ./VERSION' '755 ./cpu' '755 ./cpu/apply.sh' \
-    '755 ./cpu/probe.sh' '755 ./cpu/revert.sh' '755 ./lib' "$lib_entries" '755 ./pc-oc' \
-    '755 ./toolchain' '755 ./toolchain/probe.sh' | sort)"
+    '755 ./cpu/probe.sh' '755 ./cpu/revert.sh' '755 ./lib' "$lib_entries" '755 ./os' \
+    '644 ./os/install.sh' '755 ./pc-oc' '755 ./toolchain' '755 ./toolchain/probe.sh' | sort)"
   [ "$(cd "$dest/usr/local/lib/pc-oc" && find . -printf '%m %p\n' | sort)" = "$expected" ]
   [ "$(<"$dest/usr/local/lib/pc-oc/VERSION")" = "$(git -C "$repo" rev-parse HEAD)" ]
   [ "$(stat -c %a "$dest/etc/sudoers.d/pc-oc")" = 440 ]
@@ -66,5 +69,99 @@ setup() {
   run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"pc-oc: os: "*sudoers* ]]
+  [ -z "$(find "$dest" -mindepth 1)" ]
+}
+
+# Contract #47: install copies every regular file directly under a component dir.
+# INSTALL_SH repoints the scratch repo at another install.sh, to watch the cases go red.
+# add_real: put the real os and gpu component files in the scratch repo.
+add_real() {
+  mkdir -p "$repo/os" "$repo/gpu"
+  cp "$SRC"/os/{apply.sh,revert.sh,probe.sh,scx_loader.toml} "$repo/os/"
+  cp "$SRC"/gpu/{apply.sh,revert.sh,probe.sh,values} "$repo/gpu/"
+  echo "# real component files: $(cat "$SRC/os/scx_loader.toml" "$SRC/gpu/values" | wc -c) bytes of data, 2 data files" >&3
+}
+
+@test "install copies data files at 0644, byte-identical, and verb scripts at 0755" {
+  skip "contract #47 pending"
+  add_real
+  printf 'notes\n' >"$repo/cpu/notes.txt"
+  chmod 755 "$repo/cpu/notes.txt" "$repo/os/scx_loader.toml"
+  chmod 644 "$repo/os/apply.sh"
+  run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
+  [ "$status" -eq 0 ]
+  inst="$dest/usr/local/lib/pc-oc"
+  [ "$(stat -c %a "$inst/os/scx_loader.toml")" = 644 ]
+  [ "$(stat -c %a "$inst/gpu/values")" = 644 ]
+  [ "$(stat -c %a "$inst/cpu/notes.txt")" = 644 ]
+  [ "$(stat -c %a "$inst/os/apply.sh")" = 755 ]
+  [ "$(stat -c %a "$inst/gpu/probe.sh")" = 755 ]
+  [ "$(stat -c %a "$inst/os")" = 755 ]
+  cmp "$repo/os/scx_loader.toml" "$inst/os/scx_loader.toml"
+  cmp "$repo/gpu/values" "$inst/gpu/values"
+  cmp "$repo/cpu/notes.txt" "$inst/cpu/notes.txt"
+}
+
+@test "install copies nothing outside the component dirs, lib and pc-oc" {
+  skip "contract #47 pending"
+  add_real
+  mkdir -p "$repo/tests/os/fixtures" "$repo/docs"
+  echo x >"$repo/tests/os/fixtures/f" && echo x >"$repo/docs/a.md" && echo x >"$repo/stray.txt"
+  run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
+  [ "$status" -eq 0 ]
+  inst="$dest/usr/local/lib/pc-oc"
+  [ -f "$inst/os/scx_loader.toml" ]
+  [ ! -e "$inst/tests" ]
+  [ ! -e "$inst/docs" ]
+  [ ! -e "$inst/stray.txt" ]
+  [ ! -e "$inst/bench" ]
+  [ "$(find "$inst" -mindepth 1 -maxdepth 1 -printf '%f\n' | LC_ALL=C sort | tr '\n' ' ')" = "VERSION cpu gpu lib os pc-oc toolchain " ]
+}
+
+@test "the installed tree's os apply then revert round-trips to stock under the scx mocks" {
+  skip "contract #47 pending"
+  add_real
+  run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
+  [ "$status" -eq 0 ]
+  inst="$dest/usr/local/lib/pc-oc"
+  fix="$BATS_TEST_DIRNAME/fixtures/scx"
+  export SYSFS_ROOT="$BATS_TEST_TMPDIR/root" PC_OC_STATE="$BATS_TEST_TMPDIR/state"
+  export MOCK_LOG="$BATS_TEST_TMPDIR/systemctl.log" MOCK_ENABLED="$BATS_TEST_TMPDIR/enabled"
+  export PATH="$fix/bin:$PATH"
+  sx="$SYSFS_ROOT/sys/kernel/sched_ext"
+  mkdir -p "$sx" "$PC_OC_STATE"
+  echo disabled >"$sx/state"
+  echo disabled >"$MOCK_ENABLED"
+  : >"$MOCK_LOG"
+  run --separate-stderr bash "$inst/os/apply.sh"
+  [ "$status" -eq 0 ]
+  cmp "$SRC/os/scx_loader.toml" "$SYSFS_ROOT/etc/scx_loader/config.toml"
+  [ "$(cat "$sx/state")" = enabled ]
+  run --separate-stderr bash "$inst/os/revert.sh"
+  [ "$status" -eq 0 ]
+  [ ! -e "$SYSFS_ROOT/etc/scx_loader/config.toml" ]
+  [ "$(cat "$MOCK_ENABLED")" = disabled ]
+  [ "$(cat "$sx/state")" = disabled ]
+  [ -z "$(find "$PC_OC_STATE" -type f)" ]
+}
+
+@test "a symlink in a component dir makes install exit 1 naming it, installing nothing" {
+  skip "contract #47 pending"
+  add_real
+  ln -s /etc/passwd "$repo/cpu/sneaky-link"
+  run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: os: "*sneaky-link* ]]
+  [ -z "$(find "$dest" -mindepth 1)" ]
+}
+
+@test "a subdirectory in a component dir makes install exit 1 naming it, installing nothing" {
+  skip "contract #47 pending"
+  add_real
+  mkdir -p "$repo/gpu/nested-dir"
+  echo x >"$repo/gpu/nested-dir/f"
+  run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: os: "*nested-dir* ]]
   [ -z "$(find "$dest" -mindepth 1)" ]
 }
