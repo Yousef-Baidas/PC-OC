@@ -7,7 +7,7 @@ setup() {
   REPO="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$REPO/gpu" "$BATS_TEST_TMPDIR/bin"
   cp -r "$BATS_TEST_DIRNAME/../../lib" "$REPO/lib"
-  cp "$BATS_TEST_DIRNAME/../../gpu/"{apply.sh,revert.sh,probe.sh} "$REPO/gpu/"
+  cp "$BATS_TEST_DIRNAME/../../gpu/"{apply.sh,revert.sh,probe.sh,pl.sh} "$REPO/gpu/"
   export MOCK_DIR="$BATS_TEST_DIRNAME/fixtures/apply"
   export MOCK_STATE="$BATS_TEST_TMPDIR/mock"
   mkdir -p "$MOCK_STATE"
@@ -83,10 +83,10 @@ set_pl() {
   grep -q '^gpu.pl_w=150' "$PC_OC_STATE/gpu/stock"
 }
 
-@test "revert gpu with no snapshot exits 1 and logs no -pl" {
+@test "revert gpu with no snapshot says nothing to revert, exits 0 and logs no -pl" {
   run --separate-stderr bash "$REPO/gpu/revert.sh"
-  [ "$status" -eq 1 ]
-  [ "$stderr" = "pc-oc: gpu: no stock snapshot" ]
+  [ "$status" -eq 0 ]
+  [ "$stderr" = "pc-oc: gpu: nothing to revert" ]
   [ ! -s "$MOCK_STATE/calls" ]
 }
 
@@ -126,4 +126,78 @@ set_pl() {
   [[ "$stderr" != *"not implemented"* ]]
   [ "$(cat "$MOCK_STATE/calls")" = "-pl 216" ]
   [ -z "$(find "$PC_OC_STATE" -type f 2>/dev/null)" ]
+}
+
+# set_snapshot <pl_w>: write a stock snapshot as probe.sh would have
+set_snapshot() {
+  mkdir -p "$PC_OC_STATE/gpu"
+  printf 'source=/x bytes=1 items=1\ngpu.pl_w=%s\n' "$1" >"$PC_OC_STATE/gpu/stock"
+}
+
+@test "revert gpu whose read-back differs exits 1 and keeps the snapshot" {
+  set_pl 216
+  run --separate-stderr bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 0 ]
+  ln -sf "$MOCK_DIR/nvidia-smi-ignore-pl" "$BATS_TEST_TMPDIR/bin/nvidia-smi"
+  run --separate-stderr bash "$REPO/gpu/revert.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: gpu: "* ]]
+  [[ "$stderr" != *"not implemented"* ]]
+  [ -f "$PC_OC_STATE/gpu/stock" ]
+}
+
+@test "apply gpu exits 1 when the read-back is 1 W off the request" {
+  ln -sf "$MOCK_DIR/nvidia-smi-off-by-one" "$BATS_TEST_TMPDIR/bin/nvidia-smi"
+  set_pl 200
+  run --separate-stderr bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: gpu: "* ]]
+  [ "$(cat "$MOCK_STATE/calls")" = "-pl 200" ]
+  [ "$(cat "$MOCK_STATE/pl")" = "201.00" ]
+}
+
+@test "revert gpu with snapshot pl_w 300.00 above the mocked max exits 1, logs no -pl, keeps the snapshot" {
+  set_snapshot 300.00
+  run --separate-stderr bash "$REPO/gpu/revert.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: gpu: "* ]]
+  [[ "$stderr" != *"not implemented"* ]]
+  [ ! -s "$MOCK_STATE/calls" ]
+  [ -f "$PC_OC_STATE/gpu/stock" ]
+}
+
+@test "revert gpu with snapshot pl_w 50.00 below the mocked min exits 1, logs no -pl, keeps the snapshot" {
+  set_snapshot 50.00
+  run --separate-stderr bash "$REPO/gpu/revert.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: gpu: "* ]]
+  [ ! -s "$MOCK_STATE/calls" ]
+  [ -f "$PC_OC_STATE/gpu/stock" ]
+}
+
+@test "apply then revert gpu leaves no gpu dir under the state dir" {
+  set_pl 216
+  run --separate-stderr bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 0 ]
+  run --separate-stderr bash "$REPO/gpu/revert.sh"
+  [ "$status" -eq 0 ]
+  [ ! -e "$PC_OC_STATE/gpu" ]
+}
+
+@test "revert gpu keeps a gpu state dir that still holds another file" {
+  set_pl 216
+  run --separate-stderr bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 0 ]
+  printf 'x\n' >"$PC_OC_STATE/gpu/other"
+  run --separate-stderr bash "$REPO/gpu/revert.sh"
+  [ "$status" -eq 0 ]
+  [ -f "$PC_OC_STATE/gpu/other" ]
+}
+
+@test "the -pl call, power.limit read-back and 0.5 W tolerance appear only in gpu/pl.sh, not in apply.sh or revert.sh" {
+  gpu="$BATS_TEST_DIRNAME/../../gpu"
+  grep -q -e 'nvidia-smi -pl "' "$gpu/pl.sh"
+  grep -q -e 'power\.limit' "$gpu/pl.sh"
+  run grep -nE -e 'nvidia-smi -pl "|power\.limit|0\.5' "$gpu/apply.sh" "$gpu/revert.sh"
+  [ "$status" -eq 1 ]
 }
