@@ -43,7 +43,6 @@ run_ram() {
 }
 
 @test "ram.bats goes red when one probe line drops the installed path" {
-  skip "contract #101 pending"
   local ln
   ln="$(grep -n '/usr/local/lib/pc-oc/pc-oc probe ram' "$COPY/ram.md" | head -1 | cut -d: -f1)"
   echo "mutated line: $ln"
