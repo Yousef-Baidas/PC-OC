@@ -152,7 +152,6 @@ toolchain_errors() {
 }
 
 @test "manifest has the toolchain rows" {
-  skip "contract #115 pending"
   run toolchain_errors "$M"
   [ "$status" -eq 0 ] || {
     echo "$output" >&2
