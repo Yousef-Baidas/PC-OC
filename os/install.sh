@@ -17,12 +17,12 @@ source "$here/lib/common.sh"
 components=(cpu ram gpu os toolchain)
 dest="${DESTDIR:-}"
 
-[[ "$EUID" -eq 0 || -n "$dest" ]] || die os "must run as root: sudo os/install.sh (tests set DESTDIR)"
+is_root || [[ -n "$dest" ]] || die os "must run as root: sudo os/install.sh (tests set DESTDIR)"
 
 # git runs as the calling user: a repo config can name commands (core.fsmonitor, filters)
 # that must never run as root
 as_user=()
-if [[ "$EUID" -eq 0 ]]; then
+if is_root; then
   [[ -n "${SUDO_UID:-}" && -n "${SUDO_GID:-}" ]] || die os "run through sudo from your user, so git does not run as root"
   as_user=(setpriv --reuid="$SUDO_UID" --regid="$SUDO_GID" --clear-groups)
 fi

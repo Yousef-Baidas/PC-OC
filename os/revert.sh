@@ -3,9 +3,9 @@ set -euo pipefail
 # Undo os/apply.sh: stop scx_loader, restore its config and enabled state, wait for stock sched_ext.
 # Each step skips when already done and the records go last, so a failed revert can be rerun.
 # ADR 0001: root runs with a fixed PATH. Non-root (bats) keeps PATH so mock systemctl/sleep win.
-[[ "$EUID" -ne 0 ]] || PATH=/usr/bin
 # shellcheck source=../lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+! is_root || PATH=/usr/bin
 # shellcheck source=../lib/write.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/write.sh"
 

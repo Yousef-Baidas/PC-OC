@@ -5,9 +5,9 @@ set -euo pipefail
 # Backups live under $(pc_oc_state): backup/<path with / as %> holds stock content,
 # absent/<same key> marks a file_install dest that did not exist.
 
-# pc_oc_state: print ${PC_OC_STATE:-/var/lib/pc-oc}; always /var/lib/pc-oc when EUID is 0.
+# pc_oc_state: print ${PC_OC_STATE:-/var/lib/pc-oc}; always /var/lib/pc-oc for root.
 pc_oc_state() {
-  if [[ "$EUID" -eq 0 ]]; then
+  if is_root; then
     printf '%s\n' /var/lib/pc-oc
   else
     printf '%s\n' "${PC_OC_STATE:-/var/lib/pc-oc}"
