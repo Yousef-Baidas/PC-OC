@@ -51,5 +51,5 @@ gpu-burn	gpu-burn: multi-GPU CUDA stress test (wilicc)	https://github.com/wilicc
 memtest-vulkan	memtest_vulkan: Vulkan compute memory tester (GpuZelenograd)	https://github.com/GpuZelenograd/memtest_vulkan/releases/tag/v0.5.0	tag v0.5.0, release 2025-09-11
 nv-xid	NVIDIA Xid Catalog: Analyzing Xid Errors	https://docs.nvidia.com/deploy/xid-errors/analyzing-xid-catalog.html	"Last updated on Sep 09, 2026"
 nvml-perf-modes	NVML: nvmlDeviceGetPerformanceModes (Device Queries)	https://docs.nvidia.com/deploy/nvml-api/api/group__nvmlDeviceQueries.html#nvmlDeviceGetPerformanceModes__nvmlDevice_t.nvmlDevicePerfModes_tP	"Last updated on Sep 09, 2026", NVML v615
-py-isolated	Python command line: option -I (isolated mode)	https://docs.python.org/3/using/cmdline.html#cmdoption-I	Python 3.14.8 docs, "Last updated on Sep 09, 2026"
+py-isolated	Python command line: option -I (isolated mode)	https://docs.python.org/3.14/using/cmdline.html#cmdoption-I	Python 3.14.8 docs, "Last updated on Oct 01, 2026 (10:41 UTC)"
 research-111	PC-OC #111 finding: GPU offset load tools, step sizes, margins	https://github.com/Yousef-Baidas/PC-OC/issues/111#issuecomment-5942350671	issue comment, 2026-10-01T23:00:56Z
