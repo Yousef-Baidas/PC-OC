@@ -37,3 +37,14 @@ assert_adopted() {
 @test "os probe uses probe_emit and no own header or byte counter" {
   assert_adopted os
 }
+
+@test "no component file calls probe_source or counts command output itself" {
+  skip "adopted in #49/#50"
+  local f bad=""
+  for f in "$ROOT"/{cpu,ram,gpu,os}/*; do
+    [[ -f "$f" ]] || continue
+    echo "adoption: $f, $(wc -c <"$f") bytes" >&3
+    grep -Eq 'probe_source|\$\{#|\+ *1\b|wc -c' "$f" && bad+="$f "
+  done
+  [ -z "$bad" ] || fail "own byte counting in: $bad"
+}

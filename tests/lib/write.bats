@@ -139,3 +139,51 @@ leftovers() {
   [ "$status" -eq 0 ]
   [ "$(sha "$SYSFS_ROOT$epp")" = "$stock" ]
 }
+
+# Contract #48: file_recorded. A false answer must be silent, so a die (exit 1) cannot pass for it.
+@test "file_recorded is false before file_install, true after, false after file_restore" {
+  skip "contract #48 pending"
+  dest=/etc/scx_loader/config.toml
+  printf 'stock\n' >"$SYSFS_ROOT$dest"
+  run --separate-stderr lib file_recorded "$dest"
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ]
+  run --separate-stderr lib file_install "$src" "$dest"
+  [ "$status" -eq 0 ]
+  run --separate-stderr lib file_recorded "$dest"
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  run --separate-stderr lib file_restore "$dest"
+  [ "$status" -eq 0 ]
+  run --separate-stderr lib file_recorded "$dest"
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ]
+}
+
+@test "file_recorded is true for a dest that was absent, and false once restored" {
+  skip "contract #48 pending"
+  dest=/etc/scx_loader/new.toml
+  run --separate-stderr lib file_recorded "$dest"
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ]
+  run --separate-stderr lib file_install "$src" "$dest"
+  [ "$status" -eq 0 ]
+  run --separate-stderr lib file_recorded "$dest"
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  run --separate-stderr lib file_restore "$dest"
+  run --separate-stderr lib file_recorded "$dest"
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ]
+}
+
+@test "file_recorded answers per dest: another dest's record does not count" {
+  skip "contract #48 pending"
+  run --separate-stderr lib file_install "$src" /etc/scx_loader/a.toml
+  [ "$status" -eq 0 ]
+  run --separate-stderr lib file_recorded /etc/scx_loader/a.toml
+  [ "$status" -eq 0 ]
+  run --separate-stderr lib file_recorded /etc/scx_loader/b.toml
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ]
+}

@@ -81,11 +81,17 @@ disable scx_loader" ]
   [ "$(cat "$SX/state")" = disabled ]
 }
 
-@test "revert with no apply record exits 1" {
+@test "revert with no apply record says nothing to revert, exits 0 and changes nothing" {
+  skip "contract #48 pending"
   run --separate-stderr bash "$OS/revert.sh"
-  [ "$status" -eq 1 ]
-  [[ "$stderr" == *"pc-oc: os: nothing to revert"* ]]
+  [ "$status" -eq 0 ]
+  [ "$stderr" = "pc-oc: os: nothing to revert" ]
+  [ -z "$output" ]
   [ ! -s "$MOCK_LOG" ]
+  [ -z "$(state_files)" ]
+  [ ! -e "$SYSFS_ROOT/etc/scx_loader" ]
+  [ "$(cat "$MOCK_ENABLED")" = disabled ]
+  [ "$(cat "$SX/state")" = disabled ]
 }
 
 @test "a second apply keeps the first stock record" {
@@ -182,5 +188,53 @@ fail_verb() {
     [ ! -e "$CONF" ]
     [ "$(cat "$MOCK_ENABLED")" = disabled ]
     [ -z "$(state_files)" ]
+  done
+}
+
+# Contract #48
+# scratch_os: a copy of os/ and lib/ in a scratch root, os/scx_loader.toml removed, so file_install dies on its src.
+scratch_os() {
+  mkdir -p "$BATS_TEST_TMPDIR/scratch"
+  cp -r "$ROOT/os" "$ROOT/lib" "$BATS_TEST_TMPDIR/scratch/"
+  rm -f "$BATS_TEST_TMPDIR/scratch/os/scx_loader.toml"
+  echo "scratch: $BATS_TEST_TMPDIR/scratch, os without scx_loader.toml" >&3
+}
+
+@test "apply whose file_install dies on a missing src exits 1 with apply failed and leaves nothing" {
+  skip "contract #48 pending"
+  scratch_os
+  run --separate-stderr bash "$BATS_TEST_TMPDIR/scratch/os/apply.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"apply failed"* ]]
+  [[ "$stderr" == *"no such file"* ]]
+  [[ "$stderr" != *"unbound variable"* ]]
+  [ -z "$(find "$PC_OC_STATE" -mindepth 1)" ]
+  [ ! -e "$SYSFS_ROOT/etc/scx_loader" ]
+  [ "$(cat "$MOCK_ENABLED")" = disabled ]
+  [ "$(cat "$SX/state")" = disabled ]
+  [ "$(cat "$MOCK_LOG")" = "is-enabled scx_loader" ]
+}
+
+@test "apply whose file_install dies leaves a stock /etc/scx_loader dir alone" {
+  skip "contract #48 pending"
+  scratch_os
+  mkdir -p "$SYSFS_ROOT/etc/scx_loader"
+  run --separate-stderr bash "$BATS_TEST_TMPDIR/scratch/os/apply.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"apply failed"* ]]
+  [ -d "$SYSFS_ROOT/etc/scx_loader" ]
+  [ -z "$(find "$PC_OC_STATE" -mindepth 1)" ]
+}
+
+@test "os scripts use file_recorded and hold no record key, backup/ or absent/ string" {
+  skip "contract #48 pending"
+  local f
+  for f in "$ROOT"/os/apply.sh "$ROOT"/os/revert.sh; do
+    echo "scanned: $f, $(wc -c <"$f") bytes" >&3
+    if grep -Eq "backup/|absent/|%etc%|scx_loader%config" "$f"; then
+      echo "record encoding in $f" >&3
+      return 1
+    fi
+    grep -q 'file_recorded' "$f"
   done
 }
