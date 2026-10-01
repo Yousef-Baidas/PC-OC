@@ -1,0 +1,3 @@
+# Placeholder: contract #26. Deliberately not valid sudoers, so visudo, the lint
+# and os/install.sh all refuse it until the real rules land.
+not implemented (#26)
