@@ -214,7 +214,6 @@ lint_fails() {
 }
 
 @test "lint fails src-unknown.md on rule 10 (src id nope is not in the manifest)" {
-  skip "contract #97 pending"
   BIOS_MANIFEST="$MANIFEST" run bios_lint "$FIX/menu-paths.tsv" "$FIX/src-unknown.md"
   echo "$output"
   [ "$status" -eq 1 ]
@@ -223,7 +222,6 @@ lint_fails() {
 }
 
 @test "lint reports a missing manifest on line 0, never a silent pass" {
-  skip "contract #97 pending"
   BIOS_MANIFEST="$BATS_TEST_TMPDIR/no-such-manifest.tsv" run bios_lint "$FIX/menu-paths.tsv" "$FIX/ok.md"
   echo "$output"
   [ "$status" -eq 1 ]
@@ -231,7 +229,6 @@ lint_fails() {
 }
 
 @test "lint reports a missing manifest on line 0 even for a zero-byte runbook" {
-  skip "contract #97 pending"
   : >"$BATS_TEST_TMPDIR/empty.md"
   BIOS_MANIFEST="$BATS_TEST_TMPDIR/no-such-manifest.tsv" run bios_lint "$FIX/menu-paths.tsv" "$BATS_TEST_TMPDIR/empty.md"
   echo "$output"
