@@ -77,7 +77,6 @@ setup_stubs() {
 }
 
 @test "probe_run bytes= is the real size for one newline, none, and two" {
-  skip "contract #46 pending"
   setup_stubs
   local out want
   for out in 'one line\n' 'no newline' 'two\n\n' 'a\nb\n\n\n'; do
@@ -89,7 +88,6 @@ setup_stubs() {
 }
 
 @test "probe_run source= is the stub's absolute path" {
-  skip "contract #46 pending"
   setup_stubs
   STUB_OUT='x\n' run_probe 'probe_run stubcmd; probe_emit v=1'
   [ "$status" -eq 0 ]
@@ -98,7 +96,6 @@ setup_stubs() {
 }
 
 @test "probe_run passes args, sets REPLY to the trimmed first line" {
-  skip "contract #46 pending"
   setup_stubs
   STUB_OUT='first  \nsecond\n' run_probe 'probe_run stubcmd; probe_emit v="[$REPLY]"'
   [ "$status" -eq 0 ]
@@ -106,7 +103,6 @@ setup_stubs() {
 }
 
 @test "probe_run PROBE_CONTENT keeps trailing newlines" {
-  skip "contract #46 pending"
   setup_stubs
   STUB_OUT='a\n\n\n' run_probe 'probe_run stubcmd; [ "${PROBE_CONTENT}x" = "$(printf "a\n\n\n"; echo x)" ] && probe_emit same=yes'
   [ "$status" -eq 0 ]
@@ -114,7 +110,6 @@ setup_stubs() {
 }
 
 @test "probe_run on a missing command dies not found" {
-  skip "contract #46 pending"
   setup_stubs
   run_probe 'probe_run no-such-cmd-xyz; probe_emit v=1'
   [ "$status" -eq 1 ]
@@ -123,7 +118,6 @@ setup_stubs() {
 }
 
 @test "probe_run on a failing command dies failed" {
-  skip "contract #46 pending"
   setup_stubs
   run_probe 'probe_run failcmd; probe_emit v=1'
   [ "$status" -eq 1 ]

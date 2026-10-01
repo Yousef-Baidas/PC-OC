@@ -41,7 +41,17 @@ probe_source() {
 # newlines kept) and REPLY to the trimmed first line; record its absolute path and byte count.
 # Dies "<cmd> not found" when absent and "<cmd> failed" on a non-zero exit. Contract #46.
 probe_run() {
-  die "${PROBE_COMPONENT:-lib}" "probe_run not implemented"
+  local LC_ALL=C path out
+  path=$(command -v "$1") || die "${PROBE_COMPONENT:-lib}" "$1 not found"
+  [[ "$path" == /* ]] || die "${PROBE_COMPONENT:-lib}" "$1 not found"
+  out=$("$path" "${@:2}" && printf x) || die "${PROBE_COMPONENT:-lib}" "$1 failed"
+  out=${out%x}
+  _PROBE_SOURCES+=("$path")
+  _PROBE_BYTES=$((_PROBE_BYTES + ${#out}))
+  # shellcheck disable=SC2034 # read by the sourcing probe
+  PROBE_CONTENT=$out
+  REPLY=${out%%$'\n'*}
+  REPLY=${REPLY%"${REPLY##*[![:space:]]}"}
 }
 
 # probe_emit <key=value>...: print the line-1 header, then <component>.<key>=<value>.
