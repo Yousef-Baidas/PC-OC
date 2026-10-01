@@ -1,0 +1,12 @@
+input.source=/usr/bin/journalctl bytes=41152 items=391
+input.journalctl=systemd 262 (262-1-arch)
+input.since=2026-10-01 04:09:49
+input.ycruncher=y-cruncher v0.8.7 Build 9547-gcc
+input.stressng=stress-ng, version 0.22.01 (gcc 16.2.1, x86_64 Linux 7.2.8-1-cachyos)
+input.minutes=10
+input.ycruncher_args=skip-warnings colors:0 pause:-2 stress -TL:600
+input.stressng_args=--cpu 0 --cpu-method all --vm 4 --vm-bytes 80% --verify -t 600s
+result.stability.ycruncher=PASS
+result.stability.stressng=PASS
+result.stability.journal=PASS
+result.stability=PASS
