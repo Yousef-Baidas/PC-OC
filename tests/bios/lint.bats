@@ -192,3 +192,23 @@ lint_fails() {
 @test "lint fails v-core.md on rule 3 (V-Core on a Report line)" {
   lint_fails v-core.md 11 3
 }
+
+@test "lint fails give-more.md on rule 7 (change verb give, direction more on a Note line)" {
+  lint_fails give-more.md 12 7
+}
+
+@test "lint fails add-vdd.md on rule 7 (change verb add on a Note line)" {
+  lint_fails add-vdd.md 12 7
+}
+
+@test "lint fails push-higher.md on rule 7 (change verb push, direction higher on a Note line)" {
+  lint_fails push-higher.md 12 7
+}
+
+@test "lint fails higher-heading.md on rule 7 (direction Higher in a heading)" {
+  lint_fails higher-heading.md 12 7
+}
+
+@test "lint fails try-higher.md on rule 7 (change verb try, direction higher on a Save line)" {
+  lint_fails try-higher.md 12 7
+}
