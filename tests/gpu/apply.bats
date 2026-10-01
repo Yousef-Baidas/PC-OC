@@ -25,7 +25,6 @@ set_pl() {
 }
 
 @test "apply gpu refuses pl_w 99 below the mocked min and logs no -pl" {
-  skip "contract #30 pending"
   set_pl 99
   run --separate-stderr bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 1 ]
@@ -34,7 +33,6 @@ set_pl() {
 }
 
 @test "apply gpu refuses pl_w 217 above the mocked max and logs no -pl" {
-  skip "contract #30 pending"
   set_pl 217
   run --separate-stderr bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 1 ]
@@ -43,7 +41,6 @@ set_pl() {
 }
 
 @test "apply gpu with pl_w 216 logs -pl 216 once and exits 0" {
-  skip "contract #30 pending"
   set_pl 216
   run --separate-stderr bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 0 ]
@@ -52,7 +49,6 @@ set_pl() {
 }
 
 @test "apply gpu exits 1 when the read-back differs because -pl was ignored" {
-  skip "contract #30 pending"
   ln -sf "$MOCK_DIR/nvidia-smi-ignore-pl" "$BATS_TEST_TMPDIR/bin/nvidia-smi"
   set_pl 216
   run --separate-stderr bash "$REPO/gpu/apply.sh"
@@ -63,7 +59,6 @@ set_pl() {
 }
 
 @test "apply then revert gpu logs -pl 150 and removes the snapshot" {
-  skip "contract #30 pending"
   set_pl 216
   run --separate-stderr bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 0 ]
@@ -76,7 +71,6 @@ set_pl() {
 }
 
 @test "second apply gpu keeps the first snapshot" {
-  skip "contract #30 pending"
   set_pl 216
   run --separate-stderr bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 0 ]
@@ -90,7 +84,6 @@ set_pl() {
 }
 
 @test "revert gpu with no snapshot exits 1 and logs no -pl" {
-  skip "contract #30 pending"
   run --separate-stderr bash "$REPO/gpu/revert.sh"
   [ "$status" -eq 1 ]
   [ "$stderr" = "pc-oc: gpu: no stock snapshot" ]
@@ -98,7 +91,6 @@ set_pl() {
 }
 
 @test "apply gpu refuses pl_w 0250 as non-canonical and logs no -pl" {
-  skip "contract #30 pending"
   set_pl 0250
   run --separate-stderr bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 1 ]
@@ -108,7 +100,6 @@ set_pl() {
 }
 
 @test "apply gpu refuses pl_w 08 as non-canonical and logs no -pl" {
-  skip "contract #30 pending"
   set_pl 08
   run --separate-stderr bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 1 ]
@@ -118,7 +109,6 @@ set_pl() {
 }
 
 @test "apply gpu refuses a 64-bit wrapping pl_w and logs no -pl" {
-  skip "contract #30 pending"
   set_pl 18446744073709551832
   run --separate-stderr bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 1 ]
@@ -128,7 +118,6 @@ set_pl() {
 }
 
 @test "first apply gpu whose -pl fails exits 1 and leaves the state dir empty" {
-  skip "contract #30 pending"
   ln -sf "$MOCK_DIR/nvidia-smi-fail-pl" "$BATS_TEST_TMPDIR/bin/nvidia-smi"
   set_pl 216
   run --separate-stderr bash "$REPO/gpu/apply.sh"
