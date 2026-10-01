@@ -255,7 +255,6 @@ run_sampled() {
 }
 
 @test "soak 1 with passing mocks is PASS, runs stress-ng --verify at 85% then y-cruncher" {
-  skip "contract #76 pending"
   run --separate-stderr bash "$SCRIPT" soak 1
   [ "$status" -eq 0 ]
   [ "$(value result.stability.soak_minutes)" = 1 ]
@@ -272,7 +271,6 @@ run_sampled() {
 }
 
 @test "soak with a stress-ng that exits 1 is stressng=FAIL, overall FAIL, exit 1" {
-  skip "contract #76 pending"
   export SNG_EXIT=1
   run --separate-stderr bash "$SCRIPT" soak 1
   [ "$status" -eq 1 ]
@@ -281,14 +279,12 @@ run_sampled() {
 }
 
 @test "soak 0 prints usage naming soak and exits 2" {
-  skip "contract #76 pending"
   run --separate-stderr bash "$SCRIPT" soak 0
   [ "$status" -eq 2 ]
   [[ "$stderr" == *soak* ]]
 }
 
 @test "soak runs the telemetry sampler too" {
-  skip "contract #76 pending"
   write_probe 1250 1310
   run_sampled soak 1
   [ "$status" -eq 0 ]
