@@ -30,21 +30,18 @@ run_power_limits() {
 }
 
 @test "power-limits.bats goes red when no line reads the installed VERSION" {
-  skip "contract #103 pending"
   mutant_without /usr/local/lib/pc-oc/VERSION
   run_power_limits
   [ "$status" -ne 0 ]
 }
 
 @test "power-limits.bats goes red when no line runs os/install.sh" {
-  skip "contract #103 pending"
   mutant_without os/install.sh
   run_power_limits
   [ "$status" -ne 0 ]
 }
 
 @test "power-limits.bats stays green on an unmodified copy of bios/" {
-  skip "contract #103 pending"
   run_power_limits
   [ "$status" -eq 0 ]
 }

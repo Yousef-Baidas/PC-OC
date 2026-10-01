@@ -59,7 +59,6 @@ sets() {
 }
 
 @test "power-limits.md checks the installed copy before the first probe" {
-  skip "contract #103 pending"
   local ver inst probe
   ver="$(grep -n -m1 -F '/usr/local/lib/pc-oc/VERSION' "$RUNBOOK" | cut -d: -f1 || true)"
   inst="$(grep -n -m1 -F 'os/install.sh' "$RUNBOOK" | cut -d: -f1 || true)"
