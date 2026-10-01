@@ -148,8 +148,8 @@ bios_lint() {
         "|(^|[^a-z0-9])v[ ._-]?core"
       n = split("set type enter change raise increase select enable adjust put configure modify use apply" \
         " lower reduce drop decrease disable turn switch toggle choose pick keep leave unlock remove bump" \
-        " make lift override tweak tune flip restore load max", k, " ")
-      verb = "chose|chosen|made|kept|left"
+        " make lift override tweak tune flip restore load max try push add give go bring boost", k, " ")
+      verb = "chose|chosen|made|kept|left|gave|given|went|gone|brought|more|higher|up|further|extra|beyond"
       for (i = 1; i <= n; i++) {
         st = k[i]
         sub(/e$/, "", st)
