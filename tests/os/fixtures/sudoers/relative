@@ -1,0 +1,5 @@
+# pc-oc: the installed entry point only, exact verb and component per line (docs/adr/0001)
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc apply cpu
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc revert cpu
+tuff ALL=(root) NOPASSWD: pc-oc probe cpu
+tuff ALL=(root) NOPASSWD: /usr/local/lib/pc-oc/pc-oc revert all
