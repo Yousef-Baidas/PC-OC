@@ -4,7 +4,7 @@
 bats_require_minimum_version 1.5.0
 
 setup() {
-  LIB="$BATS_TEST_DIRNAME/../../lib/common.sh"
+  LIB="${PC_OC_LIB:-$BATS_TEST_DIRNAME/../../lib/common.sh}"
   export FIX="$BATS_TEST_DIRNAME/fixtures/probe"
   export TWO="$FIX/two-lines.txt"
   export NONL="$FIX/no-newline.txt"
@@ -148,4 +148,44 @@ setup_stubs() {
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "source=$PROBE_CMD_DIR/stubcmd bytes=3 items=1" ]
   [ "${lines[1]}" = "demo.v=ab" ]
+}
+
+# Contract #82. Fixture binary.bin is 8 bytes: 01 02 00 2a ff 10 07 08.
+@test "probe_read_bytes returns bytes 2..5 as hex, NUL kept, in file order" {
+  skip "contract #82 pending"
+  echo "probe fixture: $FIX/binary.bin, $(wc -c <"$FIX/binary.bin") bytes, 1 file" >&3
+  run_probe 'probe_read_bytes "$FIX/binary.bin" 2 4; probe_emit v="$REPLY"'
+  [ "$status" -eq 0 ]
+  [ "${lines[1]}" = "demo.v=002aff10" ]
+}
+
+@test "probe_read_bytes names the file and counts count bytes in the header" {
+  skip "contract #82 pending"
+  run_probe 'probe_read_bytes "$FIX/binary.bin" 2 4; probe_emit v="$REPLY"'
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "source=$FIX/binary.bin bytes=4 items=1" ]
+}
+
+@test "probe_read_bytes dies when offset+count passes the end of the file" {
+  skip "contract #82 pending"
+  run_probe 'probe_read_bytes "$FIX/binary.bin" 6 4; probe_emit v="$REPLY"'
+  [ "$status" -eq 1 ]
+  [ "$output" = "" ]
+  [ "$stderr" = "pc-oc: demo: cannot read $FIX/binary.bin" ]
+}
+
+@test "probe_read_bytes dies when offset is past the end of the file" {
+  skip "contract #82 pending"
+  run_probe 'probe_read_bytes "$FIX/binary.bin" 99 1; probe_emit v="$REPLY"'
+  [ "$status" -eq 1 ]
+  [ "$output" = "" ]
+  [ "$stderr" = "pc-oc: demo: cannot read $FIX/binary.bin" ]
+}
+
+@test "probe_read_bytes dies on an unreadable path" {
+  skip "contract #82 pending"
+  run_probe 'probe_read_bytes "$FIX/missing.bin" 0 1; probe_emit v="$REPLY"'
+  [ "$status" -eq 1 ]
+  [ "$output" = "" ]
+  [ "$stderr" = "pc-oc: demo: cannot read $FIX/missing.bin" ]
 }

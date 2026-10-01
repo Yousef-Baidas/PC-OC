@@ -37,6 +37,15 @@ probe_read() {
   REPLY=${REPLY%"${REPLY##*[![:space:]]}"}
 }
 
+# probe_read_bytes <path> <offset> <count>: read exactly <count> bytes starting at
+# byte <offset> of <path>, in one read; set REPLY to them as lowercase hex in file
+# order (2*count chars, no separators, NUL bytes kept); record <path> and <count>
+# in the probe header. Dies "<component>: cannot read <path>" when <path> is not
+# readable or fewer than <count> bytes come back. Contract #82.
+probe_read_bytes() {
+  die "${PROBE_COMPONENT:-lib}" "not implemented"
+}
+
 # probe_source <label> <bytes>: record a source that is not a file.
 probe_source() {
   _PROBE_SOURCES+=("$1")
