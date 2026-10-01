@@ -86,7 +86,6 @@ STUB
 }
 
 @test "probe gpu with nvidia-smi output lacking a trailing newline gives bytes= equal to its real wc -c" {
-  skip "contract #50 pending"
   cat >"$STUB_DIR/nvidia-smi" <<STUB
 #!/usr/bin/env bash
 printf '%s' '$FIELDS'
@@ -97,4 +96,19 @@ STUB
   [ "$status" -eq 0 ]
   [[ "${lines[0]}" =~ ^source=[^\ ]*nvidia-smi[^\ ]*\ bytes=([0-9]+)\ items=9$ ]]
   [ "${BASH_REMATCH[1]}" -eq "$real" ]
+}
+
+@test "probe gpu with nvidia-smi output ending in a blank line gives the 9 keys and bytes= equal to its real wc -c" {
+  cat >"$STUB_DIR/nvidia-smi" <<STUB
+#!/usr/bin/env bash
+printf '%s\n\n' '$FIELDS'
+STUB
+  real=$("$STUB_DIR/nvidia-smi" | wc -c)
+  [ "$real" -eq "$((${#FIELDS} + 2))" ]
+  run --separate-stderr bash "$PROBE"
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" =~ ^source=[^\ ]*nvidia-smi[^\ ]*\ bytes=([0-9]+)\ items=9$ ]]
+  [ "${BASH_REMATCH[1]}" -eq "$real" ]
+  [ "$((${#lines[@]} - 1))" -eq 9 ]
+  [[ "$output" == *$'\ngpu.pl_max_w=216.00'* ]]
 }
