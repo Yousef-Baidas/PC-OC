@@ -57,3 +57,16 @@ sets() {
   grep -qiE '^#+ .*cmos' "$RUNBOOK"
   grep -qF CLR_CMOS "$RUNBOOK"
 }
+
+@test "power-limits.md checks the installed copy before the first probe" {
+  skip "contract #103 pending"
+  local ver inst probe
+  ver="$(grep -n -m1 -F '/usr/local/lib/pc-oc/VERSION' "$RUNBOOK" | cut -d: -f1 || true)"
+  inst="$(grep -n -m1 -F 'os/install.sh' "$RUNBOOK" | cut -d: -f1 || true)"
+  probe="$(grep -n -m1 -F 'pc-oc probe' "$RUNBOOK" | cut -d: -f1)"
+  echo "VERSION line: ${ver:-none}; install.sh line: ${inst:-none}; first probe line: $probe"
+  [ -n "$ver" ]
+  [ -n "$inst" ]
+  [ "$ver" -lt "$probe" ]
+  [ "$inst" -lt "$probe" ]
+}
