@@ -12,7 +12,6 @@ here="$(dirname "${BASH_SOURCE[0]}")"
 rdir="$(pc_oc_state)/os"
 rec="$rdir/scx_loader.enabled"
 mkrec="$rdir/scx_loader.mkdir"
-key='%etc%scx_loader%config.toml'
 conf_dir="$(sysfs_path /etc/scx_loader)"
 state="$(sysfs_path /sys/kernel/sched_ext/state)"
 ops="$(sysfs_path /sys/kernel/sched_ext/root/ops)"
@@ -27,7 +26,7 @@ undo() {
   local rc=$?
   trap - EXIT
   [[ "$rc" -ne 0 ]] || exit 0
-  if [[ -e "$(pc_oc_state)/backup/$key" || -e "$(pc_oc_state)/absent/$key" ]]; then
+  if file_recorded /etc/scx_loader/config.toml; then
     # the install ran, so the loader and config need the full revert
     bash "$here/revert.sh" || :
     printf 'pc-oc: os: scx_lavd did not load\n' >&2

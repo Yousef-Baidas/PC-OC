@@ -82,7 +82,6 @@ disable scx_loader" ]
 }
 
 @test "revert with no apply record says nothing to revert, exits 0 and changes nothing" {
-  skip "contract #48 pending"
   run --separate-stderr bash "$OS/revert.sh"
   [ "$status" -eq 0 ]
   [ "$stderr" = "pc-oc: os: nothing to revert" ]
@@ -201,7 +200,6 @@ scratch_os() {
 }
 
 @test "apply whose file_install dies on a missing src exits 1 with apply failed and leaves nothing" {
-  skip "contract #48 pending"
   scratch_os
   run --separate-stderr bash "$BATS_TEST_TMPDIR/scratch/os/apply.sh"
   [ "$status" -eq 1 ]
@@ -216,7 +214,6 @@ scratch_os() {
 }
 
 @test "apply whose file_install dies leaves a stock /etc/scx_loader dir alone" {
-  skip "contract #48 pending"
   scratch_os
   mkdir -p "$SYSFS_ROOT/etc/scx_loader"
   run --separate-stderr bash "$BATS_TEST_TMPDIR/scratch/os/apply.sh"
@@ -227,7 +224,6 @@ scratch_os() {
 }
 
 @test "os scripts use file_recorded and hold no record key, backup/ or absent/ string" {
-  skip "contract #48 pending"
   local f
   for f in "$ROOT"/os/apply.sh "$ROOT"/os/revert.sh; do
     echo "scanned: $f, $(wc -c <"$f") bytes" >&3

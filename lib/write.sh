@@ -128,7 +128,11 @@ file_restore() {
   fi
 }
 
-# file_recorded <dest>: return 0 when a file_install record exists for <dest>, else 1. Contract #48.
+# file_recorded <dest>: return 0 when a file_install record exists for <dest>, else 1; silent either way.
 file_recorded() {
-  die lib "file_recorded not implemented"
+  [[ $# -eq 1 ]] || die lib "usage: file_recorded <dest>"
+  local state key
+  state="$(pc_oc_state)" || die lib "pc_oc_state failed"
+  key="$(_w_key "$1")" || exit 1
+  [[ -e "$state/backup/$key" || -e "$state/absent/$key" ]]
 }

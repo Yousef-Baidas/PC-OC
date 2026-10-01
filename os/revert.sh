@@ -12,18 +12,20 @@ source "$(dirname "${BASH_SOURCE[0]}")/../lib/write.sh"
 rdir="$(pc_oc_state)/os"
 rec="$rdir/scx_loader.enabled"
 mkrec="$rdir/scx_loader.mkdir"
-key='%etc%scx_loader%config.toml'
 state="$(sysfs_path /sys/kernel/sched_ext/state)"
 
 sc() {
   systemctl "$@" || die os "systemctl $* failed"
 }
 
-[[ -f "$rec" ]] || die os "nothing to revert"
+if [[ ! -f "$rec" ]]; then
+  printf 'pc-oc: os: nothing to revert\n' >&2
+  exit 0
+fi
 stock="$(cat -- "$rec")" || die os "cannot read $rec"
 
 sc stop scx_loader
-if [[ -e "$(pc_oc_state)/backup/$key" || -e "$(pc_oc_state)/absent/$key" ]]; then
+if file_recorded /etc/scx_loader/config.toml; then
   file_restore /etc/scx_loader/config.toml
 fi
 # only a dir apply made is removed; rmdir leaves a populated one alone
