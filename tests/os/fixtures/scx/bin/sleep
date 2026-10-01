@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Mock sleep for tests/os/scx.bats: returns at once so the 10 s poll costs nothing.
+exit 0

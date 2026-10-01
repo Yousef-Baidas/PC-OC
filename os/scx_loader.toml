@@ -1,0 +1,4 @@
+# src: scx-loader, cachy-scx
+default_sched = "scx_lavd"
+# src: scx-lavd, cachy-scx
+default_mode = "Gaming"

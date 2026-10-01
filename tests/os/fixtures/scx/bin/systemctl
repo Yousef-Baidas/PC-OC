@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Mock systemctl for tests/os/scx.bats: logs its args, tracks the enabled state,
+# and on stop/restart of scx_loader flips the fake sched_ext files.
+# MOCK_SCX_MODE: ok (default), never (restart loads nothing), bpfland (loads bpfland_x).
+set -euo pipefail
+echo "$*" >>"$MOCK_LOG"
+sx="$SYSFS_ROOT/sys/kernel/sched_ext"
+case "$1 ${2:-}" in
+  "is-enabled scx_loader")
+    cat "$MOCK_ENABLED"
+    [[ "$(cat "$MOCK_ENABLED")" == enabled ]]
+    ;;
+  "enable scx_loader") echo enabled >"$MOCK_ENABLED" ;;
+  "disable scx_loader") echo disabled >"$MOCK_ENABLED" ;;
+  "stop scx_loader")
+    echo disabled >"$sx/state"
+    rm -rf "$sx/root"
+    ;;
+  "restart scx_loader")
+    case "${MOCK_SCX_MODE:-ok}" in
+      ok) ops=lavd_1.0 ;;
+      bpfland) ops=bpfland_x ;;
+      *) exit 0 ;;
+    esac
+    mkdir -p "$sx/root"
+    echo "$ops" >"$sx/root/ops"
+    echo enabled >"$sx/state"
+    ;;
+  *) exit 1 ;;
+esac
