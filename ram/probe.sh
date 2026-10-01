@@ -57,9 +57,8 @@ if [[ "$(id -u)" -eq 0 ]]; then
   [[ -e "${eeproms[0]:-}" ]] || pairs+=(spd=no-spd5118)
   for k in "${!eeproms[@]}"; do
     eeprom="${eeproms[k]}"
-    probe_read "$eeprom"
-    id="$(od -An -tx1 -j552 -N2 "$eeprom" 2>/dev/null | tr -d ' \n')" || die ram "cannot read $eeprom"
-    [[ "$id" =~ ^[0-9a-f]{4}$ ]] || die ram "cannot read $eeprom: DRAM maker is at bytes 552-553"
+    probe_read_bytes "$eeprom" 552 2
+    id=$REPLY
     case "${id^^}" in
       80AD) mfr=hynix ;;
       802C) mfr=micron ;;
