@@ -42,6 +42,18 @@ run_ram() {
   [[ "$output" == *mem.vddq* ]]
 }
 
+@test "ram.bats goes red when one probe line drops the installed path" {
+  skip "contract #101 pending"
+  local ln
+  ln="$(grep -n '/usr/local/lib/pc-oc/pc-oc probe ram' "$COPY/ram.md" | head -1 | cut -d: -f1)"
+  echo "mutated line: $ln"
+  [ -n "$ln" ]
+  sed -i "${ln}s|/usr/local/lib/pc-oc/pc-oc probe ram|pc-oc probe ram|" "$COPY/ram.md"
+  run_ram
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"$ln"* ]]
+}
+
 @test "ram.bats stays green on an unmodified copy of bios/" {
   run_ram
   [ "$status" -eq 0 ]

@@ -71,3 +71,14 @@ sets() {
   grep -qiE '^#+ .*cmos' "$RUNBOOK"
   grep -qF CLR_CMOS "$RUNBOOK"
 }
+
+@test "ram.md runs pc-oc by its installed path" {
+  skip "contract #101 pending"
+  local n
+  n="$(grep -c 'pc-oc probe' "$RUNBOOK" || true)"
+  echo "lines with pc-oc probe: $n"
+  [ "$n" -ge 1 ]
+  bad="$(grep -n 'pc-oc probe' "$RUNBOOK" | grep -vF '/usr/local/lib/pc-oc/pc-oc probe' | cut -d: -f1 | paste -sd' ' || true)"
+  echo "lines without the installed path: $bad"
+  [ -z "$bad" ]
+}
