@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# shellcheck disable=SC2016 # bash -c bodies are single-quoted on purpose: the child shell expands them
 
 bats_require_minimum_version 1.5.0
 
@@ -183,4 +184,15 @@ leftovers() {
   run --separate-stderr lib file_recorded /etc/scx_loader/b.toml
   [ "$status" -eq 1 ]
   [ -z "$stderr" ]
+}
+
+# Contract #60. Only pc_oc_state is called; no os/* or gpu/* script runs with a forged EUID.
+@test "pc_oc_state prints PC_OC_STATE for a non-root caller whose environment forges EUID=0" {
+  skip "contract #60 pending"
+  [ "$(id -u)" -ne 0 ] || skip "needs a non-root user"
+  scratch="$BATS_TEST_TMPDIR/scratch-state"
+  run --separate-stderr env EUID=0 PC_OC_STATE="$scratch" \
+    bash -c 'source "$1/common.sh"; source "$1/write.sh"; pc_oc_state' _ "$LIB"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$scratch" ]
 }
