@@ -84,6 +84,150 @@
 #     `- Leave ...`. Rule 7 does not run on it; rules 3 and 8 do (rule 8
 #     first, as above)
 bios_lint() {
-  echo "pc-oc: bios: lint not implemented" >&2
-  return 1
+  [ "$#" -gt 0 ] || {
+    echo "pc-oc: bios: usage: bios_lint <menu-paths.tsv> [<runbook.md>...]" >&2
+    return 2
+  }
+  local table="$1" f
+  shift
+  for f in "$table" "$@"; do
+    [ -r "$f" ] || {
+      echo "pc-oc: bios: cannot read $f" >&2
+      return 2
+    }
+  done
+  [ "$#" -gt 0 ] || return 0
+  LC_ALL=C awk -v keys="$(tail -n +2 "$table" | cut -f1)" -v paths="$(tail -n +2 "$table" | cut -f2)" '
+    function hit(rule, what) { print FILENAME ":" FNR ": rule " rule ": " what; bad = 1 }
+    # word(s, re): re is a whole word of s; a-z, 0-9 and _ make up words
+    function word(s, re) { return s ~ ("(^|[^a-z0-9_])(" re ")([^a-z0-9_]|$)") }
+    # strip(s): s without the reading tokens a Report/Read/Record line may name
+    function strip(s, o, t) {
+      while (match(s, /[A-Za-z0-9_.]+/)) {
+        t = substr(s, RSTART, RLENGTH)
+        sub(/\.+$/, "", t)
+        o = o substr(s, 1, RSTART - 1) (t in reading ? " " : substr(s, RSTART, RLENGTH))
+        s = substr(s, RSTART + RLENGTH)
+      }
+      return o s
+    }
+    # named(s): s names a leaf part or key suffix as a whole word
+    function named(s, n, t, i) {
+      for (n in name) {
+        t = s
+        while ((i = index(t, n))) {
+          if (substr(t, i - 1, 1) !~ /[a-z0-9_]/ && substr(t, i + length(n), 1) !~ /[a-z0-9_]/) return 1
+          t = substr(t, i + 1)
+        }
+      }
+      return 0
+    }
+    function unclosed() {
+      if (fence != "") { print fence ": rule 7: code fence never closes"; bad = 1 }
+      fence = ""
+    }
+    BEGIN {
+      n = split(keys, k, "\n")
+      for (i = 1; i <= n; i++) known[k[i]] = 1
+      n = split(paths, p, "\n")
+      for (i = 1; i <= n; i++) {
+        if (p[i] == "-" || p[i] == "") continue
+        sub(/.* > /, "", p[i])
+        m = split(tolower(p[i]), part, / \/ /)
+        for (j = 1; j <= m; j++) name[part[j]] = 1
+      }
+      n = split("pl1 pl2 tau ac_ll dc_ll xmp freq vdd vddq tcl trcd trp tras trfc", k, " ")
+      for (i = 1; i <= n; i++) name[k[i]] = 1
+      reading["cpu.vcore_mv"] = reading["vcore_max_mv"] = reading["result.stability.vcore_max_mv"] = 1
+      x = "[^a-z0-9]*"
+      knob = "vcore|dvid|core" x "volt|(cpu|processor)" x "volt|vcc" x "(core|ia|in|sa)|load" x "line" x "cal" \
+        "|ratio([^n]|$)|multiplier|bclk|(base|host|ref(erence)?|cpu|bus)" x "(clock|clk)|cpu" x "upgrade" \
+        "|multi" x "core" x "(perf|enh)|enhanced" x "multi|per" x "core" x "limit|avx" x "(offset|setting)" \
+        "|system" x "agent|vdd" x "2|memory" x "controller|(adaptive|override|offset)" x "(mode|volt)" \
+        "|volt[a-z]*" x "(mode|offset|override|adaptive)|(^|[^a-z0-9])(llc|sa|fsb)([^a-z0-9]|$)" \
+        "|(^|[^a-z0-9])v[ ._-]?core"
+      n = split("set type enter change raise increase select enable adjust put configure modify use apply" \
+        " lower reduce drop decrease disable turn switch toggle choose pick keep leave unlock remove bump" \
+        " make lift override tweak tune flip restore load max", k, " ")
+      verb = "chose|chosen|made|kept|left"
+      for (i = 1; i <= n; i++) {
+        st = k[i]
+        sub(/e$/, "", st)
+        verb = verb "|" k[i] "|" st substr(st, length(st)) "?(s|es|ed|d|ing)"
+        if (k[i] ~ /y$/) verb = verb "|" substr(k[i], 1, length(k[i]) - 1) "(ies|ied)"
+      }
+      num = "(^|[^a-z0-9_.])[0-9]+"
+      unit = num "([.][0-9]+)? ?(v|mv|w|kw|mohms?|mhz|ghz|mt/s|volts?|millivolts?|watts?|milliohms?)([^a-z0-9]|$)"
+      value = "auto|enabled|disabled|unlimited|max|on|off"
+    }
+    FNR == 1 { unclosed(); ll = 1.1; ll_was = "stock 1.1 mOhm (intel-14-pl Table 77 p191)" }
+    /[\200-\377]|<[A-Za-z\/!]|&#?[A-Za-z0-9]+;/ {
+      hit(8, "not plain ASCII Markdown (non-ASCII byte, HTML tag or comment, or entity)")
+      next
+    }
+    {
+      infence = fence != ""
+      if ($0 ~ /^```([a-z]+)?$/) { fence = infence ? "" : FILENAME ":" FNR; infence = 1 }
+      s = $0
+      gsub(/[*~`]/, "", s)
+      gsub(/[ \t]+/, " ", s)
+      l = tolower(s)
+      field = rest = ""
+      if (match(s, /^ ?(([-+]|[0-9]+\.) )?(Report|Read|Record|Revert|Save|Short|Run|Why|Note)( |:|$)/)) {
+        field = substr(s, RSTART, RLENGTH)
+        sub(/^ ?(([-+]|[0-9]+\.) )?/, "", field)
+        sub(/[ :]$/, "", field)
+        rest = tolower(substr(s, RSTART + RLENGTH))
+      }
+      r = field ~ /^Re(port|ad|cord)$/ ? tolower(strip(s)) : l
+      if (r ~ knob)
+        hit(3, "forbidden knob (core voltage, LLC, ratio, BCLK, CPU Upgrade, Multi-Core, VCC SA, VDD2)")
+
+      if (word(l, "set")) {
+        nset = 0
+        nw = split(l, w, /[^a-z0-9_]+/)
+        for (i = 1; i <= nw; i++) nset += w[i] == "set"
+        if (nset > 1 || s !~ /^- SET [^ ]+ = [^ #]+( [^ #]+)*( # src: [a-z0-9-]+(,[a-z0-9-]+)*)?$/) {
+          hit(1, "not a SET line: want - SET <key> = <value> # src: <id>[,<id>]")
+          next
+        }
+        split(s, f, " ")
+        key = f[3]
+        if (!(key in known)) { hit(1, "SET key " key " has no row in menu-paths.tsv"); next }
+        val = s
+        sub(/^- SET [^ ]+ = /, "", val)
+        sub(/ # src: .*/, "", val)
+        if (s !~ / # src: /) hit(2, "SET " key " has no # src: cite")
+
+        if (key == "cpu.pl1" || key == "cpu.pl2") {
+          if (val !~ /^[0-9]+(\.[0-9]+)? W$/) hit(4, key " value \"" val "\" is not a plain decimal in W")
+          else if (val + 0 > 219) hit(4, key " " val " is above 219 W")
+        } else if (key == "mem.vdd" || key == "mem.vddq") {
+          if (val !~ /^[0-9]+(\.[0-9]+)? m?V$/) hit(5, key " value \"" val "\" is not a plain decimal in V or mV")
+          else if ((val ~ /mV$/ ? val / 1000 : val + 0) > 1.35) hit(5, key " " val " is above 1.35 V")
+        } else if (key == "cpu.ac_ll") {
+          if (val !~ /^[0-9]+(\.[0-9]+)? mOhm$/) hit(6, key " value \"" val "\" is not a plain decimal in mOhm")
+          else if (val + 0 > ll) hit(6, key " " val " is above " ll_was)
+          else { ll = val + 0; ll_was = "the previous " val }
+        } else if (val !~ /^[A-Za-z0-9.+_-]+( (W|V|mV|mOhm|s|ms|MHz|ns))?$/)
+          hit(1, key " value \"" val "\" is not one token and a unit")
+        next
+      }
+
+      # rule 7 parts each line kind checks: a change verb, b number with unit, c name with value
+      if (infence) { a = ""; b = c = l }
+      else if (s ~ /^#/) { a = b = c = l; sub(/^#+ ?step [0-9]+/, "#", c) }
+      else if (field ~ /^(Re(port|ad|cord|vert))$/) { a = rest; b = c = "" }
+      else if (field != "") { a = rest; b = c = l }
+      else {
+        if ($0 !~ /^[ \t]*$/)
+          hit(9, "not a heading, SET line or Report/Read/Record/Revert/Save/Short/Run/Why/Note line")
+        next
+      }
+      why = word(a, verb) ? "change verb" : b ~ unit ? "number with unit" : \
+        named(c) && (c ~ num || word(c, value)) ? "name with value" : ""
+      if (why != "") hit(7, "BIOS change outside a SET line (" why ")")
+    }
+    END { unclosed(); exit bad }
+  ' "$@"
 }

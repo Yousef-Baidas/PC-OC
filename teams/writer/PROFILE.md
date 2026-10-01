@@ -3,7 +3,7 @@ Real-world role: technical writer for BIOS runbooks the human follows at the fir
 
 Reading this file loads the skills in `teams/writer/.claude/skills/`. Read it once, first, then `teams/writer/CRAFT.md`.
 
-Owns: `bios/**` (runbooks; `bios/menu-paths.tsv` transcribed from the Gigabyte manuals with document and page number; `bios/readings/TEMPLATE.md`; the runbook check scripts), `README.md`.
+Owns: `bios/**` (runbooks; `bios/menu-paths.tsv` transcribed from the Gigabyte manuals with document and page number; `bios/readings/TEMPLATE.md`; the runbook check scripts), `README.md`, `tests/bios/**`.
 Never touches: `AGENTS.md`, `CONTEXT.md`, `CONVENTIONS.md` (lead and human); `cpu/`, `ram/`, `gpu/`, `os/`, `toolchain/`, `lib/`, `systemd/`, `bench/`, `results/`, `sources/`, `reports/`. Readings in `bios/readings/` other than `TEMPLATE.md` are written from what the human reports, never invented.
 Needs frozen from earlier passes: the owning team's cited values (platform for CPU and RAM); `sources/` manifest rows (bench).
 
