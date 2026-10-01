@@ -4,6 +4,11 @@ set -euo pipefail
 # Runs <component>/<verb>.sh next to this file. Only names in the list below run,
 # so an argument can never point sudo at a path outside the install.
 
+# As root, the test seams must not redirect writes: real /sys and /var/lib/pc-oc only
+if [[ "$EUID" -eq 0 ]]; then
+  unset SYSFS_ROOT PC_OC_STATE
+fi
+
 # sudo can pass the caller's PATH through; look commands up only in root-owned
 # /usr/bin, so a user-writable dir on PATH cannot supply bash (docs/adr/0001)
 export PATH=/usr/bin
@@ -11,6 +16,7 @@ export PATH=/usr/bin
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$here/lib/common.sh"
+# apply order; revert all walks it backwards
 components=(cpu ram gpu os toolchain)
 
 usage() {
@@ -26,6 +32,19 @@ case "$verb" in
   *) usage ;;
 esac
 
+if [[ "$target" == all && "$verb" == revert ]]; then
+  # keep going: stopping at a failure would leave the later components tuned
+  failed=()
+  for ((i = ${#components[@]} - 1; i >= 0; i--)); do
+    c="${components[i]}"
+    if [[ -f "$here/$c/revert.sh" ]]; then
+      bash "$here/$c/revert.sh" || failed+=("$c")
+    fi
+  done
+  [[ ${#failed[@]} -eq 0 ]] || die all "revert.sh failed: ${failed[*]}"
+  exit 0
+fi
+
 if [[ "$target" == all ]]; then
   for c in "${components[@]}"; do
     if [[ -f "$here/$c/$verb.sh" ]]; then
@@ -37,7 +56,8 @@ fi
 
 for c in "${components[@]}"; do
   if [[ "$c" == "$target" && -f "$here/$c/$verb.sh" ]]; then
-    exec bash "$here/$c/$verb.sh"
+    bash "$here/$c/$verb.sh" || die "$c" "$verb.sh failed"
+    exit 0
   fi
 done
 usage
