@@ -1,8 +1,10 @@
 #!/usr/bin/bash
 set -euo pipefail
 # sudo os/install.sh: copy the reviewed root scripts to ${DESTDIR:-}/usr/local/lib/pc-oc/
-# and install etc/sudoers.d/pc-oc (docs/adr/0001). Everything is copied to a root-owned
-# staging dir first; the checks and the install read only that copy, never the repo.
+# and install etc/sudoers.d/pc-oc (docs/adr/0001) and the boot unit systemd/pc-oc-gpu.service.
+# Everything is copied to a root-owned staging dir first; the checks and the install read
+# only that copy, never the repo. The unit is only copied: enabling it is `pc-oc apply gpu`,
+# so nothing here calls systemctl.
 
 # same reason as pc-oc: under sudo, look commands up only in root-owned /usr/bin
 export PATH=/usr/bin
@@ -15,6 +17,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$here/lib/common.sh"
 # same list as pc-oc
 components=(cpu ram gpu os toolchain)
+unit=pc-oc-gpu.service
 dest="${DESTDIR:-}"
 
 is_root || [[ -n "$dest" ]] || die os "must run as root: sudo os/install.sh (tests set DESTDIR)"
@@ -31,9 +34,10 @@ git_user() {
 }
 head="$(git_user rev-parse HEAD)" || die os "git rev-parse HEAD failed in $here"
 # only the paths the installer copies count, and ignored files in them too (it copies those);
-# anything else in the checkout never reaches the install
+# anything else in the checkout never reaches the install. systemd/ counts whole, though
+# only the unit is copied
 changes="$(git_user status --porcelain --untracked-files=all --ignored \
-  -- pc-oc "${components[@]}" lib etc/sudoers.d/pc-oc)" || die os "git status failed in $here"
+  -- pc-oc "${components[@]}" lib etc/sudoers.d/pc-oc systemd)" || die os "git status failed in $here"
 
 stage="$(mktemp -d /tmp/pc-oc-install.XXXXXX)" || die os "mktemp failed"
 trap 'rm -rf "$stage" || true' EXIT
@@ -63,22 +67,34 @@ for f in "${files[@]}"; do
 done
 cp -RP "$here/lib" "$tree/lib" || die os "copy lib failed"
 cp -RP "$here/etc/sudoers.d/pc-oc" "$stage/sudoers" || die os "copy etc/sudoers.d/pc-oc failed"
+# a missing or unreadable unit stops here, before anything is installed
+cp -RP "$here/systemd/$unit" "$stage/$unit" || die os "copy systemd/$unit failed; nothing installed"
 
 # from here on only the staged copy is read
 odd="$(find "$stage" ! -type f ! -type d)" || die os "find $stage failed"
 [[ -z "$odd" ]] || die os "not a regular file: ${odd//$'\n'/ }"
 chmod 0440 "$stage/sudoers" || die os "chmod sudoers failed"
 visudo -cf "$stage/sudoers" >/dev/null || die os "etc/sudoers.d/pc-oc fails visudo -cf; nothing installed"
+# -RP copies a directory too, and the find above lets one through
+[[ -f "$stage/$unit" ]] || die os "systemd/$unit is not a regular file; nothing installed"
+chmod 0644 "$stage/$unit" || die os "chmod $unit failed"
 
 printf '%s%s\n' "$head" "${changes:+-dirty}" >"$tree/VERSION" || die os "write VERSION failed"
 find "$tree" -type d -exec chmod 0755 {} + || die os "chmod dirs failed"
 find "$tree" -type f -exec chmod 0644 {} + || die os "chmod files failed"
 (cd "$tree" && chmod 0755 "${scripts[@]}") || die os "chmod scripts failed"
 
-mkdir -p "$dest/usr/local/lib" "$dest/etc/sudoers.d" || die os "mkdir under ${dest:-/} failed"
+# umask 022 above: a directory missing here is created 0755
+mkdir -p "$dest/usr/local/lib" "$dest/etc/sudoers.d" "$dest/etc/systemd/system" ||
+  die os "mkdir under ${dest:-/} failed"
 rm -rf "$dest/usr/local/lib/pc-oc" || die os "remove old $dest/usr/local/lib/pc-oc failed"
 mv "$tree" "$dest/usr/local/lib/pc-oc" || die os "move to $dest/usr/local/lib/pc-oc failed"
 # sudoers.d skips dotted names, so the half-written temp is never read; mv swaps it in whole
 cp "$stage/sudoers" "$dest/etc/sudoers.d/.pc-oc.new" || die os "copy sudoers to $dest/etc/sudoers.d failed"
 mv -f "$dest/etc/sudoers.d/.pc-oc.new" "$dest/etc/sudoers.d/pc-oc" || die os "install sudoers failed"
+# systemd loads only names with a unit suffix, so the temp is never read. install unlinks a
+# temp left by an earlier run and sets the mode itself; cp would keep the old file's mode
+install -m 0644 "$stage/$unit" "$dest/etc/systemd/system/.$unit.new" ||
+  die os "copy $unit to $dest/etc/systemd/system failed"
+mv -f "$dest/etc/systemd/system/.$unit.new" "$dest/etc/systemd/system/$unit" || die os "install $unit failed"
 echo "pc-oc: os: installed $head${changes:+-dirty} to ${dest:-}/usr/local/lib/pc-oc"

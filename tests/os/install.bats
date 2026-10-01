@@ -250,7 +250,6 @@ install_version() {
 
 # Contract #124: install puts systemd/pc-oc-gpu.service at etc/systemd/system and calls no systemctl.
 @test "a DESTDIR install puts the boot unit at etc/systemd/system, mode 0644, byte-identical" {
-  skip "contract #124 pending"
   [ "$(stat -c %a "$repo/systemd/pc-oc-gpu.service")" = 755 ]
   run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
   [ "$status" -eq 0 ]
@@ -265,7 +264,6 @@ install_version() {
 # uid stays the caller's, so this is the DESTDIR path, never root. The unit must be installed:
 # an install that skips the unit calls no systemctl either.
 @test "a DESTDIR install that installs the boot unit calls systemctl 0 times" {
-  skip "contract #124 pending"
   local log="$BATS_TEST_TMPDIR/systemctl.log" mocks="$BATS_TEST_TMPDIR/mocks"
   mkdir -p "$mocks"
   cat >"$mocks/systemctl" <<EOF
@@ -292,14 +290,12 @@ EOF
 }
 
 @test "an uncommitted edit to systemd/pc-oc-gpu.service makes VERSION -dirty" {
-  skip "contract #124 pending"
   echo '# local edit' >>"$repo/systemd/pc-oc-gpu.service"
   install_version
   [ "$version" = "$(git -C "$repo" rev-parse HEAD)-dirty" ]
 }
 
 @test "an untracked systemd/x makes VERSION -dirty" {
-  skip "contract #124 pending"
   echo x >"$repo/systemd/x"
   install_version
   [ "$version" = "$(git -C "$repo" rev-parse HEAD)-dirty" ]
@@ -307,7 +303,6 @@ EOF
 
 # twice: installing the unit must not touch the checkout, or the second stamp would be -dirty
 @test "a clean tree with the boot unit installed leaves VERSION as the bare HEAD hash, twice" {
-  skip "contract #124 pending"
   install_version
   [ -f "$unit" ]
   [ "$version" = "$(git -C "$repo" rev-parse HEAD)" ]
@@ -322,7 +317,6 @@ dest_snapshot() {
 }
 
 @test "with systemd/pc-oc-gpu.service deleted install exits 1 and DESTDIR holds no new or changed file" {
-  skip "contract #124 pending"
   run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
   [ "$status" -eq 0 ]
   dest_snapshot >"$BATS_TEST_TMPDIR/before"
@@ -336,11 +330,69 @@ dest_snapshot() {
 }
 
 @test "an existing unit at the destination is replaced and no temporary name is left beside it" {
-  skip "contract #124 pending"
   mkdir -p "$dest/etc/systemd/system"
   printf '[Unit]\nDescription=stale\n' >"$unit"
   run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
   [ "$status" -eq 0 ]
   cmp "$repo/systemd/pc-oc-gpu.service" "$unit"
+  [ "$(ls -A "$dest/etc/systemd/system")" = pc-oc-gpu.service ]
+}
+
+# #124 Amendment 1: interface rules the contract has no case for. Added with the installer
+# change, not by the contracts worker.
+@test "a missing etc/systemd/system is created 0755 under a caller umask of 077" {
+  umask 077
+  run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
+  [ "$status" -eq 0 ]
+  [ -f "$unit" ]
+  [ "$(stat -c %a "$dest/etc/systemd")" = 755 ]
+  [ "$(stat -c %a "$dest/etc/systemd/system")" = 755 ]
+}
+
+@test "a file under systemd hidden by .git/info/exclude makes VERSION -dirty" {
+  echo 'systemd/x' >"$repo/.git/info/exclude"
+  echo x >"$repo/systemd/x"
+  [ -z "$(git -C "$repo" status --porcelain)" ]
+  install_version
+  [ "$version" = "$(git -C "$repo" rev-parse HEAD)-dirty" ]
+}
+
+@test "an unreadable systemd/pc-oc-gpu.service makes install exit 1 naming it, installing nothing" {
+  [[ "$EUID" -ne 0 ]] || skip "needs a non-root user: root reads a mode 000 file"
+  chmod 000 "$repo/systemd/pc-oc-gpu.service"
+  run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: os: "*pc-oc-gpu.service* ]]
+  [ -z "$(find "$dest" -mindepth 1)" ]
+}
+
+@test "a symlink at systemd/pc-oc-gpu.service makes install exit 1 naming it, installing nothing" {
+  cp "$repo/systemd/pc-oc-gpu.service" "$BATS_TEST_TMPDIR/elsewhere.service"
+  ln -sf "$BATS_TEST_TMPDIR/elsewhere.service" "$repo/systemd/pc-oc-gpu.service"
+  run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: os: "*pc-oc-gpu.service* ]]
+  [ -z "$(find "$dest" -mindepth 1)" ]
+}
+
+@test "a directory at systemd/pc-oc-gpu.service makes install exit 1 naming it, installing nothing" {
+  rm "$repo/systemd/pc-oc-gpu.service"
+  mkdir "$repo/systemd/pc-oc-gpu.service"
+  echo x >"$repo/systemd/pc-oc-gpu.service/f"
+  run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: os: "*pc-oc-gpu.service* ]]
+  [ -z "$(find "$dest" -mindepth 1)" ]
+}
+
+# the temporary name is the installer's: .pc-oc-gpu.service.new
+@test "a world-writable temporary name left by an earlier run still gives a 0644 unit" {
+  mkdir -p "$dest/etc/systemd/system"
+  echo stale >"$dest/etc/systemd/system/.pc-oc-gpu.service.new"
+  chmod 666 "$dest/etc/systemd/system/.pc-oc-gpu.service.new"
+  run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
+  [ "$status" -eq 0 ]
+  cmp "$repo/systemd/pc-oc-gpu.service" "$unit"
+  [ "$(stat -c %a "$unit")" = 644 ]
   [ "$(ls -A "$dest/etc/systemd/system")" = pc-oc-gpu.service ]
 }
