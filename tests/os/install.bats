@@ -175,7 +175,6 @@ install_version() {
 }
 
 @test "untracked local tool dirs at the repo root leave VERSION as the bare HEAD hash" {
-  skip "contract #107 pending"
   mkdir -p "$repo/.claude" "$repo/.playwright-mcp"
   echo x >"$repo/.claude/x"
   echo y >"$repo/.playwright-mcp/y"
@@ -185,7 +184,6 @@ install_version() {
 }
 
 @test "a modified tracked file outside the installed paths leaves VERSION as the bare HEAD hash" {
-  skip "contract #107 pending"
   echo '# local edit' >>"$repo/bench/probe.sh"
   [ -n "$(git -C "$repo" status --porcelain bench)" ]
   install_version
@@ -221,7 +219,6 @@ install_version() {
 }
 
 @test "a file hidden by .git/info/exclude inside a component dir makes VERSION -dirty" {
-  skip "contract #107 pending"
   echo 'cpu/extra.sh' >"$repo/.git/info/exclude"
   echo '# new' >"$repo/cpu/extra.sh"
   install_version
@@ -229,7 +226,6 @@ install_version() {
 }
 
 @test "a file under lib hidden by a committed .gitignore is installed and makes VERSION -dirty" {
-  skip "contract #107 pending"
   echo 'lib/sub/' >"$repo/.gitignore"
   git -C "$repo" add .gitignore
   git -C "$repo" -c user.name=t -c user.email=t@t -c commit.gpgsign=false -c core.hooksPath=/dev/null \
@@ -242,7 +238,6 @@ install_version() {
 }
 
 @test "status.showUntrackedFiles=no in the repo does not hide an untracked file in a component dir" {
-  skip "contract #107 pending"
   git -C "$repo" config status.showUntrackedFiles no
   echo '# new' >"$repo/cpu/extra.sh"
   install_version
