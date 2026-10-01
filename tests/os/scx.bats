@@ -97,3 +97,65 @@ disable scx_loader" ]
   [ "$(cat "$MOCK_ENABLED")" = disabled ]
   [ ! -e "$CONF" ]
 }
+
+# review round 1: failure paths
+# fail_verb <verb>: write a systemctl that fails <verb>, else runs the mock; put $FAIL_BIN first on PATH
+fail_verb() {
+  FAIL_BIN="$BATS_TEST_TMPDIR/fail"
+  mkdir -p "$FAIL_BIN"
+  {
+    echo '#!/usr/bin/env bash'
+    echo "[[ \"\$1\" != $1 ]] || exit 5"
+    echo "exec \"$BATS_TEST_DIRNAME/fixtures/scx/bin/systemctl\" \"\$@\""
+  } >"$FAIL_BIN/systemctl"
+  chmod +x "$FAIL_BIN/systemctl"
+}
+
+@test "a failure before the install leaves the state dir empty and the loader alone" {
+  mkdir -p "$SYSFS_ROOT/etc"
+  chmod 500 "$SYSFS_ROOT/etc"
+  run --separate-stderr bash "$OS/apply.sh"
+  chmod 700 "$SYSFS_ROOT/etc"
+  [ "$status" -eq 1 ]
+  [ -z "$(state_files)" ]
+  [ "$(cat "$MOCK_LOG")" = "is-enabled scx_loader" ]
+  run --separate-stderr bash "$OS/revert.sh"
+  [[ "$stderr" == *"pc-oc: os: nothing to revert"* ]]
+}
+
+@test "a revert that fails at disable reruns to stock" {
+  bash "$OS/apply.sh"
+  fail_verb disable
+  PATH="$FAIL_BIN:$PATH" run --separate-stderr bash "$OS/revert.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: os: systemctl disable scx_loader failed"* ]]
+  run --separate-stderr bash "$OS/revert.sh"
+  [ "$status" -eq 0 ]
+  [ ! -e "$CONF" ]
+  [ "$(cat "$MOCK_ENABLED")" = disabled ]
+  [ -z "$(state_files)" ]
+}
+
+@test "a revert that fails at stop reruns to stock" {
+  bash "$OS/apply.sh"
+  fail_verb stop
+  PATH="$FAIL_BIN:$PATH" run --separate-stderr bash "$OS/revert.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: os: systemctl stop scx_loader failed"* ]]
+  run --separate-stderr bash "$OS/revert.sh"
+  [ "$status" -eq 0 ]
+  [ ! -e "$CONF" ]
+  [ "$(cat "$MOCK_ENABLED")" = disabled ]
+  [ -z "$(state_files)" ]
+}
+
+@test "revert keeps a stock /etc/scx_loader dir, removes one apply made" {
+  mkdir -p "$SYSFS_ROOT/etc/scx_loader"
+  bash "$OS/apply.sh"
+  bash "$OS/revert.sh"
+  [ -d "$SYSFS_ROOT/etc/scx_loader" ]
+  rmdir "$SYSFS_ROOT/etc/scx_loader"
+  bash "$OS/apply.sh"
+  bash "$OS/revert.sh"
+  [ ! -e "$SYSFS_ROOT/etc/scx_loader" ]
+}
