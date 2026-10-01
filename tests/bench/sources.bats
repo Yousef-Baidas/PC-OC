@@ -104,3 +104,31 @@ craft_ids() {
   run unresolved_ids "$FIX/known-cite" "$FIX/good.tsv"
   [ -z "$output" ]
 }
+
+# cpu_ram_errors FILE: one line per cpu-ram id that is missing, repeated, or has
+# a non-https url or an empty or `same` revision; status 1 if any (#71)
+cpu_ram_errors() {
+  local id
+  for id in gb-bios700 intel-14-pl intel-ll intel-sdm-perfstatus kernel-rapl \
+    kernel-spd5118 jep106 kingston-kf556c40 ddr5-vdd; do
+    awk -F'\t' -v id="$id" '
+      $1 == id { n++; url = $3; rev = $4 }
+      END {
+        if (n != 1) print id ": " n + 0 " rows, want 1"
+        else if (url !~ /^https:\/\//) print id ": non-https url " url
+        else if (rev == "" || rev == "same") print id ": bad revision \"" rev "\""
+      }
+    ' "$1"
+  done >"$BATS_TEST_TMPDIR/errors"
+  cat "$BATS_TEST_TMPDIR/errors"
+  [ ! -s "$BATS_TEST_TMPDIR/errors" ]
+}
+
+@test "cpu-ram ids present" {
+  skip "contract #71 pending"
+  run cpu_ram_errors "$M"
+  [ "$status" -eq 0 ] || {
+    echo "$output" >&2
+    return 1
+  }
+}
