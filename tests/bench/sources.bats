@@ -158,3 +158,31 @@ toolchain_errors() {
     return 1
   }
 }
+
+# gpu_offsets_errors FILE: one line per gpu-offsets id that is missing,
+# repeated, or has a non-https url or an empty revision; status 1 if any (#125)
+gpu_offsets_errors() {
+  local id
+  for id in gpu-burn memtest-vulkan nv-xid nvml-perf-modes py-isolated \
+    research-111; do
+    awk -F'\t' -v id="$id" '
+      $1 == id { n++; url = $3; rev = $4 }
+      END {
+        if (n != 1) print id ": " n + 0 " rows, want 1"
+        else if (url !~ /^https:\/\//) print id ": non-https url " url
+        else if (rev == "") print id ": empty revision"
+      }
+    ' "$1"
+  done >"$BATS_TEST_TMPDIR/errors"
+  cat "$BATS_TEST_TMPDIR/errors"
+  [ ! -s "$BATS_TEST_TMPDIR/errors" ]
+}
+
+@test "manifest has the gpu-offsets rows" {
+  skip "contract #125 pending"
+  run gpu_offsets_errors "$M"
+  [ "$status" -eq 0 ] || {
+    echo "$output" >&2
+    return 1
+  }
+}
