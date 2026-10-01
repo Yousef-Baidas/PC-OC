@@ -1,6 +1,6 @@
 # Fixture: clean runbook
 
-1. Save the current settings: in Save & Exit > Save Profiles, pick Setup Profile 1.
+1. Save the current profile to Setup Profile 1 in Save & Exit > Save Profiles.
 
 ## Steps
 
@@ -18,4 +18,4 @@ Read cpu.vcore_mv
 
 ## Recovery: clear CMOS
 
-Short the CLR_CMOS jumper, then Load Profiles > Setup Profile 1.
+Short the CLR_CMOS jumper, then revert to Setup Profile 1.

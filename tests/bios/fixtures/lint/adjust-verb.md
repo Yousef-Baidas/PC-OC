@@ -1,6 +1,6 @@
 # Fixture: clean runbook
 
-1. Save the current settings: in Save & Exit > Save Profiles, pick Setup Profile 1.
+1. Save the current profile to Setup Profile 1 in Save & Exit > Save Profiles.
 
 ## Steps
 
@@ -9,9 +9,9 @@
 - SET cpu.ac_ll = 0.50 mOhm  # src: intel-ll,gb-bios700
 - SET cpu.ac_ll = 0.40 mOhm  # src: intel-ll,gb-bios700
 - SET mem.freq = 6000  # src: gb-bios700
-Adjust DRAM Voltage to 1.45 V.
+- Note: Adjust DRAM Voltage one step.
 - SET mem.vddq = 1.35 V  # src: ddr5-vdd
 
 ## Recovery: clear CMOS
 
-Short the CLR_CMOS jumper, then Load Profiles > Setup Profile 1.
+Short the CLR_CMOS jumper, then revert to Setup Profile 1.

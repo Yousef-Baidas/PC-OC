@@ -78,6 +78,13 @@ lint_fails() {
   [ -z "$output" ]
 }
 
+@test "lint passes runbook-ok.md (full canonical runbook)" {
+  run bios_lint "$FIX/menu-paths.tsv" "$FIX/runbook-ok.md"
+  echo "$output"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "lint fails unknown-key.md on rule 1 (SET key has no menu-paths row)" {
   lint_fails unknown-key.md 11 1
 }
@@ -86,7 +93,7 @@ lint_fails() {
   lint_fails no-cite.md 12 2
 }
 
-@test "lint fails bclk.md on rule 3 (BCLK named without a value)" {
+@test "lint fails bclk.md on rule 3 (BCLK named on a Report line)" {
   lint_fails bclk.md 11 3
 }
 
@@ -110,15 +117,15 @@ lint_fails() {
   lint_fails set-offform.md 7 1
 }
 
-@test "lint fails prose-change.md on rule 7 (BIOS change outside a SET line)" {
+@test "lint fails prose-change.md on rule 7 (number with unit on a Note line)" {
   lint_fails prose-change.md 12 7
 }
 
-@test "lint fails llc-spaced.md on rule 3 (Load Line Calibration)" {
-  lint_fails llc-spaced.md 11 3
+@test "lint fails llc-spaced.md on rule 3 (Load Line Calibration in a fence)" {
+  lint_fails llc-spaced.md 12 3
 }
 
-@test "lint fails vcore-underscore.md on rule 3 (CPU_Vcore, no number with unit)" {
+@test "lint fails vcore-underscore.md on rule 3 (CPU_Vcore on a Note line)" {
   lint_fails vcore-underscore.md 11 3
 }
 
@@ -130,19 +137,19 @@ lint_fails() {
   lint_fails ll-first-high.md 9 6
 }
 
-@test "lint fails adjust-verb.md on rule 7 (change verb adjust)" {
+@test "lint fails adjust-verb.md on rule 7 (change verb adjust on a Note line)" {
   lint_fails adjust-verb.md 12 7
 }
 
-@test "lint fails table-row.md on rule 7 (number with unit, no verb)" {
-  lint_fails table-row.md 12 7
+@test "lint fails table-row.md on rule 9 (a table row is outside the line grammar)" {
+  lint_fails table-row.md 12 9
 }
 
-@test "lint fails leaf-value.md on rule 7 (menu leaf with a value)" {
+@test "lint fails leaf-value.md on rule 7 (menu leaf with a value on a Note line)" {
   lint_fails leaf-value.md 7 7
 }
 
-@test "lint fails split-bold.md on rule 7 (verb split by ** before normalizing)" {
+@test "lint fails split-bold.md on rule 7 (verb split by ** on a Note line)" {
   lint_fails split-bold.md 12 7
 }
 
@@ -154,10 +161,34 @@ lint_fails() {
   lint_fails entity.md 11 8
 }
 
-@test "lint fails fence-info.md on rule 7 (a backtick info string is not a fence)" {
-  lint_fails fence-info.md 17 7
+@test "lint fails fence-info.md on rule 9 (a backtick info string is not a fence)" {
+  lint_fails fence-info.md 15 9
 }
 
 @test "lint fails fence-unclosed.md on rule 7 (fence open at end of file)" {
   lint_fails fence-unclosed.md 15 7
+}
+
+@test "lint fails c-states.md on rule 9 (prose outside the line grammar)" {
+  lint_fails c-states.md 11 9
+}
+
+@test "lint fails leave-auto.md on rule 9 (list item whose first word is no field)" {
+  lint_fails leave-auto.md 11 9
+}
+
+@test "lint fails record-raise.md on rule 7 (change verb on a Record line)" {
+  lint_fails record-raise.md 12 7
+}
+
+@test "lint fails note-pl1.md on rule 7 (key suffix with a value on a Note line)" {
+  lint_fails note-pl1.md 7 7
+}
+
+@test "lint fails why-volts.md on rule 7 (number with spelled unit on a Why line)" {
+  lint_fails why-volts.md 12 7
+}
+
+@test "lint fails v-core.md on rule 3 (V-Core on a Report line)" {
+  lint_fails v-core.md 11 3
 }

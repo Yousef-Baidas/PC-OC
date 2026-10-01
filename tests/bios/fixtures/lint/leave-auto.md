@@ -4,11 +4,11 @@
 
 ## Steps
 
-- Note: Power Limit TDP (Watts): Unlimited
+- SET cpu.pl1 = 219 W  # src: intel-14-pl,gb-bios700
 - SET cpu.pl2 = 219 W  # src: intel-14-pl,gb-bios700
 - SET cpu.ac_ll = 0.50 mOhm  # src: intel-ll,gb-bios700
 - SET cpu.ac_ll = 0.40 mOhm  # src: intel-ll,gb-bios700
-- SET mem.freq = 6000  # src: gb-bios700
+- Leave DDR5 Voltage Control at Auto.
 - SET mem.vdd = 1.35 V  # src: ddr5-vdd
 - SET mem.vddq = 1.35 V  # src: ddr5-vdd
 
