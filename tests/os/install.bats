@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# shellcheck disable=SC2030,SC2031 # bats `run` sets status/stderr in the test shell; shellcheck reads each @test as a subshell
 
 bats_require_minimum_version 1.5.0
 
@@ -158,4 +159,55 @@ add_real() {
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"pc-oc: os: "*nested-dir* ]]
   [ -z "$(find "$dest" -mindepth 1)" ]
+}
+
+# Contract #107: VERSION is -dirty only when a path the installer copies differs from HEAD.
+# Installs, prints the VERSION it read, and leaves it in $version.
+install_version() {
+  # an empty HOME and XDG_CONFIG_HOME: git reads ~/.config/git/ignore even with
+  # GIT_CONFIG_GLOBAL=/dev/null, and the caller's ignore must not decide the stamp
+  mkdir -p "$BATS_TEST_TMPDIR/home"
+  run --separate-stderr env DESTDIR="$dest" HOME="$BATS_TEST_TMPDIR/home" \
+    XDG_CONFIG_HOME="$BATS_TEST_TMPDIR/home/.config" "$repo/os/install.sh"
+  [ "$status" -eq 0 ]
+  version="$(<"$dest/usr/local/lib/pc-oc/VERSION")"
+  printf '# VERSION read: %s\n' "$version" >&3
+}
+
+@test "untracked local tool dirs at the repo root leave VERSION as the bare HEAD hash" {
+  skip "contract #107 pending"
+  mkdir -p "$repo/.claude" "$repo/.playwright-mcp"
+  echo x >"$repo/.claude/x"
+  echo y >"$repo/.playwright-mcp/y"
+  install_version
+  [[ "$version" =~ ^[0-9a-f]{40}$ ]]
+  [ "$version" = "$(git -C "$repo" rev-parse HEAD)" ]
+}
+
+@test "a modified tracked file outside the installed paths leaves VERSION as the bare HEAD hash" {
+  skip "contract #107 pending"
+  echo '# local edit' >>"$repo/bench/probe.sh"
+  [ -n "$(git -C "$repo" status --porcelain bench)" ]
+  install_version
+  [[ "$version" =~ ^[0-9a-f]{40}$ ]]
+  [ "$version" = "$(git -C "$repo" rev-parse HEAD)" ]
+}
+
+@test "an untracked file directly in a component dir makes VERSION -dirty" {
+  echo '# new' >"$repo/cpu/extra.sh"
+  install_version
+  [ "$version" = "$(git -C "$repo" rev-parse HEAD)-dirty" ]
+}
+
+@test "a modified tracked file under lib makes VERSION -dirty" {
+  echo '# local edit' >>"$repo/lib/common.sh"
+  install_version
+  [ "$version" = "$(git -C "$repo" rev-parse HEAD)-dirty" ]
+}
+
+@test "a modified sudoers drop-in that still passes visudo makes VERSION -dirty" {
+  echo '# local comment' >>"$repo/etc/sudoers.d/pc-oc"
+  visudo -cf "$repo/etc/sudoers.d/pc-oc" >/dev/null
+  install_version
+  [ "$version" = "$(git -C "$repo" rev-parse HEAD)-dirty" ]
 }
