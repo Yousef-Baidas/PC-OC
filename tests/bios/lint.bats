@@ -71,6 +71,13 @@ lint_fails() {
   [ -z "$output" ]
 }
 
+@test "lint passes reading-ok.md (vcore reading tokens on Report/Read/Record lines)" {
+  run bios_lint "$FIX/menu-paths.tsv" "$FIX/reading-ok.md"
+  echo "$output"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "lint fails unknown-key.md on rule 1 (SET key has no menu-paths row)" {
   lint_fails unknown-key.md 11 1
 }
@@ -83,14 +90,42 @@ lint_fails() {
   lint_fails bclk.md 11 3
 }
 
-@test "lint fails vdd-140.md on rule 4 (mem.vdd above 1.35)" {
-  lint_fails vdd-140.md 12 4
+@test "lint fails pl-253.md on rule 4 (cpu.pl1 above 219)" {
+  lint_fails pl-253.md 7 4
 }
 
-@test "lint fails pl-253.md on rule 5 (cpu.pl1 above 219)" {
-  lint_fails pl-253.md 7 5
+@test "lint fails vdd-140.md on rule 5 (mem.vdd above 1.35)" {
+  lint_fails vdd-140.md 12 5
 }
 
 @test "lint fails ll-up.md on rule 6 (cpu.ac_ll goes up)" {
   lint_fails ll-up.md 10 6
+}
+
+@test "lint fails set-dotless.md on rule 1 (SET key PL1 is not a menu-paths key)" {
+  lint_fails set-dotless.md 7 1
+}
+
+@test "lint fails set-offform.md on rule 1 (SET line not in canonical form)" {
+  lint_fails set-offform.md 7 1
+}
+
+@test "lint fails prose-change.md on rule 7 (BIOS change outside a SET line)" {
+  lint_fails prose-change.md 12 7
+}
+
+@test "lint fails llc-spaced.md on rule 3 (Load Line Calibration)" {
+  lint_fails llc-spaced.md 11 3
+}
+
+@test "lint fails vcore-underscore.md on rule 3 (CPU_Vcore)" {
+  lint_fails vcore-underscore.md 11 3
+}
+
+@test "lint fails pl-unlimited.md on rule 4 (cpu.pl1 not a plain number)" {
+  lint_fails pl-unlimited.md 7 4
+}
+
+@test "lint fails ll-first-high.md on rule 6 (first cpu.ac_ll above stock 1.1 mOhm)" {
+  lint_fails ll-first-high.md 9 6
 }
