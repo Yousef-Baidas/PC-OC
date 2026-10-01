@@ -19,7 +19,11 @@ setup() {
   SRC="$src"
   repo="$BATS_TEST_TMPDIR/repo"
   dest="$BATS_TEST_TMPDIR/dest"
-  mkdir -p "$repo/os" "$repo/etc/sudoers.d" "$repo/cpu" "$repo/toolchain" "$repo/bench" "$dest"
+  mkdir -p "$repo/os" "$repo/etc/sudoers.d" "$repo/cpu" "$repo/toolchain" "$repo/bench" "$repo/systemd" "$dest"
+  # the boot unit (#124) is a fixture, committed 0755 so an installer that keeps the source mode shows
+  cp "$BATS_TEST_DIRNAME/fixtures/systemd/pc-oc-gpu.service" "$repo/systemd/"
+  chmod 755 "$repo/systemd/pc-oc-gpu.service"
+  unit="$dest/etc/systemd/system/pc-oc-gpu.service"
   cp "$src/pc-oc" "$repo/"
   cp -r "$src/lib" "$repo/"
   cp "${INSTALL_SH:-$src/os/install.sh}" "$repo/os/install.sh"
@@ -242,4 +246,101 @@ install_version() {
   echo '# new' >"$repo/cpu/extra.sh"
   install_version
   [ "$version" = "$(git -C "$repo" rev-parse HEAD)-dirty" ]
+}
+
+# Contract #124: install puts systemd/pc-oc-gpu.service at etc/systemd/system and calls no systemctl.
+@test "a DESTDIR install puts the boot unit at etc/systemd/system, mode 0644, byte-identical" {
+  skip "contract #124 pending"
+  [ "$(stat -c %a "$repo/systemd/pc-oc-gpu.service")" = 755 ]
+  run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
+  [ "$status" -eq 0 ]
+  [ -f "$unit" ]
+  [ ! -L "$unit" ]
+  cmp "$repo/systemd/pc-oc-gpu.service" "$unit"
+  [ "$(stat -c %a "$unit")" = 644 ]
+}
+
+# install.sh pins PATH=/usr/bin, so a mock put first on PATH is never the systemctl it would run.
+# The install runs in a mount namespace with a recording mock bound over /usr/bin/systemctl; the
+# uid stays the caller's, so this is the DESTDIR path, never root. The unit must be installed:
+# an install that skips the unit calls no systemctl either.
+@test "a DESTDIR install that installs the boot unit calls systemctl 0 times" {
+  skip "contract #124 pending"
+  local log="$BATS_TEST_TMPDIR/systemctl.log" mocks="$BATS_TEST_TMPDIR/mocks"
+  mkdir -p "$mocks"
+  cat >"$mocks/systemctl" <<EOF
+#!/usr/bin/bash
+# pc-oc-test-mock
+echo "systemctl \$*" >>"$log"
+EOF
+  chmod +x "$mocks/systemctl"
+  cat >"$BATS_TEST_TMPDIR/guard.sh" <<EOF
+#!/usr/bin/bash
+mount --bind "$mocks/systemctl" /usr/bin/systemctl || exit 97
+[[ "\$(sed -n 2p /usr/bin/systemctl)" == "# pc-oc-test-mock" ]] || exit 97
+[[ "\$(/usr/bin/id -u)" != 0 ]] || exit 97
+exec "\$@"
+EOF
+  run --separate-stderr unshare --map-user="$(id -u)" --map-group="$(id -g)" --keep-caps -m \
+    bash "$BATS_TEST_TMPDIR/guard.sh" env DESTDIR="$dest" PATH="$mocks:$PATH" "$repo/os/install.sh"
+  [ "$status" -eq 0 ]
+  [ -f "$unit" ]
+  [ ! -e "$log" ] || {
+    echo "install called: $(tr '\n' ';' <"$log")" >&3
+    return 1
+  }
+}
+
+@test "an uncommitted edit to systemd/pc-oc-gpu.service makes VERSION -dirty" {
+  skip "contract #124 pending"
+  echo '# local edit' >>"$repo/systemd/pc-oc-gpu.service"
+  install_version
+  [ "$version" = "$(git -C "$repo" rev-parse HEAD)-dirty" ]
+}
+
+@test "an untracked systemd/x makes VERSION -dirty" {
+  skip "contract #124 pending"
+  echo x >"$repo/systemd/x"
+  install_version
+  [ "$version" = "$(git -C "$repo" rev-parse HEAD)-dirty" ]
+}
+
+# twice: installing the unit must not touch the checkout, or the second stamp would be -dirty
+@test "a clean tree with the boot unit installed leaves VERSION as the bare HEAD hash, twice" {
+  skip "contract #124 pending"
+  install_version
+  [ -f "$unit" ]
+  [ "$version" = "$(git -C "$repo" rev-parse HEAD)" ]
+  install_version
+  [ "$version" = "$(git -C "$repo" rev-parse HEAD)" ]
+}
+
+# every path under DESTDIR with its type, mode, inode, size, mtime and content hash
+dest_snapshot() {
+  (cd "$dest" && find . -printf '%p %y %m %i %s %T@\n' | LC_ALL=C sort &&
+    find . -type f -exec sha256sum {} + | LC_ALL=C sort)
+}
+
+@test "with systemd/pc-oc-gpu.service deleted install exits 1 and DESTDIR holds no new or changed file" {
+  skip "contract #124 pending"
+  run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
+  [ "$status" -eq 0 ]
+  dest_snapshot >"$BATS_TEST_TMPDIR/before"
+  echo "# DESTDIR before: $(grep -c ' f ' "$BATS_TEST_TMPDIR/before") files" >&3
+  rm "$repo/systemd/pc-oc-gpu.service"
+  run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"pc-oc: os: "* ]]
+  dest_snapshot >"$BATS_TEST_TMPDIR/after"
+  diff "$BATS_TEST_TMPDIR/before" "$BATS_TEST_TMPDIR/after" >&3
+}
+
+@test "an existing unit at the destination is replaced and no temporary name is left beside it" {
+  skip "contract #124 pending"
+  mkdir -p "$dest/etc/systemd/system"
+  printf '[Unit]\nDescription=stale\n' >"$unit"
+  run --separate-stderr env DESTDIR="$dest" "$repo/os/install.sh"
+  [ "$status" -eq 0 ]
+  cmp "$repo/systemd/pc-oc-gpu.service" "$unit"
+  [ "$(ls -A "$dest/etc/systemd/system")" = pc-oc-gpu.service ]
 }
