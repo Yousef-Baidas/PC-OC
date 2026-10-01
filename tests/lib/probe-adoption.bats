@@ -33,7 +33,6 @@ assert_adopted() {
 }
 
 @test "gpu probe uses probe_emit and no own header or byte counter" {
-  skip "adopted in #38"
   assert_adopted gpu
 }
 
