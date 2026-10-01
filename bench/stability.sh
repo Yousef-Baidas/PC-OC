@@ -25,22 +25,48 @@ inputs=()
 results=()
 tmp="$(mktemp -d)"
 sampler=""
+tool=""
 
-# stop_sampler: kill the sampler and its sleep, reap it; safe to call twice
+# stop_tool: TERM the running tool's session (setsid made it the group leader), KILL after 1 s; reap
+stop_tool() {
+  [ -n "$tool" ] || return 0
+  kill -TERM -- "-$tool" 2>/dev/null || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    kill -0 "$tool" 2>/dev/null || break
+    sleep 0.1
+  done
+  kill -KILL -- "-$tool" 2>/dev/null || true
+  wait "$tool" 2>/dev/null || true
+  tool=""
+}
+
+# run_tool <cmd...>: run in its own session, in the background, so a signal to this script
+# reaches the trap while we wait; status in $rc
+run_tool() {
+  setsid "$@" &
+  tool=$!
+  rc=0
+  wait "$tool" || rc=$?
+  tool=""
+}
+
+# stop_sampler: kill the sampler (first, so it starts no new probe) and its sleep, reap it; safe to call twice
 stop_sampler() {
   [ -n "$sampler" ] || return 0
-  pkill -P "$sampler" 2>/dev/null || true
   kill "$sampler" 2>/dev/null || true
+  pkill -P "$sampler" 2>/dev/null || true
   wait "$sampler" 2>/dev/null || true
   sampler=""
 }
 cleanup() {
+  stop_tool
   stop_sampler
   rm -rf "$tmp"
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 # sample_loop <out>: every STABILITY_SAMPLE_S seconds append "<ns> <vcore_mv|-> <energy_uj|-> <mhz|->"
 # (probe keys cpu.vcore_mv, cpu.pkg_energy_uj from pc-oc probe cpu; clock from cpufreq, in kHz)
@@ -99,7 +125,8 @@ case "${1:-}" in
   cpu | soak)
     mode="$1"
     minutes="${2:-$([ "$mode" = soak ] && echo 60 || echo 10)}"
-    [[ "$minutes" =~ ^[1-9][0-9]*$ ]] || usage
+    # 1..1440 (24 h): bounds the arithmetic below; stress-ng reads -t 0 as forever
+    [[ "$minutes" =~ ^[1-9][0-9]{0,3}$ ]] && [ "$minutes" -le 1440 ] || usage
     need y-cruncher "yay -S y-cruncher"
     need stress-ng "pacman -S stress-ng"
     yc_args=(skip-warnings colors:0 pause:-2 stress "-TL:$((minutes * 60))")
@@ -121,9 +148,9 @@ case "${1:-}" in
     : >"$tmp/samples"
     sample_loop "$tmp/samples" >/dev/null 2>&1 &
     sampler=$!
-    rc=0
     run_yc() {
-      y-cruncher "${yc_args[@]}" </dev/null 2>&1 | tee "$tmp/ycruncher.log" >&2 || rc=$?
+      # shellcheck disable=SC2016 # the script text is expanded by the child bash, not here
+      run_tool bash -c 'set -o pipefail; y-cruncher "${@:2}" </dev/null 2>&1 | tee "$1" >&2' _ "$tmp/ycruncher.log" "${yc_args[@]}"
       if [ "$rc" -eq 0 ] && ! grep -q 'Stress test failed' "$tmp/ycruncher.log"; then
         results+=(result.stability.ycruncher=PASS)
       else
@@ -131,7 +158,8 @@ case "${1:-}" in
       fi
     }
     run_sng() {
-      if stress-ng "${sng_args[@]}" >&2; then
+      run_tool stress-ng "${sng_args[@]}" >&2
+      if [ "$rc" -eq 0 ]; then
         results+=(result.stability.stressng=PASS)
       else
         results+=(result.stability.stressng=FAIL)
