@@ -3,6 +3,8 @@ set -euo pipefail
 # game.sh setup | parse <csv>...: Cyberpunk 2077 MangoHud logs to avg and 1% low FPS.
 # shellcheck source=../lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+# shellcheck source=lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 # Sources:
 # - MangoHud README (github.com/flightlessmango/MangoHud): output_folder,
@@ -86,7 +88,7 @@ parse() {
     sum_low="$(awk -v a="$sum_low" -v b="$low" 'BEGIN { printf "%.6f", a + b }')"
   done
   [ "$run" -ge 1 ] || die bench "no frame logs, only summaries: $skipped"
-  printf 'input.source=%s bytes=%d items=%d\n' "$src" "$bytes" "$items"
+  input_line "$src" "$bytes" "$items"
   printf 'input.skipped=%s\n' "$skipped"
   printf 'input.mangohud=%s\ninput.files=%d\ninput.low1_definition=%s\n' "$ver" "$run" "$LOW1_DEF"
   printf '%s' "$out"

@@ -32,6 +32,13 @@ run_probe() {
   [ "${lines[0]}" = "source=$NONL bytes=4 items=1" ]
 }
 
+@test "probe_read sets PROBE_CONTENT to every line, and bytes= is its size" {
+  run_probe 'probe_read "$TWO"; want=$(printf "alpha  \nsecond line\n"; echo x); [ "${PROBE_CONTENT}x" = "$want" ] && probe_emit same=yes'
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "source=$TWO bytes=20 items=1" ]
+  [ "${lines[1]}" = "demo.same=yes" ]
+}
+
 @test "adding a key bumps items=" {
   run_probe 'probe_read "$NONL"; probe_emit a=1 b=2 c=3'
   [ "$status" -eq 0 ]

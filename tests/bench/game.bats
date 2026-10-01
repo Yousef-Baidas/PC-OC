@@ -2,6 +2,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load helper
+
 setup() {
   SCRIPT="$BATS_TEST_DIRNAME/../../bench/game.sh"
   FIX="$BATS_TEST_DIRNAME/fixtures/game"
@@ -11,27 +13,6 @@ setup() {
   RUN200="$FIX/run-200.csv"
   # run-100_summary.csv: what MangoHud writes next to run-100.csv when logging stops
   SUM100="$FIX/run-100_summary.csv"
-}
-
-# value <key>: print the value of stdout line <key>=
-value() {
-  local l
-  for l in "${lines[@]}"; do
-    [[ "$l" == "$1="* ]] && printf '%s\n' "${l#"$1="}" && return 0
-  done
-  return 1
-}
-
-# contract_order: stdout is input.* lines, then result.* lines, nothing else
-contract_order() {
-  local seen=0 l
-  for l in "${lines[@]}"; do
-    case "$l" in
-      input.*=*) [ "$seen" -eq 0 ] || return 1 ;;
-      result.*=*) seen=1 ;;
-      *) return 1 ;;
-    esac
-  done
 }
 
 @test "parse gives 97.1 avg fps and 25.0 1% low for 99 frames at 10 ms and 1 at 40 ms" {

@@ -5,6 +5,8 @@ set -euo pipefail
 # $XDG_DATA_HOME/pc-oc/mangohud/<label>/ (default ~/.local/share).
 # shellcheck source=../lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+# shellcheck source=lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || die bench "cannot resolve repo root"
 
@@ -34,7 +36,8 @@ done_ok=""
 # a failed run must leave no results dir that looks complete
 trap '[ -n "$done_ok" ] || rm -rf "$dest"' EXIT
 
-printf '%s bytes=%s items=%d\n' "$logs_dir" "$(cat "${logs[@]}" | wc -c)" "${#logs[@]}"
+log_bytes="$(cat "${logs[@]}" | wc -c)" || die bench "cannot read MangoHud logs in $logs_dir"
+input_line "$logs_dir" "$log_bytes" "${#logs[@]}"
 
 "$ROOT/pc-oc" probe all >"$dest/settings.txt" || die bench "pc-oc probe all failed"
 "$ROOT/bench/compile.sh" >"$dest/compile.txt" || die bench "compile.sh failed"

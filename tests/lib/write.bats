@@ -36,7 +36,6 @@ leftovers() {
 }
 
 @test "sys_write then sys_restore gives byte-identical stock and no backup left" {
-  skip "contract #25 pending"
   stock="$(sha "$SYSFS_ROOT$epp")"
   run --separate-stderr lib sys_write "$epp" performance
   [ "$status" -eq 0 ]
@@ -48,7 +47,6 @@ leftovers() {
 }
 
 @test "a second sys_write keeps the first backup, so restore gives stock" {
-  skip "contract #25 pending"
   stock="$(sha "$SYSFS_ROOT$epp")"
   run --separate-stderr lib sys_write "$epp" performance
   [ "$status" -eq 0 ]
@@ -61,7 +59,6 @@ leftovers() {
 }
 
 @test "sys_write exits 1 naming want and got when the target ignores writes" {
-  skip "contract #25 pending"
   # a symlink to /dev/null accepts every write and always reads back empty
   mkdir -p "$SYSFS_ROOT/sys/fake"
   ln -s /dev/null "$SYSFS_ROOT/sys/fake/ignores_writes"
@@ -71,7 +68,6 @@ leftovers() {
 }
 
 @test "sys_restore with no backup exits 1 and leaves the target alone" {
-  skip "contract #25 pending"
   stock="$(sha "$SYSFS_ROOT$epp")"
   run --separate-stderr lib sys_restore "$epp"
   [ "$status" -eq 1 ]
@@ -80,7 +76,6 @@ leftovers() {
 }
 
 @test "file_install then file_restore on an absent dest removes it again" {
-  skip "contract #25 pending"
   dest=/etc/scx_loader/config.toml
   run --separate-stderr lib file_install "$src" "$dest"
   [ "$status" -eq 0 ]
@@ -92,7 +87,6 @@ leftovers() {
 }
 
 @test "file_install then file_restore on an existing dest gives the original bytes" {
-  skip "contract #25 pending"
   dest=/etc/scx_loader/config.toml
   printf 'default_sched = "scx_bpfland"\n' >"$SYSFS_ROOT$dest"
   stock="$(sha "$SYSFS_ROOT$dest")"
@@ -106,7 +100,6 @@ leftovers() {
 }
 
 @test "paths with spaces work for sys_write, sys_restore, file_install, file_restore" {
-  skip "contract #25 pending"
   knob="/sys/fake dir/a knob"
   dest="/etc/fake dir/a file.conf"
   mkdir -p "$SYSFS_ROOT/sys/fake dir" "$SYSFS_ROOT/etc/fake dir"
@@ -130,7 +123,6 @@ leftovers() {
 }
 
 @test "sys_write to a read-only target exits 1 and leaves no backup behind" {
-  skip "contract #25 pending"
   [[ "$EUID" -ne 0 ]] || skip "root ignores file modes"
   chmod 444 "$SYSFS_ROOT$epp"
   stock="$(sha "$SYSFS_ROOT$epp")"

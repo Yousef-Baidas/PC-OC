@@ -11,17 +11,14 @@ set -euo pipefail
 # the kernel also uses it for info lines (thermal monitoring, bank setup).
 # shellcheck source=../lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+# shellcheck source=lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 ERROR_PATTERN='\[Hardware Error\]|Machine check|NVRM: Xid'
 
 usage() {
   echo "pc-oc: bench: usage: stability.sh cpu [minutes>=1] | scan <since>" >&2
   exit 2
-}
-
-# need <tool> <install hint>: die unless <tool> is on PATH
-need() {
-  command -v "$1" >/dev/null || die bench "$1 not found; install: $2"
 }
 
 inputs=()
@@ -31,11 +28,13 @@ trap 'rm -rf "$tmp"' EXIT
 
 # scan_journal <since>: kernel lines since <since> into results; their source goes first in inputs
 scan_journal() {
-  local first source_line
+  local first source_line bytes items
   need journalctl "pacman -S systemd"
   journalctl _TRANSPORT=kernel --since "$1" --no-pager -o short-iso >"$tmp/journal" ||
     die bench "journalctl failed"
-  source_line="input.source=$(command -v journalctl) bytes=$(wc -c <"$tmp/journal") items=$(wc -l <"$tmp/journal")"
+  bytes="$(wc -c <"$tmp/journal")" || die bench "cannot read $tmp/journal"
+  items="$(wc -l <"$tmp/journal")" || die bench "cannot read $tmp/journal"
+  source_line="$(input_line "$(command -v journalctl)" "$bytes" "$items")" || exit 1
   inputs=("$source_line" "input.journalctl=$(journalctl --version | head -1)" "input.since=$1" "${inputs[@]}")
   first="$(grep -m1 -E "$ERROR_PATTERN" "$tmp/journal" || true)"
   if [ -n "$first" ]; then
