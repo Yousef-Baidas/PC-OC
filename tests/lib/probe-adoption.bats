@@ -23,12 +23,10 @@ assert_adopted() {
 }
 
 @test "cpu probe uses probe_emit and no own header or byte counter" {
-  skip "adopted in #37"
   assert_adopted cpu
 }
 
 @test "ram probe uses probe_emit and no own header or byte counter" {
-  skip "adopted in #37"
   assert_adopted ram
 }
 
