@@ -10,7 +10,6 @@ setup_file() {
 }
 
 setup() {
-  skip "contract #72 pending"
   load lint
   FIX="$BATS_TEST_DIRNAME/fixtures/lint"
   TABLE="$BIOS_ROOT/menu-paths.tsv"

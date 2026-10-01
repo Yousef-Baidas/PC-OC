@@ -1,0 +1,15 @@
+key	path	doc	page	note
+cpu.pl1	Tweaker > Advanced CPU Settings > Turbo Power Limits > Power Limit TDP (Watts) / Power Limit Time	gb-bios700	13	confirm-on-screen
+cpu.pl2	Tweaker > Advanced CPU Settings > Turbo Power Limits > Power Limit TDP (Watts) / Power Limit Time	gb-bios700	13	confirm-on-screen
+cpu.tau	Tweaker > Advanced CPU Settings > Turbo Power Limits > Power Limit TDP (Watts) / Power Limit Time	gb-bios700	13	confirm-on-screen
+cpu.ac_ll	Tweaker > Advanced Voltage Settings	gb-bios700	16	confirm-on-screen
+cpu.dc_ll	Tweaker > Advanced Voltage Settings	gb-bios700	16	confirm-on-screen
+mem.xmp	Tweaker > Extreme Memory Profile (X.M.P.)	gb-bios700	13	confirm-on-screen
+mem.freq	Tweaker > System Memory Multiplier	gb-bios700	13	confirm-on-screen
+mem.vdd	Tweaker > DDR5 Voltage Control	gb-bios700	16	confirm-on-screen
+mem.vddq	Tweaker > DDR5 Voltage Control	gb-bios700	16	confirm-on-screen
+mem.tcl	Tweaker > Advanced Memory Settings > Memory Channels Timings > Channels Standard Timing Control	gb-bios700	15	confirm-on-screen
+mem.trcd	Tweaker > Advanced Memory Settings > Memory Channels Timings > Channels Standard Timing Control	gb-bios700	15	confirm-on-screen
+mem.trp	Tweaker > Advanced Memory Settings > Memory Channels Timings > Channels Standard Timing Control	gb-bios700	15	confirm-on-screen
+mem.tras	Tweaker > Advanced Memory Settings > Memory Channels Timings > Channels Standard Timing Control	gb-bios700	15	confirm-on-screen
+mem.trfc	Tweaker > Advanced Memory Settings > Memory Channels Timings > Channels Standard Timing Control	gb-bios700	15	confirm-on-screen
