@@ -86,7 +86,7 @@ lint_fails() {
   lint_fails no-cite.md 12 2
 }
 
-@test "lint fails bclk.md on rule 3 (forbidden knob)" {
+@test "lint fails bclk.md on rule 3 (BCLK named without a value)" {
   lint_fails bclk.md 11 3
 }
 
@@ -118,7 +118,7 @@ lint_fails() {
   lint_fails llc-spaced.md 11 3
 }
 
-@test "lint fails vcore-underscore.md on rule 3 (CPU_Vcore)" {
+@test "lint fails vcore-underscore.md on rule 3 (CPU_Vcore, no number with unit)" {
   lint_fails vcore-underscore.md 11 3
 }
 
@@ -128,4 +128,36 @@ lint_fails() {
 
 @test "lint fails ll-first-high.md on rule 6 (first cpu.ac_ll above stock 1.1 mOhm)" {
   lint_fails ll-first-high.md 9 6
+}
+
+@test "lint fails adjust-verb.md on rule 7 (change verb adjust)" {
+  lint_fails adjust-verb.md 12 7
+}
+
+@test "lint fails table-row.md on rule 7 (number with unit, no verb)" {
+  lint_fails table-row.md 12 7
+}
+
+@test "lint fails leaf-value.md on rule 7 (menu leaf with a value)" {
+  lint_fails leaf-value.md 7 7
+}
+
+@test "lint fails split-bold.md on rule 7 (verb split by ** before normalizing)" {
+  lint_fails split-bold.md 12 7
+}
+
+@test "lint fails zwsp-set.md on rule 8 (zero-width space inside SET)" {
+  lint_fails zwsp-set.md 7 8
+}
+
+@test "lint fails entity.md on rule 8 (HTML entity in V&#99;ore)" {
+  lint_fails entity.md 11 8
+}
+
+@test "lint fails fence-info.md on rule 7 (a backtick info string is not a fence)" {
+  lint_fails fence-info.md 17 7
+}
+
+@test "lint fails fence-unclosed.md on rule 7 (fence open at end of file)" {
+  lint_fails fence-unclosed.md 15 7
 }
