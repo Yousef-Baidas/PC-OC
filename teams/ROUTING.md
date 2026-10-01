@@ -28,5 +28,6 @@ One row per deliverable type or path pattern → the one team that owns it. The 
 | `reports/**` | bench |
 | `tests/bench/**` | bench |
 | `bios/**` (runbooks, `menu-paths.tsv`, `readings/TEMPLATE.md`) | writer |
+| `tests/bios/**` | writer |
 | `README.md` | writer |
 | `AGENTS.md`, `CONTEXT.md`, `CONVENTIONS.md` | lead or human, never a team |
