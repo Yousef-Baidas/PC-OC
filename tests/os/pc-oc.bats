@@ -182,6 +182,75 @@ refused() { # refused <verb> <target>
   refused apply all
 }
 
+# Contract #56 amendment: the uid comes from the kernel, never from an EUID the caller put in the environment.
+# Safety: these run pc-oc at the caller's uid with a forged EUID, the bypass that reaches real tools when pc-oc
+# is broken; so every component script in the scratch tree must be a logging fake before pc-oc starts.
+assert_only_fakes() {
+  local f n=0
+  for f in "$root"/{cpu,ram,gpu,os,toolchain}/{apply,revert}.sh; do
+    # shellcheck disable=SC2016 # matching the literal text $CALLS in the fake
+    grep -q '>>"\$CALLS"' "$f" || {
+      echo "not a fake: $f" >&3
+      return 97
+    }
+    n=$((n + 1))
+  done
+  [ "$n" -eq 10 ] || {
+    echo "want 10 fakes in $root, found $n" >&3
+    return 97
+  }
+}
+
+refused_env_euid() { # refused_env_euid <EUID value> <verb> <target>
+  fake_all_loggers
+  assert_only_fakes
+  run --separate-stderr env EUID="$1" "$root/pc-oc" "$2" "$3"
+  [ "$status" -eq 1 ] || {
+    echo "non-root env EUID=$1 $2 $3 exited $status, want 1" >&3
+    return 1
+  }
+  [ "$stderr" = "pc-oc: $2 needs root: sudo pc-oc $2 $3" ] || {
+    echo "non-root env EUID=$1 $2 $3 stderr was '$stderr'" >&3
+    return 1
+  }
+  [ -z "$output" ] || {
+    echo "non-root env EUID=$1 $2 $3 wrote stdout '$output'" >&3
+    return 1
+  }
+  [ ! -e "$calls" ] || {
+    echo "non-root env EUID=$1 $2 $3 ran components: $(tr '\n' ';' <"$calls")" >&3
+    return 1
+  }
+}
+
+@test "non-root env EUID=0 pc-oc apply os and revert all still refuse and run no component" {
+  skip "contract #56 pending"
+  refused_env_euid 0 apply os
+  refused_env_euid 0 revert all
+}
+
+@test "as_root env EUID=1000 pc-oc apply os still runs with SYSFS_ROOT and PC_OC_STATE unset" {
+  skip "contract #56 pending"
+  fake_component os apply
+  run --separate-stderr as_root env EUID=1000 "$root/pc-oc" apply os
+  [ "$status" -eq 0 ] || {
+    echo "root with env EUID=1000 exited $status; stderr '$stderr'" >&3
+    return 1
+  }
+  [ "$output" = "apply os SYSFS_ROOT=unset PC_OC_STATE=unset" ]
+  [ ! -e "$MOCK_LOG" ]
+}
+
+@test "non-root env EUID with a command substitution refuses and never evaluates it" {
+  skip "contract #56 pending"
+  local marker="$BATS_TEST_TMPDIR/eval-marker"
+  refused_env_euid "a[\$(touch $marker)]" apply os
+  [ ! -e "$marker" ] || {
+    echo "pc-oc evaluated the env EUID: $marker exists" >&3
+    return 1
+  }
+}
+
 @test "non-root pc-oc probe all still runs every component" {
   local c
   for c in cpu ram gpu os toolchain; do
