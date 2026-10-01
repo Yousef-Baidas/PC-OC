@@ -10,8 +10,8 @@ GPU 00000000:01:00.0
     GPU Power Readings
         Average Power Draw                : 25.10 W
         Instantaneous Power Draw          : 25.42 W
-        Current Power Limit               : 160.00 W
-        Requested Power Limit             : 160.00 W
+        Current Power Limit               : 150.00 W
+        Requested Power Limit             : 150.00 W
         Default Power Limit               : 160.00 W
         Min Power Limit                   : 100.00 W
         Max Power Limit                   : 216.00 W

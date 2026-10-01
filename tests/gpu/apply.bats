@@ -11,7 +11,8 @@ setup() {
   export MOCK_DIR="$BATS_TEST_DIRNAME/fixtures/apply"
   export MOCK_STATE="$BATS_TEST_TMPDIR/mock"
   mkdir -p "$MOCK_STATE"
-  printf '160.00\n' >"$MOCK_STATE/pl"
+  # stock 150.00 differs from the card default 160.00, so revert-to-default fails
+  printf '150.00\n' >"$MOCK_STATE/pl"
   : >"$MOCK_STATE/calls"
   ln -s "$MOCK_DIR/nvidia-smi" "$BATS_TEST_TMPDIR/bin/nvidia-smi"
   export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
@@ -61,16 +62,16 @@ set_pl() {
   [ "$(cat "$MOCK_STATE/calls")" = "-pl 216" ]
 }
 
-@test "apply then revert gpu logs -pl 160 and removes the snapshot" {
+@test "apply then revert gpu logs -pl 150 and removes the snapshot" {
   skip "contract #30 pending"
   set_pl 216
   run --separate-stderr bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 0 ]
-  [ "$(grep -c '^gpu.pl_w=160' "$PC_OC_STATE/gpu/stock")" -eq 1 ]
+  [ "$(grep -c '^gpu.pl_w=150' "$PC_OC_STATE/gpu/stock")" -eq 1 ]
   run --separate-stderr bash "$REPO/gpu/revert.sh"
   [ "$status" -eq 0 ]
-  [ "$(tail -n 1 "$MOCK_STATE/calls")" = "-pl 160" ]
-  [ "$(cat "$MOCK_STATE/pl")" = "160.00" ]
+  [ "$(tail -n 1 "$MOCK_STATE/calls")" = "-pl 150" ]
+  [ "$(cat "$MOCK_STATE/pl")" = "150.00" ]
   [ ! -e "$PC_OC_STATE/gpu/stock" ]
 }
 
@@ -85,7 +86,7 @@ set_pl() {
   [ "$status" -eq 0 ]
   [ "$(cat "$MOCK_STATE/pl")" = "200.00" ]
   cmp "$PC_OC_STATE/gpu/stock" "$BATS_TEST_TMPDIR/first"
-  grep -q '^gpu.pl_w=160' "$PC_OC_STATE/gpu/stock"
+  grep -q '^gpu.pl_w=150' "$PC_OC_STATE/gpu/stock"
 }
 
 @test "revert gpu with no snapshot exits 1 and logs no -pl" {
@@ -94,4 +95,46 @@ set_pl() {
   [ "$status" -eq 1 ]
   [ "$stderr" = "pc-oc: gpu: no stock snapshot" ]
   [ ! -s "$MOCK_STATE/calls" ]
+}
+
+@test "apply gpu refuses pl_w 0250 as non-canonical and logs no -pl" {
+  skip "contract #30 pending"
+  set_pl 0250
+  run --separate-stderr bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: gpu: "* ]]
+  [[ "$stderr" != *"not implemented"* ]]
+  [ ! -s "$MOCK_STATE/calls" ]
+}
+
+@test "apply gpu refuses pl_w 08 as non-canonical and logs no -pl" {
+  skip "contract #30 pending"
+  set_pl 08
+  run --separate-stderr bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: gpu: "* ]]
+  [[ "$stderr" != *"not implemented"* ]]
+  [ ! -s "$MOCK_STATE/calls" ]
+}
+
+@test "apply gpu refuses a 64-bit wrapping pl_w and logs no -pl" {
+  skip "contract #30 pending"
+  set_pl 18446744073709551832
+  run --separate-stderr bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: gpu: "* ]]
+  [[ "$stderr" != *"not implemented"* ]]
+  [ ! -s "$MOCK_STATE/calls" ]
+}
+
+@test "first apply gpu whose -pl fails exits 1 and leaves the state dir empty" {
+  skip "contract #30 pending"
+  ln -sf "$MOCK_DIR/nvidia-smi-fail-pl" "$BATS_TEST_TMPDIR/bin/nvidia-smi"
+  set_pl 216
+  run --separate-stderr bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == "pc-oc: gpu: "* ]]
+  [[ "$stderr" != *"not implemented"* ]]
+  [ "$(cat "$MOCK_STATE/calls")" = "-pl 216" ]
+  [ -z "$(find "$PC_OC_STATE" -type f 2>/dev/null)" ]
 }
