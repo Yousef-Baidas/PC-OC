@@ -124,7 +124,7 @@ leftovers() {
 }
 
 @test "sys_write to a read-only target exits 1 and leaves no backup behind" {
-  [[ "$EUID" -ne 0 ]] || skip "root ignores file modes"
+  [ "$(id -u)" -ne 0 ] || skip "root ignores file modes"
   chmod 444 "$SYSFS_ROOT$epp"
   stock="$(sha "$SYSFS_ROOT$epp")"
   run --separate-stderr lib sys_write "$epp" performance
@@ -188,7 +188,6 @@ leftovers() {
 
 # Contract #60. Only pc_oc_state is called; no os/* or gpu/* script runs with a forged EUID.
 @test "pc_oc_state prints PC_OC_STATE for a non-root caller whose environment forges EUID=0" {
-  skip "contract #60 pending"
   [ "$(id -u)" -ne 0 ] || skip "needs a non-root user"
   scratch="$BATS_TEST_TMPDIR/scratch-state"
   run --separate-stderr env EUID=0 PC_OC_STATE="$scratch" \

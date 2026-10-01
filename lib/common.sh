@@ -16,7 +16,7 @@ die() {
 # is_root: return 0 when the kernel uid (/usr/bin/id -u) is 0, 1 otherwise; never reads a
 # uid variable the caller can forge through the environment. Contract #60.
 is_root() {
-  die lib "is_root not implemented"
+  [[ "$(/usr/bin/id -u)" == 0 ]]
 }
 
 # Probe header state: files read (or sources recorded) and their byte total.

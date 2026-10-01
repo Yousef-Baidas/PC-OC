@@ -2,9 +2,9 @@
 set -euo pipefail
 # Load scx_lavd through scx_loader; on any failure after a step ran, undo the steps taken and die.
 # ADR 0001: root runs with a fixed PATH. Non-root (bats) keeps PATH so mock systemctl/sleep win.
-[[ "$EUID" -ne 0 ]] || PATH=/usr/bin
 # shellcheck source=../lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+! is_root || PATH=/usr/bin
 # shellcheck source=../lib/write.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/write.sh"
 
