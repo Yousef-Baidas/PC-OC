@@ -125,7 +125,6 @@ cpu_ram_errors() {
 }
 
 @test "cpu-ram ids present" {
-  skip "contract #71 pending"
   run cpu_ram_errors "$M"
   [ "$status" -eq 0 ] || {
     echo "$output" >&2
