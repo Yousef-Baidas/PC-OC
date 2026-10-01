@@ -126,7 +126,6 @@ setup_stubs() {
 }
 
 @test "probe_run counts bytes, not characters, under a UTF-8 locale" {
-  skip "contract #46 pending"
   setup_stubs
   LC_ALL=C.UTF-8 STUB_OUT='héllo €\n' run_probe 'probe_run stubcmd; probe_emit v=1'
   [ "$status" -eq 0 ]
@@ -134,7 +133,6 @@ setup_stubs() {
 }
 
 @test "probe_run runs the command exactly once" {
-  skip "contract #46 pending"
   setup_stubs
   export COUNTER="$BATS_TEST_TMPDIR/runs"
   printf '#!/bin/bash\necho run >>"$COUNTER"\nprintf "x\\n"\n' >"$PROBE_CMD_DIR/countcmd"
@@ -145,7 +143,6 @@ setup_stubs() {
 }
 
 @test "probe_run drops NUL bytes: rc 0 and bytes= counts the bytes kept" {
-  skip "contract #46 pending"
   setup_stubs
   STUB_OUT='a\0b\n' run_probe 'probe_run stubcmd; probe_emit v="$REPLY"'
   [ "$status" -eq 0 ]

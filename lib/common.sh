@@ -40,6 +40,8 @@ probe_source() {
 # probe_run <cmd> [args...]: run <cmd> once; set PROBE_CONTENT to its stdout (trailing
 # newlines kept) and REPLY to the trimmed first line; record its absolute path and byte count.
 # Dies "<cmd> not found" when absent and "<cmd> failed" on a non-zero exit. Contract #46.
+# NUL bytes in the output are dropped by bash command substitution, so bytes= counts only
+# the bytes kept; this is not an error.
 probe_run() {
   local LC_ALL=C path out
   path=$(command -v "$1") || die "${PROBE_COMPONENT:-lib}" "$1 not found"
