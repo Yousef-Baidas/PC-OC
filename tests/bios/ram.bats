@@ -13,7 +13,6 @@ setup_file() {
 }
 
 setup() {
-  skip "contract #79 pending"
   load lint
   RUNBOOK="$BIOS_ROOT/ram.md"
   echo "runbook: $RUNBOOK"
