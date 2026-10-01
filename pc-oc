@@ -35,7 +35,7 @@ esac
 
 # the incident on run log #1: a non-root apply/revert reached the real systemctl; refuse before any component runs
 if [[ "$verb" != probe && "$uid" != 0 ]]; then
-  echo "pc-oc: $verb needs root: sudo pc-oc $verb $target" >&2
+  echo "pc-oc: $verb needs root: sudo $here/pc-oc $verb $target" >&2
   exit 1
 fi
 
