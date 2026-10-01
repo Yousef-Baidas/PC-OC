@@ -61,3 +61,13 @@ sets() {
   grep -qiE '^#+ .*cmos' "$RUNBOOK"
   grep -qF CLR_CMOS "$RUNBOOK"
 }
+
+@test "undervolt.md stops before any SET when Intel Default Settings is not on" {
+  skip "contract #102 pending"
+  local rep set
+  rep="$(grep -n -E '^- Report:' "$RUNBOOK" | grep -F 'Intel Default Settings' | grep -i -w 'stop' | head -1 | cut -d: -f1 || true)"
+  set="$(grep -n -m1 -E '^- SET' "$RUNBOOK" | cut -d: -f1)"
+  echo "Report line: ${rep:-none}; first SET line: $set"
+  [ -n "$rep" ]
+  [ "$rep" -lt "$set" ]
+}
