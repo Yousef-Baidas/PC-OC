@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# shellcheck disable=SC2030,SC2031 # bats runs each test in a subshell; exports are per test
 
 bats_require_minimum_version 1.5.0
 
@@ -152,4 +153,89 @@ scan_fails_on() {
 @test "scan with no since argument exits 2" {
   run --separate-stderr bash "$SCRIPT" scan
   [ "$status" -eq 2 ]
+}
+
+# write_probe <vcore>...: a mock PC_OC_PROBE; call n prints the n-th <vcore>
+# (the last one repeats) and an energy counter that grows 20 W of wall clock.
+# Every call is logged to calls-probe. PC_OC_PROBE gets the script's path.
+write_probe() {
+  local seq="$*"
+  cat >"$STUB_DIR/mock-probe" <<STUB
+#!/usr/bin/env bash
+echo "\$0" >>"$BATS_TEST_TMPDIR/calls-probe"
+n="\$(wc -l <"$BATS_TEST_TMPDIR/calls-probe")"
+set -- $seq
+[ "\$n" -le "\$#" ] || n="\$#"
+echo "source=/mock bytes=1 items=2"
+echo "cpu.vcore_mv=\${!n}"
+echo "cpu.pkg_energy_uj=\$((\$(date +%s%N) / 1000 * 20))"
+STUB
+  chmod +x "$STUB_DIR/mock-probe"
+  export PC_OC_PROBE="$STUB_DIR/mock-probe"
+}
+
+# write_cpufreq: SYSFS_ROOT=<tmp>/root with two cpus at 3000 and 5000 MHz
+write_cpufreq() {
+  local c
+  for c in 0:3000000 1:5000000; do
+    mkdir -p "$BATS_TEST_TMPDIR/root/sys/devices/system/cpu/cpu${c%%:*}/cpufreq"
+    echo "${c##*:}" >"$BATS_TEST_TMPDIR/root/sys/devices/system/cpu/cpu${c%%:*}/cpufreq/scaling_cur_freq"
+  done
+  export SYSFS_ROOT="$BATS_TEST_TMPDIR/root"
+}
+
+# run_sampled <mode> <minutes>: run with y-cruncher alive for 5 s, sampled every second
+run_sampled() {
+  export YC_SLEEP=5 STABILITY_SAMPLE_S=1
+  write_cpufreq
+  run --separate-stderr bash "$SCRIPT" "$@"
+}
+
+@test "cpu telemetry gives peak vcore, average watts and average mhz from the samples" {
+  skip "contract #75 pending"
+  write_probe 1250 1310 1280
+  run_sampled cpu 1
+  [ "$status" -eq 0 ]
+  [[ "$(value input.telemetry.source)" == "$PC_OC_PROBE samples="[1-9]* ]]
+  [ "$(value result.stability.vcore_max_mv)" = 1310 ]
+  # nominal 20.0 W; the mock reads the clock a little off the sampler's
+  awk -v w="$(value result.stability.pkg_w_avg)" 'BEGIN { exit !(w ~ /^[0-9]+\.[0-9]$/ && w >= 18 && w <= 22) }'
+  [ "$(value result.stability.mhz_avg)" = 4000 ]
+  [ "${lines[-1]}" = result.stability=PASS ]
+}
+
+@test "cpu with a probe that exits 1 gives n/a for vcore and watts and still PASS" {
+  skip "contract #75 pending"
+  printf '#!/usr/bin/env bash\nexit 1\n' >"$STUB_DIR/mock-probe"
+  chmod +x "$STUB_DIR/mock-probe"
+  export PC_OC_PROBE="$STUB_DIR/mock-probe"
+  run_sampled cpu 1
+  [ "$status" -eq 0 ]
+  [ "$(value result.stability.vcore_max_mv)" = n/a ]
+  [ "$(value result.stability.pkg_w_avg)" = n/a ]
+  [ "$(value result.stability.mhz_avg)" = 4000 ]
+  [ "${lines[-1]}" = result.stability=PASS ]
+}
+
+@test "cpu with a probe printing cpu.vcore=needs-root gives vcore_max_mv=n/a and PASS" {
+  skip "contract #75 pending"
+  printf '#!/usr/bin/env bash\necho source=/mock bytes=1 items=1\necho cpu.vcore=needs-root\n' >"$STUB_DIR/mock-probe"
+  chmod +x "$STUB_DIR/mock-probe"
+  export PC_OC_PROBE="$STUB_DIR/mock-probe"
+  run_sampled cpu 1
+  [ "$status" -eq 0 ]
+  [ "$(value result.stability.vcore_max_mv)" = n/a ]
+  [ "${lines[-1]}" = result.stability=PASS ]
+}
+
+@test "cpu leaves no sampler running after the run" {
+  skip "contract #75 pending"
+  write_probe 1250
+  run_sampled cpu 1
+  [ "$status" -eq 0 ]
+  [ -e "$BATS_TEST_TMPDIR/calls-probe" ]
+  n="$(wc -l <"$BATS_TEST_TMPDIR/calls-probe")"
+  [ "$n" -ge 2 ]
+  sleep 2.2
+  [ "$(wc -l <"$BATS_TEST_TMPDIR/calls-probe")" -eq "$n" ]
 }
