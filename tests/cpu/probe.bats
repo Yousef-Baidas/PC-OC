@@ -88,7 +88,6 @@ run_root_probe() {
 }
 
 @test "probe cpu as root reports vcore_mv from PERF_STATUS bits 47:32" {
-  skip "contract #73 pending"
   root_fixture
   run_root_probe
   [ "$status" -eq 0 ]
@@ -97,7 +96,6 @@ run_root_probe() {
 }
 
 @test "probe cpu as root reports pkg_energy_uj from energy_uj" {
-  skip "contract #73 pending"
   root_fixture
   run_root_probe
   [ "$status" -eq 0 ]
@@ -105,7 +103,6 @@ run_root_probe() {
 }
 
 @test "probe cpu as root line 1 counts the new keys and names msr and energy_uj" {
-  skip "contract #73 pending"
   root_fixture
   run_root_probe
   [ "$status" -eq 0 ]
@@ -116,7 +113,6 @@ run_root_probe() {
 }
 
 @test "probe cpu as root without an msr device prints vcore=no-msr and exits 0" {
-  skip "contract #73 pending"
   root_fixture
   rm "$msr"
   run_root_probe
@@ -126,7 +122,6 @@ run_root_probe() {
 }
 
 @test "probe cpu as root exits 1 when the msr file is 4 bytes" {
-  skip "contract #73 pending"
   root_fixture
   head -c 4 /dev/zero >"$msr"
   run_root_probe
@@ -136,7 +131,6 @@ run_root_probe() {
 }
 
 @test "probe cpu without root prints vcore=needs-root and no energy key" {
-  skip "contract #73 pending"
   [ "$(id -u)" -ne 0 ] || skip "runs as root"
   echo 123456789 >"$rapl/energy_uj"
   run --separate-stderr bash "$PROBE"
