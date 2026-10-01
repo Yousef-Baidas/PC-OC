@@ -13,7 +13,8 @@ die() {
   exit 1
 }
 
-# probe_read <path>: set REPLY to the trimmed first line; record path and size.
+# probe_read <path>: set REPLY to the trimmed first line and PROBE_CONTENT to
+# the whole content, from one read; record path and size.
 probe_read() {
   die lib "not implemented"
 }
