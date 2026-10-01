@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Mock nvidia-smi whose -pl lands the limit 1 W above the request.
+MOCK_PL_OFFSET=1 exec "$MOCK_DIR/nvidia-smi" "$@"
