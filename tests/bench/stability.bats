@@ -2,6 +2,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load helper
+
 setup() {
   SCRIPT="$BATS_TEST_DIRNAME/../../bench/stability.sh"
   FIX="$BATS_TEST_DIRNAME/fixtures/stability"
@@ -39,27 +41,6 @@ if [ "\$*" = --version ]; then echo 'systemd 258 (258.1-1-arch)'; exit 0; fi
 cat "\$JOURNAL"
 STUB
   chmod +x "$STUB_DIR"/*
-}
-
-# value <key>: print the value of stdout line <key>=
-value() {
-  local l
-  for l in "${lines[@]}"; do
-    [[ "$l" == "$1="* ]] && printf '%s\n' "${l#"$1="}" && return 0
-  done
-  return 1
-}
-
-# contract_order: stdout is input.* lines, then result.* lines, nothing else
-contract_order() {
-  local seen=0 l
-  for l in "${lines[@]}"; do
-    case "$l" in
-      input.*=*) [ "$seen" -eq 0 ] || return 1 ;;
-      result.*=*) seen=1 ;;
-      *) return 1 ;;
-    esac
-  done
 }
 
 # since_arg: the --since value journalctl was called with

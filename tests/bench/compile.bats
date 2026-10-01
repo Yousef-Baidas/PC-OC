@@ -2,6 +2,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load helper
+
 setup() {
   FIX="$BATS_TEST_DIRNAME/fixtures/compile"
   TARBALL="$FIX/linux-6.12.1.tar.xz"
@@ -9,7 +11,7 @@ setup() {
   # compile.sh reads bench/kernel.pin next to itself: run a copy in a fake repo
   REPO="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$REPO/bench" "$REPO/lib"
-  cp "$BATS_TEST_DIRNAME/../../bench/compile.sh" "$REPO/bench/"
+  cp "$BATS_TEST_DIRNAME/../../bench/compile.sh" "$BATS_TEST_DIRNAME/../../bench/lib.sh" "$REPO/bench/"
   cp "$BATS_TEST_DIRNAME/../../lib/common.sh" "$REPO/lib/"
   cp "$FIX/kernel.pin" "$REPO/bench/"
   SCRIPT="$REPO/bench/compile.sh"
@@ -68,30 +70,9 @@ STUB
   chmod +x "$STUB_DIR"/*
 }
 
-# value <key>: print the value of stdout line <key>=
-value() {
-  local l
-  for l in "${lines[@]}"; do
-    [[ "$l" == "$1="* ]] && printf '%s\n' "${l#"$1="}" && return 0
-  done
-  return 1
-}
-
 # in_range <x> <lo> <hi>: lo <= x < hi
 in_range() {
   awk -v x="$1" -v lo="$2" -v hi="$3" 'BEGIN { exit !(x >= lo && x < hi) }'
-}
-
-# contract_order: stdout is input.* lines, then result.* lines, nothing else
-contract_order() {
-  local seen=0 l
-  for l in "${lines[@]}"; do
-    case "$l" in
-      input.*=*) [ "$seen" -eq 0 ] || return 1 ;;
-      result.*=*) seen=1 ;;
-      *) return 1 ;;
-    esac
-  done
 }
 
 @test "compile times 3 builds by default and prints each run and the median" {
@@ -190,7 +171,7 @@ STUB
   export PATH="$STUB_DIR:$BATS_TEST_TMPDIR/nobc"
   run --separate-stderr bash "$SCRIPT" 1
   [ "$status" -eq 1 ]
-  [[ "$stderr" == *"pc-oc: bench: bc"* ]]
+  [ "$stderr" = "pc-oc: bench: bc not found; install: pacman -S bc" ]
   [ ! -e "$BATS_TEST_TMPDIR/calls-curl" ]
 }
 

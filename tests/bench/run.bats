@@ -8,7 +8,7 @@ setup() {
   # in a fake repo whose bench scripts and pc-oc are stubs
   R="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$R/bench" "$R/lib"
-  cp "$BATS_TEST_DIRNAME/../../bench/run.sh" "$BATS_TEST_DIRNAME/../../bench/report.sh" "$R/bench/"
+  cp "$BATS_TEST_DIRNAME/../../bench/run.sh" "$BATS_TEST_DIRNAME/../../bench/report.sh" "$BATS_TEST_DIRNAME/../../bench/lib.sh" "$R/bench/"
   cp "$BATS_TEST_DIRNAME/../../lib/common.sh" "$R/lib/"
   STUB_DIR="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$STUB_DIR"

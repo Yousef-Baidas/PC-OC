@@ -5,6 +5,8 @@ set -euo pipefail
 # its sha256 is from the kernel.org checksum file named in `source=`.
 # shellcheck source=../lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+# shellcheck source=lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 here="$(dirname "${BASH_SOURCE[0]}")"
 runs="${1:-3}"
@@ -22,11 +24,6 @@ pin_get() {
   v="$(sed -n "s/^$1=//p" <<<"$pin")"
   [ -n "$v" ] || die bench "kernel.pin: missing $1"
   printf '%s\n' "$v"
-}
-
-# need <tool> <install hint>: die unless <tool> is on PATH
-need() {
-  command -v "$1" >/dev/null || die bench "$1 not found ($2)"
 }
 
 # the kernel build's own tools; checked before any download
@@ -66,7 +63,7 @@ srcdir="$(find "$work" -mindepth 1 -maxdepth 1 -type d | head -1)"
 cd "$srcdir" || die bench "cannot enter $srcdir"
 
 jobs="$(nproc)"
-printf 'input.source=%s bytes=%s items=%s\n' "$tarball" "$bytes" "$items"
+input_line "$tarball" "$bytes" "$items"
 printf 'input.kernel_version=%s\n' "$version"
 printf 'input.sha256=%s\n' "$sha256"
 printf 'input.gcc=%s\n' "$(gcc --version | head -1)"
