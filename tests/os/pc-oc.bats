@@ -59,7 +59,6 @@ EOF
 # Contract #48: os at stock must not fail revert all. cpu is the one applied component; the real
 # os/revert.sh runs against an empty state dir, the rest are fakes that exit 0.
 @test "revert all with one component applied and os at stock exits 0 and runs every revert" {
-  skip "contract #48 pending"
   for c in cpu ram gpu toolchain; do
     fake_component "$c" revert
   done
