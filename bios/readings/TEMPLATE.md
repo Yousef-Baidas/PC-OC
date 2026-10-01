@@ -1,6 +1,6 @@
 # Reading: <runbook> step <n>
 
-Fill only from what the human reports at the screen. Never invent a value.
+The human applies every BIOS setting at the firmware screen; agents never do. Fill only from what the human reports. Never invent a value.
 
 - Date: <YYYY-MM-DD>
 - BIOS version (System Info.): <e.g. F17a>
@@ -16,6 +16,11 @@ Fill only from what the human reports at the screen. Never invent a value.
 
 - Command: <gate command run in Linux>
 - Result keys: <key=value lines it printed>
+
+## Probe
+
+- Command: <e.g. pc-oc probe cpu, run after the reboot>
+- Printed key=value lines: <paste them>
 
 ## Notes
 
