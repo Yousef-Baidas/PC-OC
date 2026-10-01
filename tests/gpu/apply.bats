@@ -84,7 +84,6 @@ set_pl() {
 }
 
 @test "revert gpu with no snapshot says nothing to revert, exits 0 and logs no -pl" {
-  skip "contract #51 pending"
   run --separate-stderr bash "$REPO/gpu/revert.sh"
   [ "$status" -eq 0 ]
   [ "$stderr" = "pc-oc: gpu: nothing to revert" ]
@@ -158,7 +157,6 @@ set_snapshot() {
 }
 
 @test "revert gpu with snapshot pl_w 300.00 above the mocked max exits 1, logs no -pl, keeps the snapshot" {
-  skip "contract #51 pending"
   set_snapshot 300.00
   run --separate-stderr bash "$REPO/gpu/revert.sh"
   [ "$status" -eq 1 ]
@@ -169,7 +167,6 @@ set_snapshot() {
 }
 
 @test "revert gpu with snapshot pl_w 50.00 below the mocked min exits 1, logs no -pl, keeps the snapshot" {
-  skip "contract #51 pending"
   set_snapshot 50.00
   run --separate-stderr bash "$REPO/gpu/revert.sh"
   [ "$status" -eq 1 ]
@@ -179,7 +176,6 @@ set_snapshot() {
 }
 
 @test "apply then revert gpu leaves no gpu dir under the state dir" {
-  skip "contract #51 pending"
   set_pl 216
   run --separate-stderr bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 0 ]
@@ -199,7 +195,6 @@ set_snapshot() {
 }
 
 @test "the -pl call, power.limit read-back and 0.5 W tolerance appear only in gpu/pl.sh, not in apply.sh or revert.sh" {
-  skip "contract #51 pending"
   gpu="$BATS_TEST_DIRNAME/../../gpu"
   grep -q -e 'nvidia-smi -pl "' "$gpu/pl.sh"
   grep -q -e 'power\.limit' "$gpu/pl.sh"

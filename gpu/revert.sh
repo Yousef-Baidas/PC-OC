@@ -6,19 +6,24 @@ here="$(dirname "${BASH_SOURCE[0]}")"
 source "$here/../lib/common.sh"
 # shellcheck source=../lib/write.sh
 source "$here/../lib/write.sh"
+# shellcheck source=pl.sh
+source "$here/pl.sh"
 
 [[ "$EUID" -ne 0 ]] || export PATH=/usr/bin
 
 stock="$(pc_oc_state)/gpu/stock"
-[[ -f "$stock" ]] || die gpu "no stock snapshot"
+if [[ ! -f "$stock" ]]; then
+  printf 'pc-oc: gpu: nothing to revert\n' >&2
+  exit 0
+fi
 pl_w=""
 while IFS= read -r line || [[ -n "$line" ]]; do
   if [[ "$line" =~ ^gpu\.pl_w=([1-9][0-9]{0,3})(\.[0-9]+)?$ ]]; then pl_w="${BASH_REMATCH[1]}"; fi
 done <"$stock"
 [[ -n "$pl_w" ]] || die gpu "no gpu.pl_w in $stock"
 
-nvidia-smi -pl "$pl_w" >/dev/null || die gpu "nvidia-smi -pl $pl_w failed"
-got="$(nvidia-smi --query-gpu=power.limit --format=csv,noheader,nounits)" || die gpu "read-back failed"
-awk -v g="$got" -v w="$pl_w" 'BEGIN { d = g - w; exit !(g ~ /^[ ]*[0-9.]+[ ]*$/ && d <= 0.5 && d >= -0.5) }' ||
-  die gpu "readback power.limit: want $pl_w got $got"
+pl_check "$pl_w"
+pl_write "$pl_w" || exit 1
+pl_verify "$pl_w"
 rm -f -- "$stock" || die gpu "cannot remove $stock"
+rmdir -- "$(dirname "$stock")" 2>/dev/null || :
