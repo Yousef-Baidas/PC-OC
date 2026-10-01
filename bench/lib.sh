@@ -4,10 +4,12 @@ set -euo pipefail
 
 # need <tool> <install hint>: die unless <tool> is on PATH
 need() {
-  die bench "not implemented"
+  command -v "$1" >/dev/null || die bench "$1 not found; install: $2"
 }
 
 # input_line <source> <bytes> <items>: print the input.source= line
 input_line() {
-  die bench "not implemented"
+  [[ "$2" =~ ^[0-9]+$ ]] || die bench "input_line: bytes is not a non-negative integer: $2"
+  [[ "$3" =~ ^[0-9]+$ ]] || die bench "input_line: items is not a non-negative integer: $3"
+  printf 'input.source=%s bytes=%s items=%s\n' "$1" "$2" "$3"
 }

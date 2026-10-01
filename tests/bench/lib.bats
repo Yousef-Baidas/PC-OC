@@ -12,7 +12,6 @@ setup() {
 }
 
 @test "need with a missing tool prints the unified message and exits 1" {
-  skip "contract #39 pending"
   run --separate-stderr bash -c "$LOAD; need no-such-tool-xyz 'pacman -S xyz'"
   [ "$status" -eq 1 ]
   [ -z "$output" ]
@@ -20,7 +19,6 @@ setup() {
 }
 
 @test "need with a present tool prints nothing and exits 0" {
-  skip "contract #39 pending"
   run --separate-stderr bash -c "$LOAD; need bash 'pacman -S bash'"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
@@ -28,7 +26,6 @@ setup() {
 }
 
 @test "input_line prints input.source=<source> bytes=<bytes> items=<items>" {
-  skip "contract #39 pending"
   run --separate-stderr bash -c "$LOAD; input_line /tmp/a.csv 123 4"
   [ "$status" -eq 0 ]
   [ "$output" = "input.source=/tmp/a.csv bytes=123 items=4" ]
@@ -36,14 +33,12 @@ setup() {
 }
 
 @test "input_line accepts zero bytes and zero items" {
-  skip "contract #39 pending"
   run bash -c "$LOAD; input_line src 0 0"
   [ "$status" -eq 0 ]
   [ "$output" = "input.source=src bytes=0 items=0" ]
 }
 
 @test "input_line rejects bytes=-1 and prints nothing on stdout" {
-  skip "contract #39 pending"
   run --separate-stderr bash -c "$LOAD; input_line src -1 3"
   [ "$status" -eq 1 ]
   [ -z "$output" ]
@@ -51,7 +46,6 @@ setup() {
 }
 
 @test "input_line rejects items=x and prints nothing on stdout" {
-  skip "contract #39 pending"
   run --separate-stderr bash -c "$LOAD; input_line src 3 x"
   [ "$status" -eq 1 ]
   [ -z "$output" ]
@@ -59,7 +53,6 @@ setup() {
 }
 
 @test "input_line rejects empty and non-integer bytes" {
-  skip "contract #39 pending"
   run --separate-stderr bash -c "$LOAD; input_line src '' 3"
   [ "$status" -eq 1 ]
   [[ "$stderr" == *bytes* ]]
@@ -69,7 +62,6 @@ setup() {
 }
 
 @test "only bench/lib.sh defines need() or prints input.source=; only helper.bash defines value() and contract_order()" {
-  skip "contract #39 pending"
   local scripts=("$BENCH_DIR"/*.sh) bats=("$TESTS_DIR"/*.bats) f bad=""
   echo "# $BENCH_DIR sha256=$(cat "${scripts[@]}" | sha256sum | cut -c1-12) scripts=${#scripts[@]} bats=${#bats[@]}" >&3
   for f in "${scripts[@]}"; do
