@@ -43,7 +43,14 @@ probe_read() {
 # in the probe header. Dies "<component>: cannot read <path>" when <path> is not
 # readable or fewer than <count> bytes come back. Contract #82.
 probe_read_bytes() {
-  die "${PROBE_COMPONENT:-lib}" "not implemented"
+  local LC_ALL=C hex
+  [[ -r "$1" ]] || die "${PROBE_COMPONENT:-lib}" "cannot read $1"
+  hex=$(dd if="$1" bs="$3" skip="$2" count=1 iflag=skip_bytes,fullblock status=none 2>/dev/null |
+    od -An -v -tx1 | tr -d ' \n') || true
+  ((${#hex} == 2 * $3)) || die "${PROBE_COMPONENT:-lib}" "cannot read $1"
+  _PROBE_SOURCES+=("$1")
+  _PROBE_BYTES=$((_PROBE_BYTES + $3))
+  REPLY=$hex
 }
 
 # probe_source <label> <bytes>: record a source that is not a file.
