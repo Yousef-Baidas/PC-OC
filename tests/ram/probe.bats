@@ -88,7 +88,7 @@ DMI
   run --separate-stderr bash "$PROBE"
   [ "$status" -eq 0 ]
   [[ "${lines[0]}" =~ ^source=/[^\ ]+\ bytes=[0-9]+\ items=([0-9]+)$ ]]
-  [ "${BASH_REMATCH[1]}" -eq 9 ]
+  [ "${BASH_REMATCH[1]}" -eq 10 ]
   [ "${BASH_REMATCH[1]}" -eq "$((${#lines[@]} - 1))" ]
   [[ "${lines[0]}" == *"$BATS_TEST_TMPDIR/bin/dmidecode"* ]]
 }
@@ -203,7 +203,6 @@ spd_eeprom() {
 }
 
 @test "probe ram as root reports dram_mfr hynix and addr for two SPD eeproms" {
-  skip "contract #74 pending"
   stub_root 0
   spd_eeprom 0-0050 80 ad
   spd_eeprom 0-0051 80 ad
@@ -218,7 +217,6 @@ spd_eeprom() {
 }
 
 @test "probe ram as root maps micron and samsung, sorted by device name" {
-  skip "contract #74 pending"
   stub_root 0
   spd_eeprom 0-0051 80 ce
   spd_eeprom 0-0050 80 2c
@@ -229,7 +227,6 @@ spd_eeprom() {
 }
 
 @test "probe ram as root prints unknown:0x plus the 4 hex digits for an unlisted ID" {
-  skip "contract #74 pending"
   stub_root 0
   spd_eeprom 0-0050 80 01
   run --separate-stderr bash "$PROBE"
@@ -238,7 +235,6 @@ spd_eeprom() {
 }
 
 @test "probe ram as root without the spd5118 driver dir prints spd=no-spd5118" {
-  skip "contract #74 pending"
   stub_root 0
   run --separate-stderr bash "$PROBE"
   [ "$status" -eq 0 ]
@@ -247,7 +243,6 @@ spd_eeprom() {
 }
 
 @test "probe ram as root exits 1 when an eeprom is shorter than the ID offset" {
-  skip "contract #74 pending"
   stub_root 0
   spd_eeprom 0-0050 80 ad 100
   run --separate-stderr bash "$PROBE"
@@ -257,7 +252,6 @@ spd_eeprom() {
 }
 
 @test "probe ram without root leaves the SPD keys out" {
-  skip "contract #74 pending"
   stub_root 1000
   spd_eeprom 0-0050 80 ad
   run --separate-stderr bash "$PROBE"
