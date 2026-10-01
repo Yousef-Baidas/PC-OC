@@ -179,7 +179,6 @@ gpu_offsets_errors() {
 }
 
 @test "manifest has the gpu-offsets rows" {
-  skip "contract #125 pending"
   run gpu_offsets_errors "$M"
   [ "$status" -eq 0 ] || {
     echo "$output" >&2
