@@ -12,3 +12,18 @@ die() {
   printf 'pc-oc: %s: %s\n' "$1" "$2" >&2
   exit 1
 }
+
+# probe_read <path>: set REPLY to the trimmed first line; record path and size.
+probe_read() {
+  die lib "not implemented"
+}
+
+# probe_source <label> <bytes>: record a source that is not a file.
+probe_source() {
+  die lib "not implemented"
+}
+
+# probe_emit <key=value>...: print the line-1 header, then <component>.<key>=<value>.
+probe_emit() {
+  die lib "not implemented"
+}
