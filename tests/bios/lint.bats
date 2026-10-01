@@ -211,3 +211,20 @@ lint_fails() {
 @test "lint fails try-higher.md on rule 7 (change verb try, direction higher on a Save line)" {
   lint_fails try-higher.md 12 7
 }
+
+@test "lint fails src-unknown.md on rule 10 (src id nope is not in the manifest)" {
+  skip "contract #97 pending"
+  BIOS_MANIFEST="$MANIFEST" run bios_lint "$FIX/menu-paths.tsv" "$FIX/src-unknown.md"
+  echo "$output"
+  [ "$status" -eq 1 ]
+  [ "${#lines[@]}" -eq 1 ]
+  [ "${lines[0]}" = "$FIX/src-unknown.md:7: rule 10: src nope not in manifest" ]
+}
+
+@test "lint reports a missing manifest on line 0, never a silent pass" {
+  skip "contract #97 pending"
+  BIOS_MANIFEST="$BATS_TEST_TMPDIR/no-such-manifest.tsv" run bios_lint "$FIX/menu-paths.tsv" "$FIX/ok.md"
+  echo "$output"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *":0: rule 10: "* ]]
+}
