@@ -7,8 +7,8 @@ bats_require_minimum_version 1.5.0
 # runs readme.bats through README_ROOT and README_FILE: the guide is the
 # fixture, the tree is a fake one built from fixtures/readme/tree.txt (every
 # path an empty file, a directory when it ends in `/`) plus this repo's pc-oc,
-# so the cases hold whatever the real tree has merged. The pending skips of
-# readme.bats are dropped from the copy that runs here.
+# so the cases hold whatever the real tree has merged. readme.bats runs from a
+# copy in the test's temp directory.
 
 setup_file() {
   local d="$BATS_TEST_DIRNAME/fixtures/readme"
@@ -29,7 +29,7 @@ setup() {
     fi
   done <"$FIX/tree.txt"
   cp "$BATS_TEST_DIRNAME/../../pc-oc" "$TREE/pc-oc"
-  sed '/^  skip "contract #146 pending"$/d' "$BATS_TEST_DIRNAME/readme.bats" >"$BATS_TEST_TMPDIR/readme.bats"
+  cp "$BATS_TEST_DIRNAME/readme.bats" "$BATS_TEST_TMPDIR/readme.bats"
   CASES="$(grep -c '^@test ' "$BATS_TEST_TMPDIR/readme.bats")"
 }
 
