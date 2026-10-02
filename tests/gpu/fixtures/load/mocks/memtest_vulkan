@@ -9,7 +9,8 @@
 # until it is signalled: SIGINT exits at once with the status byte, SIGTERM with the byte
 # | 0x10 (QUIT_JOB_REQUESTED). Fixture lines are "<ms since start>|<printf %b text>"; the
 # text "@exit <n>" makes it exit on its own with <n>. Unsignalled for 20 s after the last
-# line it exits 99.
+# line it exits 99. MOCK_MEMTEST_RUN_MS (contract #140): it exits on its own with the
+# status byte that many ms after its start, having printed the lines due before then.
 if [[ -z "${MOCK_MEMTEST_INNER:-}" ]]; then
   # The real tool installs its handlers with sigaction whatever it inherited. bash cannot
   # trap a signal that was ignored at entry (a shell's background job ignores SIGINT), so
@@ -40,12 +41,20 @@ pause() {
   nap=""
 }
 start_us="${EPOCHREALTIME/./}"
+run_ms=""
+[[ ! "${MOCK_MEMTEST_RUN_MS:-}" =~ ^[0-9]+$ ]] || run_ms="$MOCK_MEMTEST_RUN_MS"
 while IFS='|' read -r at text; do
   [[ "$at" =~ ^[0-9]+$ ]] || continue
+  [[ -z "$run_ms" ]] || ((at < run_ms)) || break
   wait_ms=$((at - (${EPOCHREALTIME/./} - start_us) / 1000))
   ((wait_ms <= 0)) || pause "$wait_ms"
   [[ "$text" != "@exit "* ]] || exit "${text#@exit }"
   printf '%b' "$text"
 done <"$MOCK_MEMTEST_OUT"
+if [[ -n "$run_ms" ]]; then
+  wait_ms=$((run_ms - (${EPOCHREALTIME/./} - start_us) / 1000))
+  ((wait_ms <= 0)) || pause "$wait_ms"
+  exit "$code"
+fi
 for _ in {1..100}; do pause 200; done
 exit 99

@@ -8,6 +8,7 @@ bats_require_minimum_version 1.5.0
 # (fixtures/load/guard.sh), so a load.sh that pins PATH or calls a tool by absolute path
 # still cannot reach the real ones. The load mocks replay timed output, so a run takes its
 # warm-up + load seconds: 1 + 1, or 1 + 2 where two samples after the warm-up are needed.
+# The cases named "#140 case N", at the end, are the contract for #140.
 
 load fixtures/load/helper
 
@@ -47,6 +48,20 @@ verdict() {
     printf 'want result=%s\nstdout:\n%s\nstderr:\n%s\n' "$2" "$output" "$stderr" >&2
     return 1
   }
+}
+
+# smi_rows <warm-up reasons> <later reasons>: an nvidia-smi scenario with these reason
+# bitmasks (bits in fixtures/load/mocks/nvidia-smi) during and after the warm-up
+smi_rows() {
+  export MOCK_SMI_ROWS="$BATS_TEST_TMPDIR/smi.rows"
+  printf 'warm P0 2520 8001 131.40 52 %s\npost P0 2520 8001 131.40 58 %s\n' "$1" "$2" \
+    >"$MOCK_SMI_ROWS"
+}
+
+# keys: the keys of the stdout block, sorted, on one line
+keys() {
+  local l
+  for l in "${lines[@]}"; do printf '%s\n' "${l%%=*}"; done | sort | tr '\n' ' '
 }
 
 @test "load core: the pass fixture gives result=pass, exit 0, every line in the grammar, all keys (#134 case 6)" {
@@ -374,5 +389,173 @@ verdict() {
     status_is 2
     [ -z "$output" ]
     no_tool_ran
+  done
+}
+
+# Contract for #140 (N is the number in the ticket's Check list). A load that ended before
+# warm-up + load seconds is invalid, reason=short; all seven limit reasons count, in
+# whichever column the active one is. The load mocks end early through MOCK_BURN_RUN_MS and
+# MOCK_MEMTEST_RUN_MS. Cases 3, 5 and 7 and the Xid case of 1 pin what gpu/load.sh of #134
+# already does; the others need #140.
+# Check 8 (existing cases stay green) holds one verdict that comes before reason=short: the
+# load of "ERROR_DEVICE_LOST in the output gives fail" ends by itself 2 s into mem 1 2, as a
+# tool that lost its device does, and that case stays fail.
+
+@test "#140 case 1: core: a complete OK output from a load that ended 1.5 s into core 1 3 gives invalid, reason=short, exit 3" {
+  skip "contract #140 pending"
+  MOCK_BURN_RUN_MS=1500 load_sh core 1 3
+  verdict 3 invalid
+  block_ok 8
+  [ "$(value reason)" = short ]
+  # load.sh asked for the 4 s, and what the tool printed was complete and clean
+  [ "$(tail -n 1 "$MOCK_STATE/gpu_burn.args")" = 4 ]
+  grep -q -x $'\tGPU 0: OK' "$(value log)/tool.out"
+}
+
+@test "#140 case 1: core: a load that ended half a second before the end of core 1 1, after the last sample, is short as well" {
+  skip "contract #140 pending"
+  MOCK_BURN_RUN_MS=1500 load_sh core 1 1
+  verdict 3 invalid
+  [ "$(value reason)" = short ]
+}
+
+@test "#140 case 1: core: a FAULTY summary and exit status 1 from a load that ended early give invalid, reason=short, not fail" {
+  skip "contract #140 pending"
+  MOCK_BURN_EXIT=1 MOCK_BURN_RUN_MS=1500 MOCK_BURN_OUT="$FIX/core/faulty.out" load_sh core 1 3
+  verdict 3 invalid
+  [ "$(value reason)" = short ]
+  grep -q 'GPU 0: FAULTY' "$(value log)/tool.out"
+}
+
+@test "#140 case 1: a new NVRM: Xid line keeps its place: a load that ended early gives fail, reason=xid" {
+  skip "contract #140 pending"
+  MOCK_BURN_RUN_MS=1500 MOCK_JOURNAL_AFTER="$FIX/journal/xid.txt" load_sh core 1 3
+  verdict 1 fail
+  [ "$(value reason)" = xid ]
+}
+
+@test "#140 case 2: mem: a read line after the warm-up and status 65 from a load that ended 1.7 s into mem 1 3 gives invalid, reason=short, exit 3" {
+  skip "contract #140 pending"
+  MOCK_MEMTEST_RUN_MS=1700 load_sh mem 1 3 1
+  verdict 3 invalid
+  block_ok 9
+  [ "$(value reason)" = short ]
+  # it ended by itself, with the read line of 1.5 s printed
+  [ ! -e "$MOCK_STATE/memtest_vulkan.signal" ]
+  grep -q 'checked: *45.0GB *50.0GB/sec' "$(value log)/tool.out"
+}
+
+@test "#140 case 2: mem: status 67 from a load that ended early gives invalid, reason=short, not fail" {
+  skip "contract #140 pending"
+  MOCK_MEMTEST_EXIT=67 MOCK_MEMTEST_RUN_MS=1700 load_sh mem 1 3 1
+  verdict 3 invalid
+  [ "$(value reason)" = short ]
+  [ ! -e "$MOCK_STATE/memtest_vulkan.signal" ]
+}
+
+@test "#140 case 3: the core and mem pass fixtures, run for their full time, still pass, with the key set of #134" {
+  skip "contract #140 pending"
+  load_sh core 1 1
+  verdict 0 pass
+  [ "$(value reason)" = ok ]
+  [ "$(keys)" = "core_mhz_max limited log mem_mhz_max pstate_min reason result xid " ]
+  rm -f "$MOCK_STATE"/*
+  load_sh mem 1 1 1
+  verdict 0 pass
+  [ "$(value reason)" = ok ]
+  [ "$(keys)" = "core_mhz_max limited log mem_mhz_max pstate_min read_gbs reason result xid " ]
+}
+
+@test "#140 case 4: each of the seven limit reasons alone, Active in a sample after the warm-up, gives invalid, reason=limited" {
+  skip "contract #140 pending"
+  missed=""
+  for column in board_limit:0x200 reliability:0x400 sw_power_cap:0x4 hw_slowdown:0x8 \
+    sw_thermal_slowdown:0x20 hw_thermal_slowdown:0x40 hw_power_brake_slowdown:0x80; do
+    rm -f "$MOCK_STATE"/*
+    smi_rows 0x0 "${column#*:}"
+    load_sh core 1 1
+    if ! (verdict 3 invalid && [ "$(value reason)" = limited ] && [ "$(value limited)" = 1 ]); then
+      printf 'only %s Active: exit %s\n%s\n' "${column%:*}" "$status" "$output"
+      missed+=" ${column%:*}"
+    fi
+  done
+  [ -z "$missed" ] || {
+    echo "not counted as a limit:$missed"
+    return 1
+  }
+}
+
+@test "#140 case 5: all seven limit reasons Active during the warm-up only: pass, limited=0" {
+  skip "contract #140 pending"
+  # 0x6ec: the seven bits of case 4
+  smi_rows 0x6ec 0x0
+  load_sh core 1 1
+  verdict 0 pass
+  [ "$(value limited)" = 0 ]
+}
+
+@test "#140 case 6: every sample's --query-gpu holds the seven limit reason fields and none of gpu_idle, applications_clocks_setting, sync_boost, which do not limit" {
+  skip "contract #140 pending"
+  # 0x13: gpu_idle, applications_clocks_setting and sync_boost, Active after the warm-up
+  smi_rows 0x0 0x13
+  load_sh core 1 1
+  verdict 0 pass
+  [ "$(value limited)" = 0 ]
+  [ -s "$MOCK_STATE/nvidia-smi.calls" ]
+  while read -r -a call; do
+    fields=""
+    for arg in "${call[@]}"; do
+      [[ "$arg" != --query-gpu=* ]] || fields=",${arg#--query-gpu=},"
+    done
+    # the driver's help lists every reason field under two names
+    fields="${fields//clocks_throttle_reasons./clocks_event_reasons.}"
+    for name in board_limit reliability sw_power_cap hw_slowdown sw_thermal_slowdown \
+      hw_thermal_slowdown hw_power_brake_slowdown; do
+      [[ "$fields" == *",clocks_event_reasons.$name,"* ]] || {
+        echo "no $name field in: ${call[*]}"
+        return 1
+      }
+    done
+    for name in gpu_idle applications_clocks_setting sync_boost; do
+      [[ "$fields" != *",clocks_event_reasons.$name,"* ]] || {
+        echo "$name is queried: ${call[*]}"
+        return 1
+      }
+    done
+  done <"$MOCK_STATE/nvidia-smi.calls"
+}
+
+@test "#140 case 7a: core: an OK summary and no progress line with an error count gives invalid (lead ruling 2 on #134)" {
+  skip "contract #140 pending"
+  MOCK_BURN_OUT="$FIX/core/no-progress.out" load_sh core 1 1
+  verdict 3 invalid
+  grep -q -x $'\tGPU 0: OK' "$(value log)/tool.out"
+}
+
+@test "#140 case 7b: journalctl exiting 1 with -- No entries -- and text on stderr gives invalid, reason=journal" {
+  skip "contract #140 pending"
+  MOCK_JOURNAL_ERR="$FIX/journal/truncated.err" load_sh core 1 1
+  verdict 3 invalid
+  [ "$(value reason)" = journal ]
+  [ -s "$MOCK_STATE/journalctl.after" ]
+}
+
+@test "#140 case 7c: journalctl exiting 1 with another line next to -- No entries -- on stdout gives invalid, reason=journal" {
+  skip "contract #140 pending"
+  MOCK_JOURNAL_NOMATCH="$FIX/journal/header-no-entries.txt" load_sh core 1 1
+  verdict 3 invalid
+  [ "$(value reason)" = journal ]
+  [ -s "$MOCK_STATE/journalctl.after" ]
+}
+
+@test "#140 case 7d: a sample during the warm-up that cannot be parsed, or that fails, gives invalid (#134 amendment 1, ruling 6)" {
+  skip "contract #140 pending"
+  for row in unknown fail; do
+    echo "warm-up sample: $row"
+    rm -f "$MOCK_STATE"/*
+    export MOCK_SMI_ROWS="$BATS_TEST_TMPDIR/smi.rows"
+    printf 'warm %s\npost P0 2520 8001 131.40 58 0x0\n' "$row" >"$MOCK_SMI_ROWS"
+    load_sh core 1 1
+    verdict 3 invalid
   done
 }

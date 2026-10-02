@@ -12,11 +12,17 @@
 # between 0.5 s and 0.9 s gets the current post row without using it up. A "late" row
 # answers every call once the load mock's run time (state/end_ms) has passed, in place of
 # the post rows. "post fail" makes
-# that call fail like a lost GPU; "post unknown" prints [Unknown Error] in every field.
+# that call fail like a lost GPU; "post unknown" prints [Unknown Error] in every field;
+# "warm fail" and "warm unknown" do the same to the warm-up calls.
 # Reason bits (nvml.h nvmlClocksEventReason*): 0x1 gpu_idle, 0x2
 # applications_clocks_setting, 0x4 sw_power_cap, 0x8 hw_slowdown, 0x10 sync_boost, 0x20
 # sw_thermal_slowdown, 0x40 hw_thermal_slowdown, 0x80 hw_power_brake_slowdown, 0x100
 # display_clock_setting, 0x200 board_limit, 0x400 reliability.
+# A row holds every reason as one bit and the answer has one column per reason field the
+# query names, in the query's order, so the same rows serve the five reason fields of #134
+# and the seven of #140. The two that #140 adds are, in `nvidia-smi --help-query-gpu` of
+# driver 615.71, "clocks_event_reasons.board_limit" and "clocks_event_reasons.reliability"
+# (each also under clocks_throttle_reasons.); that help has no display_clock_setting field.
 set -u
 export LC_ALL=C
 : "${MOCK_STATE:?}"

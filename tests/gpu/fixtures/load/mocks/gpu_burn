@@ -5,7 +5,9 @@
 # Env: MOCK_STATE (dir: gpu_burn.args argv one per line, gpu_burn.cwd, and start = the
 # load's start time, which the nvidia-smi mock reads), MOCK_BURN_OUT (timed output to
 # replay), MOCK_BURN_EXIT (exit code, default 0: the real main() returns 0 on every path
-# that reaches the summary).
+# that reaches the summary), MOCK_BURN_RUN_MS (contract #140: the run time in ms that
+# "end" counts from, in place of the tool's last argument, so a case can end the same
+# output before the time load.sh asked for).
 # Fixture lines are "<ms since start>|<printf %b text>". The time may be written "end-<ms>"
 # or "end", or "end+<ms>" for after the run time (the tool lingering through its SIGTERM
 # wait, with the summary already printed): counted from the run time the tool was given (its last argument, in seconds),
@@ -20,6 +22,7 @@ printf '%s\n' "$EPOCHREALTIME" >"$MOCK_STATE/start"
 start_us="${EPOCHREALTIME/./}"
 end_ms=2000
 [[ ! "${*: -1}" =~ ^[0-9]+$ ]] || end_ms=$((${*: -1} * 1000))
+[[ ! "${MOCK_BURN_RUN_MS:-}" =~ ^[0-9]+$ ]] || end_ms="$MOCK_BURN_RUN_MS"
 printf '%s\n' "$end_ms" >"$MOCK_STATE/end_ms"
 while IFS='|' read -r at text; do
   [[ "$at" != end ]] || at="$end_ms"

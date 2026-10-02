@@ -1,0 +1,16 @@
+# gpu_burn output, timed: <ms since start>|<printf %b text>; "end-<ms>" and "end" count
+# from the run time the mock was given.
+# The formats are the printf strings of gpu_burn-drv.cpp at commit 3ead140 (lines 144-147,
+# 187-196, 552-592, 612, 660-664, 913-914); the "GPU 0: ... (UUID" line is what its
+# system("nvidia-smi -L") prints. Numbers, the date line and the timing (a run squeezed
+# into 2 s) are reconstruction, unverified against the real tool.
+# The run takes its full time and the summary says OK, but no progress line was printed,
+# so no error count was ever seen (contract #140 case 7a).
+0|Using compare file: compare.fatbin\n
+0|Burning for 2 seconds.\n
+50|GPU 0: NVIDIA GeForce RTX 4060 Ti (UUID: GPU-00000000-0000-0000-0000-000000000000)\n
+150|Initialized device 0 with 7805 MB of memory (7404 MB available, using 5923 MB of it), using FLOATS\n
+150|Results are 268435456 bytes each, thus performing 20 iterations\n
+end-100|\nKilling processes with SIGTERM (soft kill)\n
+end-50|Freed memory for dev 0\nUninitted cublas\ndone\n
+end|\nTested 1 GPUs:\n\tGPU 0: OK\n

@@ -12,6 +12,9 @@
 # Env: MOCK_STATE (dir: journalctl.calls one line per call, journalctl.cursor the cursor
 # handed out, journalctl.after the cursor received), MOCK_JOURNAL_AFTER (kernel lines
 # after the cursor, default none), MOCK_JOURNAL_FAIL=cursor|after (that call fails).
+# Contract #140, both for the --after-cursor call only, which otherwise answers as above:
+# MOCK_JOURNAL_ERR (file it also prints on stderr), MOCK_JOURNAL_NOMATCH (file it prints
+# on stdout in place of the "-- No entries --" line when nothing matches).
 set -u
 : "${MOCK_STATE:?}"
 printf '%s\n' "$*" >>"$MOCK_STATE/journalctl.calls"
@@ -52,6 +55,7 @@ if [[ -n "$has_after" ]]; then
     echo "Failed to seek to cursor: Invalid argument" >&2
     exit 1
   fi
+  [[ -z "${MOCK_JOURNAL_ERR:-}" ]] || cat "$MOCK_JOURNAL_ERR" >&2
   lines=""
   if [[ -z "$has_pattern" ]]; then
     lines="$(cat "${MOCK_JOURNAL_AFTER:-/dev/null}")"
@@ -65,7 +69,11 @@ if [[ -n "$has_after" ]]; then
     printf '%s\n' "$lines"
     exit 0
   fi
-  [[ -n "$quiet" ]] || echo "-- No entries --"
+  if [[ -n "${MOCK_JOURNAL_NOMATCH:-}" ]]; then
+    cat "$MOCK_JOURNAL_NOMATCH"
+  elif [[ -z "$quiet" ]]; then
+    echo "-- No entries --"
+  fi
   [[ -z "$has_pattern" ]] || exit 1
   exit 0
 fi
