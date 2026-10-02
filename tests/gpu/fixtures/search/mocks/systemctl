@@ -1,0 +1,20 @@
+#!/usr/bin/bash
+# pc-oc-test-mock
+# Mock systemctl for tests/gpu/search.bats (contract #135); guard.sh binds it over
+# /usr/bin/systemctl: the search has no business with a unit; the real one is never reached.
+# A call is recorded and returns 0 at once.
+# State directory: /var/lib/pc-oc-test-mock
+#   events  "systemctl <arguments>" per call
+#   systemctl.env  the environment of every call
+set -u
+s=/var/lib/pc-oc-test-mock
+[[ -e "$s/scratch" ]] || {
+  echo "mock systemctl: $s is not the test scratch" >&2
+  exit 96
+}
+{
+  echo "-- systemctl $*"
+  /usr/bin/env
+} >>"$s/systemctl.env"
+printf 'systemctl %s\n' "$*" >>"$s/events"
+exit 0

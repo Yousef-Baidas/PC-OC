@@ -1,0 +1,47 @@
+#!/usr/bin/bash
+# pc-oc-test-mock
+# Mock getent for tests/gpu/search.bats (contract #135); guard.sh binds it over
+# /usr/bin/getent. It answers "passwd <key>" from /etc/passwd, which guard.sh has bound to
+# the fixture. It is more forgiving than glibc's getent on purpose, so that only the rule
+# in gpu/search.sh can stop a bad SUDO_UID: blanks and newlines around the key are dropped,
+# a key of digits is a uid taken modulo 2^32 (as a 32-bit uid_t wraps), anything else is a
+# user name, and the fixture has a user for every hostile name the tests pass.
+# Exit 0 with the entry, 2 when there is none, 96 on any other use.
+# State directory: /var/lib/pc-oc-test-mock
+#   events      "getent <arguments, %q-quoted>" per call
+#   getent.env  the environment of every call
+set -u
+s=/var/lib/pc-oc-test-mock
+[[ -e "$s/scratch" ]] || {
+  echo "mock getent: $s is not the test scratch" >&2
+  exit 96
+}
+{
+  echo "-- getent $*"
+  /usr/bin/env
+} >>"$s/getent.env"
+export LC_ALL=C
+{
+  printf 'getent'
+  printf ' %q' "$@"
+  printf '\n'
+} >>"$s/events"
+[[ $# -eq 2 && "$1" == passwd ]] || {
+  echo "mock getent: only passwd <key> is answered: $*" >&2
+  exit 96
+}
+key="$2"
+key="${key#"${key%%[![:space:]]*}"}"
+key="${key%"${key##*[![:space:]]}"}"
+uid=""
+if [[ -n "$key" && "$key" != *[!0123456789]* && ${#key} -le 18 ]]; then
+  uid=$((10#$key % 4294967296))
+fi
+while IFS= read -r entry; do
+  IFS=: read -r name _ id _ <<<"$entry"
+  if [[ -n "$uid" && "$id" == "$uid" ]] || [[ -z "$uid" && "$name" == "$key" ]]; then
+    printf '%s\n' "$entry"
+    exit 0
+  fi
+done </etc/passwd
+exit 2

@@ -1,0 +1,20 @@
+#!/usr/bin/bash
+# pc-oc-test-mock
+# Mock sleep for tests/gpu/search.bats (contract #135); guard.sh binds it over
+# /usr/bin/sleep: a search that waits between two steps costs the suite no time.
+# A call is recorded and returns 0 at once.
+# State directory: /var/lib/pc-oc-test-mock
+#   events  "sleep <arguments>" per call
+#   sleep.env  the environment of every call
+set -u
+s=/var/lib/pc-oc-test-mock
+[[ -e "$s/scratch" ]] || {
+  echo "mock sleep: $s is not the test scratch" >&2
+  exit 96
+}
+{
+  echo "-- sleep $*"
+  /usr/bin/env
+} >>"$s/sleep.env"
+printf 'sleep %s\n' "$*" >>"$s/events"
+exit 0

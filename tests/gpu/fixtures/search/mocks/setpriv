@@ -1,0 +1,33 @@
+#!/usr/bin/bash
+# pc-oc-test-mock
+# Mock setpriv for tests/gpu/search.bats (contract #135); guard.sh binds it over
+# /usr/bin/setpriv. Only uid 0 is mapped in the test namespace, so the real one could not
+# drop. It records its arguments and its pid, checks that the options are the three the
+# ticket gives (--reuid=, --regid=, --init-groups) and execs the rest, so the process it
+# becomes keeps that pid: a load whose pid is not in setpriv.pids was started without it.
+# State directory: /var/lib/pc-oc-test-mock
+#   events        "setpriv <arguments, %q-quoted>" per call
+#   setpriv.pids  the pid of every call
+#   setpriv.env   the environment of every call
+set -u
+s=/var/lib/pc-oc-test-mock
+[[ -e "$s/scratch" ]] || {
+  echo "mock setpriv: $s is not the test scratch" >&2
+  exit 96
+}
+{
+  echo "-- setpriv $*"
+  /usr/bin/env
+} >>"$s/setpriv.env"
+{
+  printf 'setpriv'
+  printf ' %q' "$@"
+  printf '\n'
+} >>"$s/events"
+echo "$$" >>"$s/setpriv.pids"
+if [[ $# -gt 3 && "$1" == --reuid=* && "$2" == --regid=* && "$3" == --init-groups ]]; then
+  shift 3
+  exec "$@"
+fi
+echo "mock setpriv: not the options of the ticket: $*" >&2
+exit 96
