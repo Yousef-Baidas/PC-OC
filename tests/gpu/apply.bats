@@ -1521,4 +1521,8 @@ QUOTED
   grep -qF 'from="search result"' "$root/gpu/apply.sh"
   grep -qF 'from gpu/values' "$doc"
   grep -qF 'from="gpu/values"' "$root/gpu/apply.sh"
+  grep -qF 'cannot enable pc-oc-gpu.service' "$doc"
+  grep -qF 'unit=pc-oc-gpu.service' "$root/gpu/apply.sh"
+  # shellcheck disable=SC2016 # the text of the script, not a variable of this case
+  grep -qF 'die gpu "cannot enable $unit: ' "$root/gpu/apply.sh"
 }
