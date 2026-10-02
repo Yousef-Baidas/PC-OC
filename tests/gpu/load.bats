@@ -92,7 +92,6 @@ keys() {
 }
 
 @test "load core: the pass fixture gives result=pass, exit 0, every line in the grammar, all keys (#134 case 6)" {
-  skip "contract #150 pending"
   load_sh core 1 1
   verdict 0 pass
   # the eight keys of #134 and power_cap (#150)
@@ -142,7 +141,6 @@ keys() {
 }
 
 @test "load mem: exit 65 with throughput lines gives pass and read_gbs is the median after the warm-up (#134 case 8)" {
-  skip "contract #150 pending"
   load_sh mem 1 2 1
   verdict 0 pass
   # the nine keys of #134 and power_cap (#150)
@@ -444,7 +442,6 @@ keys() {
 # tool that lost its device does, and that case stays fail.
 
 @test "#140 case 1: core: a complete OK output from a load that ended 1.5 s into core 1 3 gives invalid, reason=short, exit 3" {
-  skip "contract #150 pending"
   MOCK_BURN_RUN_MS=1500 load_sh core 1 3
   verdict 3 invalid
   block_ok 9
@@ -474,7 +471,6 @@ keys() {
 }
 
 @test "#140 case 2: mem: a read line after the warm-up and status 65 from a load that ended 1.7 s into mem 1 3 gives invalid, reason=short, exit 3" {
-  skip "contract #150 pending"
   MOCK_MEMTEST_RUN_MS=1700 load_sh mem 1 3 1
   verdict 3 invalid
   block_ok 10
@@ -492,7 +488,6 @@ keys() {
 }
 
 @test "#140 case 3: the core and mem pass fixtures, run for their full time, still pass, with the key set of #134 and power_cap (#150)" {
-  skip "contract #150 pending"
   load_sh core 1 1
   verdict 0 pass
   [ "$(value reason)" = ok ]
@@ -623,7 +618,6 @@ keys() {
 # (#121 comment 5953205480), in smi/recorded-*.rows, core/recorded.out, mem/recorded.out.
 
 @test "#150 case 1: core: the recorded real samples, sw_power_cap Active in every one, with the recorded clean gpu_burn output: result=pass, limited=0, power_cap=1, exit 0" {
-  skip "contract #150 pending"
   MOCK_BURN_OUT="$FIX/core/recorded.out" MOCK_SMI_ROWS="$FIX/smi/recorded-core.rows" load_sh core 1 2
   verdict 0 pass
   block_ok 9
@@ -646,7 +640,6 @@ keys() {
 }
 
 @test "#150 case 2: mem: the recorded real samples, reliability Active in every one, with the recorded clean memtest_vulkan output: result=pass, limited=0, power_cap=0" {
-  skip "contract #150 pending"
   MOCK_MEMTEST_OUT="$FIX/mem/recorded.out" MOCK_SMI_ROWS="$FIX/smi/recorded-mem.rows" load_sh mem 1 2 0
   verdict 0 pass
   block_ok 10
@@ -667,7 +660,6 @@ keys() {
 }
 
 @test "#150 case 3: board_limit Active in the samples after the warm-up: pass, limited=0, power_cap=0; the three reasons that void nothing, all Active: pass, limited=0, power_cap=1" {
-  skip "contract #150 pending"
   smi_rows 0x0 0x200
   load_sh core 1 1
   verdict 0 pass
@@ -685,7 +677,6 @@ keys() {
 }
 
 @test "#150 case 4: each of the four slowdown reasons alone, Active in a sample after the warm-up, gives invalid, reason=limited, limited=1, power_cap=0; Active during the warm-up only, it changes nothing" {
-  skip "contract #150 pending"
   missed=""
   for column in hw_slowdown:0x8 hw_thermal_slowdown:0x40 hw_power_brake_slowdown:0x80 \
     sw_thermal_slowdown:0x20; do
@@ -713,7 +704,6 @@ keys() {
 }
 
 @test "#150 case 5: sw_power_cap Active during the warm-up only: pass, limited=0, power_cap=0" {
-  skip "contract #150 pending"
   MOCK_SMI_ROWS="$FIX/smi/limit-warm.rows" load_sh core 1 1
   verdict 0 pass
   [ "$(value limited)" = 0 ]
@@ -721,7 +711,6 @@ keys() {
 }
 
 @test "#150 case 6: a slowdown reason and sw_power_cap in one run, in one sample or in two: invalid, reason=limited, limited=1, power_cap=1" {
-  skip "contract #150 pending"
   # 0xc: hw_slowdown and sw_power_cap
   smi_rows 0x0 0xc
   load_sh core 1 1
@@ -741,7 +730,6 @@ keys() {
 }
 
 @test "#150 case 7: power_cap= is the line after limited= for both kinds, and nothing else of the block of #134 moved" {
-  skip "contract #150 pending"
   load_sh core 1 1
   verdict 0 pass
   [ "$(after_limited)" = power_cap=0 ]
@@ -772,7 +760,6 @@ keys() {
 }
 
 @test "#150 case 7: a run with no sample after the warm-up prints limited= and power_cap= empty, power_cap= on the line after limited=" {
-  skip "contract #150 pending"
   # the load ended in the warm-up (the nosample case of #140)
   MOCK_BURN_RUN_MS=1500 load_sh core 2 1
   verdict 3 invalid
@@ -795,4 +782,28 @@ keys() {
   block_ok 9
   [ "$(grep -c '^limited=$' <<<"$output")" -eq 1 ]
   [ "$(after_limited)" = power_cap= ]
+}
+
+# Own case of the implementation (#150).
+
+@test "load: own: #150: power_cap=1 stands next to a fail as well; reliability alone reaches neither key; a slowdown among the reasons that void nothing is limited=1 with power_cap=0" {
+  smi_rows 0x0 0x4
+  MOCK_BURN_OUT="$FIX/core/faulty.out" load_sh core 1 1
+  verdict 1 fail
+  [ "$(value limited)" = 0 ]
+  [ "$(value power_cap)" = 1 ]
+  rm -f "$MOCK_STATE"/*
+  smi_rows 0x0 0x400
+  load_sh core 1 1
+  verdict 0 pass
+  [ "$(value limited)" = 0 ]
+  [ "$(value power_cap)" = 0 ]
+  rm -f "$MOCK_STATE"/*
+  # 0x620: sw_thermal_slowdown, board_limit and reliability
+  smi_rows 0x0 0x620
+  load_sh mem 1 1 1
+  verdict 3 invalid
+  [ "$(value reason)" = limited ]
+  [ "$(value limited)" = 1 ]
+  [ "$(value power_cap)" = 0 ]
 }

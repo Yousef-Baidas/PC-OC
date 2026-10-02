@@ -49,14 +49,17 @@ Note: `pc-oc` below is the installed `/usr/local/lib/pc-oc/pc-oc`; type that pat
 
 ## What the first run measures
 
-Four facts could not be checked without a load (#121). The first run measures them and stops with the offsets at 0, naming the fact, when one is not as assumed:
+Five facts could not be checked without a load (#121). The first run measures them. For the first four it stops with the offsets at 0, naming the fact, when one is not as assumed; the fifth does not stop it:
 
 - Which performance state each load reaches. Both loads at stock clocks must reach pstate 0, 1 or 2, the three the offsets are set on.
 - The unit of the NVML memory offset. At the first memory step the memory clock must move by the offset that was set, within 5 MHz. If it moves by another amount, the message gives both numbers; report them and do not go on.
 - The device index of memtest_vulkan (`mem_device_index` in `gpu/search.values`). A wrong index shows as a memory load at stock clocks that fails or reaches no working pstate.
 - That a reboot clears the offsets. This one is only measured if a step crashes: the next start then reads the offsets before it sets anything, and says so if they outlived the reboot.
+- Whether the core load runs at the power limit. `gpu/load.sh` reports it as `power_cap=1`: after the warm-up the driver gave `sw_power_cap` as a reason for the clock, which `nvidia-smi --help-query-gpu` explains as "SW Power Scaling algorithm is reducing the clocks below requested clocks because the GPU is consuming too much power". At stock clocks gpu_burn ran that way in every sample, at 158.2 to 161.1 W under the 160 W limit, with the core clock between 2130 and 2475 MHz (#121 comments 5953205480, 5953276937 and 5953431584).
+  - The power limit then sets the core clock, not the offset. So the search does not check the core clock of a core load that ran at the power limit, nor of any core load when the core load at stock clocks did. Such a step is judged by the rest: the verdict of the load, its performance state, the Xid count. Its line ends in `clock=unchecked`, and the search ends with a line, ahead of the result, that says the core load ran at the power limit.
+  - The memory load at stock clocks did not run at the power limit: 115.9 to 119.3 W, the core clock at 2730 MHz in every sample under load (same comments). The memory soak runs with the core offset set, so it is where the core offset shows on the core clock. Its line ends in `core_clock_delta=<MHz>`: its highest core clock less that of the memory load at stock clocks. The search ends with a second line that gives the number. It is a measurement: no step passes or fails by it.
 
-Report: for each of the four, what the `log` file and the messages show, or "not measured" for the reboot fact when no step crashed.
+Report: for each of the five, what the `log` file and the messages show, or "not measured" for the reboot fact when no step crashed. For the fifth: the `baseline` file of `/var/lib/pc-oc/gpu/search/`, and the number behind `core_clock_delta=` next to the core offset of the result.
 
 ## The boot unit and its start counter
 
@@ -65,3 +68,5 @@ Report: for each of the four, what the `log` file and the messages show, or "not
 ## What the search trusts
 
 The search runs the loads as your own user and trusts that account: a process of yours that rewrites the load binary in `~/.cache/pc-oc` can make a step look passed; the damage is bounded by the hard caps of the helper (300 MHz core, 2000 MHz memory) and by the final Cyberpunk check you run yourself.
+
+A core step that passed at the power limit proves less than its `pass` says. Such a load holds the card at the 160 W limit and well under its top core clock (2130 to 2475 MHz under gpu_burn at stock clocks, against 2730 MHz under the memory load; #121 comments 5953205480, 5953276937 and 5953431584), so a core step that passed with `clock=unchecked` proves the offset at those clocks only. The clocks above them are run with the core offset by the memory soak alone, and by the final Cyberpunk check: a core offset that is unstable only near the top clock shows there, not in the core steps.

@@ -12,9 +12,10 @@ set -euo pipefail
 # (nv-xid). Raw output and samples go to a new directory under
 # ${XDG_CACHE_HOME:-$HOME/.cache}/pc-oc/gpu-load/. Stdout carries the result block only:
 #   result=pass|fail|invalid  reason=<word>  pstate_min=  core_mhz_max=  mem_mhz_max=
-#   limited=0|1  xid=<count>  read_gbs=<GB/s> (mem only)  log=<directory>
-# A value that was not measured is empty. The pstate and clock keys, limited and read_gbs
-# use what was seen from the end of the warm-up on. Exit 0 pass, 1 fail, 2 usage, 3 invalid.
+#   limited=0|1  power_cap=0|1  xid=<count>  read_gbs=<GB/s> (mem only)  log=<directory>
+# A value that was not measured is empty. The pstate and clock keys, limited, power_cap and
+# read_gbs use what was seen from the end of the warm-up on. power_cap=1 says the load ran
+# at the power limit; it is no verdict. Exit 0 pass, 1 fail, 2 usage, 3 invalid.
 # Fail-closed: whatever cannot be read or parsed is result=invalid. First match wins:
 #   invalid  build memtest icd (the piece check names), log, journal, sample (nvidia-smi
 #            failed or printed something else), nosample (none after the warm-up),
@@ -27,7 +28,7 @@ set -euo pipefail
 #   invalid  core: timeout (killed by timeout), output, died (a burn process died), summary
 #            (not exactly one summary line, GPU 0: OK), progress (no error count seen);
 #            mem: exit (status not 65), output, noread (no read speed after the warm-up)
-#   invalid  limited (a clock limit reason was active after the warm-up)
+#   invalid  limited (a slowdown reason was active after the warm-up)
 #   pass     ok
 # shellcheck source=../lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
@@ -53,9 +54,21 @@ MEMTEST_ERRORS_BIT=2
 MEMTEST_CLEAN=65
 # nvidia-smi --query-gpu fields (smi; each is in `nvidia-smi --help-query-gpu` of driver
 # 615.71): the performance state, the graphics and memory clocks in MHz, the board power in
-# W, the core temperature in C, then the seven clock event reasons that are a limit (power,
-# thermal, the board-level voltage limit, reliability), each "Active" or "Not Active". The
-# other three, gpu_idle, applications_clocks_setting and sync_boost, are not read.
+# W, the core temperature in C, then seven clock event reasons, each "Active" or "Not
+# Active". All seven go into samples.csv; sample reads them by their place in this list:
+#   power_cap=1  sw_power_cap: the power limit ("SW power cap limit can be changed with
+#                nvidia-smi --power-limit="). No verdict.
+#   limited=1    hw_slowdown, hw_thermal_slowdown, hw_power_brake_slowdown ("reducing the
+#                core clocks by a factor of 2 or more") and sw_thermal_slowdown ("GPU
+#                temperature is higher than Max Operating Temp"): a slowdown, and a load
+#                under one proves nothing.
+#   nothing      board_limit ("board-level voltage limit is being enforced") and
+#                reliability ("to ensure part lifetime reliability projections"): the card
+#                at its normal top clock.
+# Source of the rule: that help text, and the loads at stock clocks on this card (#121
+# comments 5953205480, 5953276937, 5953431584): clean, gpu_burn with sw_power_cap Active in
+# every sample and memtest_vulkan with reliability Active in nearly every one. The other
+# three, gpu_idle, applications_clocks_setting and sync_boost, are not read.
 SMI_FIELDS=pstate,clocks.current.graphics,clocks.current.memory,power.draw,temperature.gpu
 SMI_FIELDS+=,clocks_event_reasons.sw_power_cap,clocks_event_reasons.hw_slowdown
 SMI_FIELDS+=,clocks_event_reasons.hw_thermal_slowdown
@@ -105,7 +118,7 @@ finish() {
   block="$(
     printf 'result=%s\nreason=%s\n' "$1" "$2"
     printf 'pstate_min=%s\ncore_mhz_max=%s\nmem_mhz_max=%s\n' "$pstate_min" "$core_mhz_max" "$mem_mhz_max"
-    printf 'limited=%s\nxid=%s\n' "$limited" "$xid"
+    printf 'limited=%s\npower_cap=%s\nxid=%s\n' "$limited" "$power_cap" "$xid"
     [[ "$kind" != mem ]] || printf 'read_gbs=%s\n' "$read_gbs"
     printf 'log=%s\n' "$log_dir"
   )"
@@ -156,7 +169,7 @@ stamp_lines() {
 # sample <elapsed-ms>: one nvidia-smi query, logged; from the end of the warm-up on it
 # feeds the result keys. Returns 1 when nvidia-smi fails or prints anything else.
 sample() {
-  local out code=0 pstate
+  local out code=0 pstate cap slow
   out="$(timeout -k 2 "$SMI_TIMEOUT_S" nvidia-smi "--query-gpu=$SMI_FIELDS" \
     --format=csv,noheader,nounits 2>&1)" || code=$?
   printf '%s, %s\n' "$1" "${out//$'\n'/ | }" >>"$log_dir/samples.csv"
@@ -164,12 +177,18 @@ sample() {
   [[ "$out" =~ $SAMPLE_RE ]] || return 1
   (($1 >= warmup * 1000)) || return 0
   pstate=$((10#${BASH_REMATCH[1]}))
-  [[ -n "$pstate_min" ]] || pstate_min="$pstate" core_mhz_max=0 mem_mhz_max=0 limited=0
+  [[ -n "$pstate_min" ]] || pstate_min="$pstate" core_mhz_max=0 mem_mhz_max=0 limited=0 power_cap=0
   ((pstate >= pstate_min)) || pstate_min="$pstate"
   ((10#${BASH_REMATCH[2]} <= core_mhz_max)) || core_mhz_max=$((10#${BASH_REMATCH[2]}))
   ((10#${BASH_REMATCH[3]} <= mem_mhz_max)) || mem_mhz_max=$((10#${BASH_REMATCH[3]}))
-  # the seven reason columns as one string: one Active in any of them is a limit
-  [[ "${BASH_REMATCH[5]}" != *", Active"* ]] || limited=1
+  # the seven reason columns, in the order of SMI_FIELDS: the power cap, the four
+  # slowdowns as one string, then board_limit and reliability, which are not looked at
+  slow="${BASH_REMATCH[5]#, }"
+  cap="${slow%%, *}"
+  slow="${slow#*, }"
+  slow=", ${slow%, *, *}"
+  [[ "$cap" != Active ]] || power_cap=1
+  [[ "$slow" != *", Active"* ]] || limited=1
 }
 
 # core_verdict: finish on what gpu_burn printed; returns when it is clean. Progress lines
@@ -278,7 +297,7 @@ fi
 
 warmup="$2"
 total=$(($2 + $3))
-pstate_min="" core_mhz_max="" mem_mhz_max="" limited="" xid="" read_gbs="" log_dir=""
+pstate_min="" core_mhz_max="" mem_mhz_max="" limited="" power_cap="" xid="" read_gbs="" log_dir=""
 emitted="" load_pid="" stamp_pid="" interrupted="" output_complete="" ended_ms=""
 trap on_exit EXIT
 trap 'interrupted=1' INT TERM HUP

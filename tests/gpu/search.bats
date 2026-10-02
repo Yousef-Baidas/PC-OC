@@ -20,8 +20,8 @@ bats_require_minimum_version 1.5.0
 # The cases named "#150 case N" are the contract for #150 (N is the number in that
 # ticket's Check list): case 16 behind the other text case on gpu/offsets.md, cases 8 to
 # 15 at the end. They run with the power_cap line of #150 in every block of the mock load
-# (power_cap_blocks); the cases of #135 get the block of #134 until the switch of the
-# helper, BLOCK_POWER_CAP, is turned.
+# (power_cap_blocks), and so does every other case since the switch of the helper,
+# BLOCK_POWER_CAP, is 1.
 
 load fixtures/search/helper
 
@@ -1123,7 +1123,6 @@ section() {
 }
 
 @test "#150 case 16: offsets.md: the first-run section names the power limit, clock=unchecked and core_clock_delta, and its Report line asks for that fact; the trust section names the power limit and the memory soak" {
-  skip "contract #150 pending"
   measures="$(section 'What the first run measures')"
   trusts="$(section 'What the search trusts')"
   [ -n "$measures" ]
@@ -1382,7 +1381,6 @@ EOF
 }
 
 @test "search: own: a block of 4097 bytes makes the step invalid, one of 4096 bytes does not" {
-  skip "contract #150 pending"
   local value
   # the block of the core step at 120 is 103 bytes and the log value: the 91 of #134 and
   # the 12 of the power_cap line of #150
@@ -1401,7 +1399,6 @@ EOF
 }
 
 @test "search: own: a block of more than 16 lines makes the step invalid" {
-  skip "contract #150 pending"
   # 9 lines of the kind, the power_cap line of #150 among them, and xid=0 eight more times
   power_cap_blocks
   plan "core@120/0$(printf ' dup=xid=0%.0s' {1..8})"
@@ -1641,7 +1638,6 @@ EOF
 # pre-flight of #121 saw 2130 to 2475 at stock).
 
 @test "#150 case 8: search: a block without power_cap, with it twice, with power_cap=2 or with it empty makes the step invalid, reason block, and the offsets are zeroed" {
-  skip "contract #150 pending"
   local action
   for action in drop=power_cap dup=power_cap=0 dup=power_cap=1 power_cap=2 power_cap=; do
     power_cap_blocks
@@ -1669,7 +1665,6 @@ EOF
 }
 
 @test "#150 case 9: search: a capped baseline and core loads far under baseline + offset: every core step and the core soak pass, each line ends clock=unchecked, and the baseline file holds core_power_cap=1" {
-  skip "contract #150 pending"
   # every core load at the power limit and its clock where the limit puts it, with an
   # offset as without: the step at 240 is 225 MHz under baseline + offset
   power_cap_blocks
@@ -1697,7 +1692,6 @@ EOF
 }
 
 @test "#150 case 10: search: an uncapped baseline and an uncapped core load: 16 MHz under baseline + offset is invalid, reason clock, as before; 15 under passes and the line has no clock= field" {
-  skip "contract #150 pending"
   # baseline 2535, offset 120
   power_cap_blocks
   plan 'core@120/0 core_mhz_max=2639'
@@ -1724,7 +1718,6 @@ EOF
 }
 
 @test "#150 case 11: search: an uncapped baseline and a capped core load: it passes whatever its clock, its line ends clock=unchecked, and no other line does" {
-  skip "contract #150 pending"
   power_cap_blocks
   plan 'core@120/0 power_cap=1 core_mhz_max=2300'
   search
@@ -1753,7 +1746,6 @@ EOF
 }
 
 @test "#150 case 11: search: only the core clock check is left out for a capped load: pstate, limited and the memory clock are judged as before" {
-  skip "contract #150 pending"
   power_cap_blocks
   plan 'core@150/0 power_cap=1 pstate_min=3'
   search
@@ -1781,7 +1773,6 @@ EOF
 }
 
 @test "#150 case 12: search: the memory soak at a core offset ends its line core_clock_delta=<n>, n its core clock less that of the memory baseline, signed; a memory step at core 0 has no such field; the verdict is the same for any n" {
-  skip "contract #150 pending"
   # a higher clock: 2745 under the soak, 2535 under the memory baseline
   power_cap_blocks
   search
@@ -1816,7 +1807,6 @@ EOF
 }
 
 @test "#150 case 13: search: a result after an unchecked core step: the power limit line is printed before the result lines, also when the step was in an earlier start; with no unchecked step it is not printed" {
-  skip "contract #150 pending"
   local moved='gpu: search: core offset 210 MHz moved the core clock by'
   # one capped step in an uncapped search; the memory soak reads 2700, 165 over its baseline
   power_cap_blocks
@@ -1856,7 +1846,6 @@ EOF
 }
 
 @test "#150 case 14: search: a baseline file without core_power_cap is refused at the start: exit 1, no set, no load, and one line names the file and sudo rm -r of the state directory" {
-  skip "contract #150 pending"
   local named
   power_cap_blocks
   old_baseline
@@ -1883,7 +1872,6 @@ EOF
 }
 
 @test "#150 case 15: search: the result file of a capped search and of an uncapped one with the same steps is the same, byte for byte, but for finished=" {
-  skip "contract #150 pending"
   power_cap_blocks
   search
   all_passed
@@ -1899,4 +1887,352 @@ EOF
   # and it is the file of #135, which gpu/apply.sh reads (#142): the two offsets and
   # finished=, in that order, nothing else
   [ "$(<"$BATS_TEST_TMPDIR/capped")" = $'core_offset_mhz=210\nmem_offset_mhz=1300\nfinished=' ]
+}
+
+# Own cases of the implementation (#150): what the contract leaves open, one choice each.
+
+# end_lines: of the text on stdin, the lines that #150 puts ahead of the result
+end_lines() {
+  grep -E 'power limit|moved the core clock' || true
+}
+
+@test "search: own: #150: the two end lines are on stdout behind pc-oc:, the power limit line, then the moved line, then the result; without an unchecked step the moved line is printed alone" {
+  local moved='gpu: search: core offset 210 MHz moved the core clock by 210 MHz under the memory load'
+  local at
+  plan 'core@120/0 power_cap=1 core_mhz_max=2300'
+  search
+  all_passed
+  [ "$(end_lines <<<"$output")" = "pc-oc: $MSG_UNCHECKED"$'\n'"pc-oc: $moved" ]
+  at="$(line_at "$MSG_UNCHECKED")"
+  [ "$(line_at "$moved")" -eq $((at + 1)) ]
+  [ "$(line_at core_offset_mhz=210)" -eq $((at + 2)) ]
+  # nothing of it on stderr
+  [ "$(grep -Ec 'power limit|moved the core clock' <<<"$stderr")" -eq 0 ]
+  # no unchecked step: the measurement of the memory soak is printed all the same
+  fresh
+  search
+  all_passed
+  [ "$(end_lines <<<"$output")" = "pc-oc: $moved" ]
+  [ "$(line_at core_offset_mhz=210)" -eq $(($(line_at "$moved") + 1)) ]
+  # no core offset in the result, so no memory soak at one: neither line
+  fresh
+  plan 'core@90/0 fail'
+  search
+  status_is 0
+  result_is 0 1300
+  [ -z "$(end_lines <<<"$output")" ]
+  [ "$(grep -c 'core_clock_delta' "$STATE/log")" -eq 0 ]
+}
+
+@test "search: own: #150: after more than one memory soak the moved line gives the last one's number, and a memory soak that fails has its core_clock_delta too" {
+  plan 'mem@210/1300 fail core_mhz_max=2600' 'mem@210/1200 core_mhz_max=2700'
+  search
+  status_is 0
+  result_is 210 1200
+  [ "$(soaks mem)" = "210/1300:fail 210/1200:pass" ]
+  step_line soak-mem 210 1300 'result=fail reason=errors core_clock_delta=65'
+  step_line soak-mem 210 1200 'result=pass reason=ok core_clock_delta=165'
+  [ "$(end_lines <<<"$output")" = "pc-oc: gpu: search: core offset 210 MHz moved the core clock by 165 MHz under the memory load" ]
+  # the core soak backed off first: the number belongs to the core offset of the result
+  fresh
+  plan 'core@210/1300 fail' 'mem@180/1300 core_mhz_max=2700'
+  search
+  status_is 0
+  result_is 180 1300
+  [ "$(end_lines <<<"$output")" = "pc-oc: gpu: search: core offset 180 MHz moved the core clock by 165 MHz under the memory load" ]
+}
+
+@test "search: own: #150: a memory soak with an Xid, or with no pass in its block, still says how far the core clock moved; one whose block is refused does not" {
+  plan 'mem@210/1300 xid core_mhz_max=2700'
+  search
+  search_ended "mem 4 7 1 @210/1300 fail" 210 1300
+  step_line soak-mem 210 1300 'result=fail reason=xid core_clock_delta=165'
+  fresh
+  plan 'mem@210/1300 invalid'
+  search
+  search_ended "mem 4 7 1 @210/1300 invalid" 210 1300
+  step_line soak-mem 210 1300 'result=invalid reason=limited core_clock_delta=210'
+  fresh
+  plan 'mem@210/1300 junk'
+  search
+  search_ended "mem 4 7 1 @210/1300 pass" 210 1300
+  step_line soak-mem 210 1300 'result=invalid reason=block'
+}
+
+@test "search: own: #150: clock=unchecked is on passed core loads only: a capped core step that fails or gives no verdict has no field, and a load that fails is a fail whatever its power_cap says" {
+  plan 'core@150/0 power_cap=1 fail'
+  search
+  status_is 0
+  [ "$(core_steps)" = "90 120 150" ]
+  step_line core 150 0 'result=fail reason=errors'
+  [ "$(grep -c 'clock=unchecked' "$STATE/log")" -eq 0 ]
+  [ "$(grep -Fc "$MSG_UNCHECKED" <<<"$output")" -eq 0 ]
+  fresh
+  plan 'core@150/0 power_cap=1 pstate_min=3'
+  search
+  search_ended "core 2 3 @150/0 pass" 150 0
+  step_line core 150 0 'result=invalid reason=pstate'
+  fresh
+  plan 'core@150/0 power_cap=2 fail'
+  search
+  status_is 0
+  step_line core 150 0 'result=fail reason=errors'
+  [ "$(core_steps)" = "90 120 150" ]
+}
+
+@test "search: own: #150: the lines of the two baseline loads carry no field, capped or not, and the power_cap of a memory load changes nothing" {
+  plan 'core@0/0 power_cap=1' 'mem@* power_cap=1'
+  search
+  all_passed
+  step_line baseline-core 0 0 'result=pass reason=ok'
+  step_line baseline-mem 0 0 'result=pass reason=ok'
+  grep -Fxq 'core_power_cap=1' "$STATE/baseline"
+  [ "$(grep -c ' phase=\(mem\|soak-mem\|baseline-mem\) .*clock=' "$STATE/log")" -eq 0 ]
+  # every memory load capped and no core load: no step is unchecked, no power limit line
+  fresh
+  plan 'mem@* power_cap=1'
+  search
+  all_passed
+  grep -Fxq 'core_power_cap=0' "$STATE/baseline"
+  [ "$(grep -c 'clock=unchecked' "$STATE/log")" -eq 0 ]
+  step_line soak-mem 210 1300 'result=pass reason=ok core_clock_delta=210'
+  [ "$(grep -Fc "$MSG_UNCHECKED" <<<"$output")" -eq 0 ]
+  [ "$(printf '%s\n' core_mhz_max=2535 mem_mhz_max=9000 read_gbs=400.0 core_power_cap=0 mem_core_mhz_max=2535)" = "$(<"$STATE/baseline")" ]
+}
+
+@test "search: own: #150: the old baseline is refused where the baseline is read: after the load check, with one line on stderr, the file left as it is and zero run; a start that finds a result prints it" {
+  local before
+  old_baseline
+  before="$(<"$STATE/baseline")"
+  search
+  status_is 1
+  said_line "pc-oc: gpu: search: /var/lib/pc-oc/gpu/search/baseline has no core_power_cap line, so a gpu/search.sh before #150 wrote it: nothing was set. Start the search over: sudo rm -r /var/lib/pc-oc/gpu/search"
+  [ "$(grep -v '^mock ' <<<"$stderr" | grep -c .)" -eq 1 ]
+  [ -z "$output" ]
+  [ "$(calls load)" = check ]
+  no_set
+  ends_at_zero
+  [ "$(<"$STATE/baseline")" = "$before" ]
+  [ ! -e "$STATE/log" ]
+  # a search that the script before #150 finished: its result is not judged again
+  fresh
+  old_baseline
+  printf '%s\n' core_offset_mhz=210 mem_offset_mhz=1300 finished=2026-09-30T10:00:00Z >"$STATE/result"
+  search
+  status_is 0
+  no_set
+  no_load
+  [[ "$output" == *"core_offset_mhz=210"* && "$output" == *"nothing was run"* ]]
+  [ -z "$(end_lines <<<"$output")" ]
+}
+
+@test "search: own: #150: a baseline file with core_power_cap that lacks mem_core_mhz_max, or whose core_power_cap is not 0 or 1, does not parse: exit 1, nothing set, no load" {
+  local lines
+  for lines in 'core_power_cap=0' 'core_power_cap=2 mem_core_mhz_max=2535' \
+    'core_power_cap= mem_core_mhz_max=2535' 'core_power_cap=1 mem_core_mhz_max=0' \
+    'core_power_cap=1 mem_core_mhz_max=2535x'; do
+    fresh
+    old_baseline
+    # shellcheck disable=SC2086 # one line per word
+    printf '%s\n' $lines >>"$STATE/baseline"
+    search
+    refused
+    said_line "pc-oc: gpu: search: /var/lib/pc-oc/gpu/search/baseline does not parse: remove /var/lib/pc-oc/gpu/search to start the search over"
+  done
+  # and the five lines the search writes are taken
+  fresh
+  old_baseline
+  printf '%s\n' core_power_cap=1 mem_core_mhz_max=2500 >>"$STATE/baseline"
+  search
+  status_is 0
+  [ -z "$(baseline_loads)" ]
+  step_line core 90 0 'result=pass reason=ok clock=unchecked'
+  step_line soak-mem 210 1300 'result=pass reason=ok core_clock_delta=245'
+}
+
+@test "search: own: #150: the log is what remembers: a start that finds the result prints the end lines again, and without the lines of the log it prints the result alone" {
+  local first
+  plan 'core@120/0 power_cap=1 core_mhz_max=2300' 'mem@210/1300 core_mhz_max=2700'
+  search
+  all_passed
+  first="$(end_lines <<<"$output")"
+  [ "$(wc -l <<<"$first")" -eq 2 ]
+  next_start
+  search
+  status_is 0
+  no_load
+  [ "$(end_lines <<<"$output")" = "$first" ]
+  [ "$(line_at "$MSG_UNCHECKED")" -lt "$(line_at core_offset_mhz=210)" ]
+  # the field of an unchecked step taken out of the log: only the moved line is left
+  sed -i 's/ clock=unchecked$//' "$STATE/log"
+  search
+  status_is 0
+  [ "$(end_lines <<<"$output")" = "$(tail -n 1 <<<"$first")" ]
+  # a memory step is no soak, and a line that only looks like the field does not count
+  printf '%s\n' '2026-09-30T10:00:00Z phase=mem core=0 mem=300 result=pass reason=ok clock=unchecked' \
+    '2026-09-30T10:00:01Z phase=soak-mem core=210 mem=1300 result=pass reason=ok core_clock_delta=12x' \
+    >"$STATE/log"
+  search
+  status_is 0
+  [ -z "$(end_lines <<<"$output")" ]
+  # no log at all: the result is printed, exit 0
+  rm "$STATE/log"
+  search
+  status_is 0
+  [ -z "$(end_lines <<<"$output")" ]
+  [[ "$output" == *"core_offset_mhz=210"* && "$output" == *"nothing was run"* ]]
+}
+
+@test "search: own: #150: a memory block whose core_mhz_max is no number is no pass: the step is invalid, reason block; at the baseline nothing is set" {
+  local value
+  for value in abc '' 0 123456 -5; do
+    fresh
+    plan "mem@0/300 core_mhz_max=$value"
+    search
+    search_ended "mem 4 6 1 @0/300 pass" 0 300
+    step_line mem 0 300 'result=invalid reason=block'
+  done
+  fresh
+  plan 'mem@210/1300 core_mhz_max=abc'
+  search
+  search_ended "mem 4 7 1 @210/1300 pass" 210 1300
+  step_line soak-mem 210 1300 'result=invalid reason=block'
+  fresh
+  plan 'mem@0/0 core_mhz_max='
+  search
+  status_is 1
+  logged 0 0 invalid block
+  no_set
+  no_result
+  [ ! -e "$STATE/baseline" ]
+}
+
+@test "search: own: #150: the power limit line with nobody to read it ends nothing early: the result is written, zero ran, exit 1" {
+  plan 'core@120/0 power_cap=1 core_mhz_max=2300'
+  # head leaves after the lines of all 24 steps, ahead of the power limit line
+  run --separate-stderr piped head -n 24
+  ends_at_zero
+  status_is 1
+  [ "$(wc -l <"$STATE/log")" -eq 24 ]
+  [ "$(grep -c ' clock=unchecked$' "$STATE/log")" -eq 1 ]
+  result_is 210 1300
+  said 'could not be printed'
+  # a reader that takes the power limit line and leaves ahead of the moved line
+  next_start
+  run --separate-stderr piped head -n 1
+  [ "$output" = "pc-oc: $MSG_UNCHECKED" ]
+  ends_at_zero
+  status_is 1
+  no_set
+  no_load
+  said 'could not be printed'
+}
+
+# The two stand-ins below are bound for the test that asks for them only: guard.sh binds
+# every file of $GUARD_MOCKS, which is this test's own copy of the mocks.
+
+# sync_mock: /usr/bin/sync is a stand-in that returns at once and records each call as
+# "sync <arguments> @<core>/<mem>" in the events, the offsets being those the mock helper
+# holds at that moment
+sync_mock() {
+  cat >"$GUARD_MOCKS/sync" <<'MOCK'
+#!/usr/bin/bash
+# pc-oc-test-mock
+set -u
+s=/var/lib/pc-oc-test-mock
+[[ -e "$s/scratch" ]] || exit 96
+core=0 mem=0
+[[ ! -e "$s/nvml.core" ]] || core="$(<"$s/nvml.core")"
+[[ ! -e "$s/nvml.mem" ]] || mem="$(<"$s/nvml.mem")"
+printf 'sync %s @%s/%s\n' "$*" "$core" "$mem" >>"$s/events"
+exit 0
+MOCK
+  chmod +x "$GUARD_MOCKS/sync"
+}
+
+# date_mock <n> <signal>: /usr/bin/date is a stand-in that prints a fixed time; its nth
+# call sends the signal to the search first, so the signal is there while log_step writes
+# the line of that call
+date_mock() {
+  cat >"$GUARD_MOCKS/date" <<'MOCK'
+#!/usr/bin/bash
+# pc-oc-test-mock
+set -u
+s=/var/lib/pc-oc-test-mock
+[[ -e "$s/scratch" ]] || exit 96
+printf 'date %s\n' "$*" >>"$s/events"
+if [[ -e "$s/date.signal" ]]; then
+  read -r nth signal <"$s/date.signal"
+  if [[ "$(grep -c '^date ' "$s/events")" == "$nth" ]]; then
+    kill -s "$signal" "$(<"$s/search.pid")"
+    printf '%s\n' "$signal" >"$s/date.sent"
+  fi
+fi
+echo 2026-01-01T00:00:00Z
+MOCK
+  chmod +x "$GUARD_MOCKS/date"
+  printf '%s %s\n' "$1" "$2" >"$MOCK/date.signal"
+}
+
+# syncs_of_log: the recorded sync calls of this start that name the log
+syncs_of_log() {
+  calls sync | grep -E '(^| )[^ ]*/log @' || true
+}
+
+@test "search: own: #150: no sync stands between a set offset and its zero that was not there before: none ahead of the zero of a start that finds a pending step, none on the way out after a signal, and the log is synced once, ahead of the end lines" {
+  sync_mock
+  # a start that finds the pending step of a killed start, core 150 still set
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  search
+  status_is 0
+  [ "$(sed -n '/^nvml zero$/q;p' "$MOCK/events" | grep -c '^sync ')" -eq 0 ]
+  [ "$(first '^sync ')" -gt "$(first '^nvml zero$')" ]
+  logged 150 0 fail crash
+  ends_at_zero
+  # TERM during a load: nothing is synced from the start of that load to the zero
+  fresh
+  signalled TERM
+  [ -z "$(syncs_of_log)" ]
+  [ "$(tac "$MOCK/events" | sed -n '/^setpriv /q;p' | grep -c '^sync ')" -eq 0 ]
+  logged 120 0 invalid signal
+  # a search to its end: every step line is in the log, which is synced once, behind the
+  # result file and ahead of the end lines
+  fresh
+  search
+  all_passed
+  [ "$(wc -l <"$STATE/log")" -eq 24 ]
+  [ "$(syncs_of_log | wc -l)" -eq 1 ]
+  [ "$(calls sync | tail -n 1)" = "$(syncs_of_log)" ]
+  [[ "$(calls sync | tail -n 2 | head -n 1)" == "-- /var/lib/pc-oc/gpu/search @"* ]]
+}
+
+@test "search: own: #150: a signal that arrives while the line of a step is written does not log the step twice: the line stands once with its verdict, the search ends there, and zero runs" {
+  # the two baseline lines take the first two calls of date, the core step at 90 the third
+  date_mock 3 INT
+  search
+  [ "$(<"$MOCK/date.sent")" = INT ]
+  status_is 1
+  said 'got a signal'
+  ends_at_zero
+  [ "$(grep -c ' phase=core core=90 mem=0 result=' "$STATE/log")" -eq 1 ]
+  logged 90 0 pass ok
+  # the search ends at that line, not at the next load: nothing is set after it
+  [ "$(calls nvml | grep -c '^set ')" -eq 2 ]
+  [ "$(wc -l <"$STATE/log")" -eq 3 ]
+  # the same while the start that finds a pending step writes its crash line, core 150 set
+  fresh
+  rm "$GUARD_MOCKS/date"
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  date_mock 1 TERM
+  search
+  [ "$(<"$MOCK/date.sent")" = TERM ]
+  status_is 1
+  said 'got a signal'
+  ends_at_zero
+  [ "$(grep -c ' phase=core core=150 mem=0 result=' "$STATE/log")" -eq 1 ]
+  logged 150 0 fail crash
+  no_set
+  no_load
 }
