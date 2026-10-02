@@ -525,3 +525,122 @@ malformed() {
   [ "$status" -eq 0 ]
   [ "$(stat -c %i "$file")" = "$inode" ]
 }
+
+# Review of PR #132 (worker #116).
+
+# lib_ifs <global|local> <fn> [args...]: like lib, from a caller that set IFS=$'\n\t' for the
+# whole script (global) or calls from a function holding `local IFS=,` (local).
+lib_ifs() {
+  bash -c 'source "$1/common.sh"; source "$1/block.sh"; mode="$2"; shift 2
+    if [[ "$mode" == global ]]; then
+      IFS="$(printf "\n\t")"
+      "$@"
+    else
+      caller() {
+        local IFS=,
+        "$@"
+      }
+      caller "$@"
+    fi' _ "$LIB" "$@"
+}
+
+# lib_env <NAME=value> <fn> [args...]: like lib, with one environment variable set for the call.
+lib_env() {
+  env "$1" bash -c 'source "$1/common.sh"; source "$1/block.sh"; shift; "$@"' _ "$LIB" "${@:2}"
+}
+
+@test "state, matches, replace and remove give the same result under a caller's IFS" {
+  local mode
+  for mode in global local; do
+    {
+      stock
+      block "$src"
+      printf '\n[alias]\nb = "build"\n'
+    } >"$file"
+    run --separate-stderr lib_ifs "$mode" block_state "$file"
+    [ "$status" -eq 0 ]
+    [ "$output" = present ]
+    [ -z "$stderr" ]
+    run --separate-stderr lib_ifs "$mode" block_matches "$file" "$src"
+    [ "$status" -eq 0 ]
+    silent
+    run --separate-stderr lib_ifs "$mode" block_apply "$file" "$src2"
+    [ "$status" -eq 0 ]
+    silent
+    {
+      stock
+      block "$src2"
+      printf '\n[alias]\nb = "build"\n'
+    } >"$want"
+    cmp "$want" "$file"
+    run --separate-stderr lib_ifs "$mode" block_remove "$file"
+    [ "$status" -eq 0 ]
+    silent
+    {
+      stock
+      printf '\n[alias]\nb = "build"\n'
+    } >"$want"
+    cmp "$want" "$file"
+    run --separate-stderr lib_ifs "$mode" block_state "$file"
+    [ "$status" -eq 0 ]
+    [ "$output" = absent ]
+  done
+}
+
+# A temp file made anywhere but next to the file would go to TMPDIR.
+@test "block_apply and block_remove work with TMPDIR pointing at a missing directory" {
+  local tmpdir="TMPDIR=$BATS_TEST_TMPDIR/none"
+  local new="$home/.cargo/config.toml"
+  run --separate-stderr lib_env "$tmpdir" block_apply "$new" "$src"
+  [ "$status" -eq 0 ]
+  block "$src" >"$want"
+  cmp "$want" "$new"
+  run --separate-stderr lib_env "$tmpdir" block_remove "$new"
+  [ "$status" -eq 0 ]
+  [ ! -e "$new" ]
+  stock >"$file"
+  cp "$file" "$orig"
+  run --separate-stderr lib_env "$tmpdir" block_apply "$file" "$src"
+  [ "$status" -eq 0 ]
+  run --separate-stderr lib_env "$tmpdir" block_apply "$file" "$src2"
+  [ "$status" -eq 0 ]
+  {
+    stock
+    block "$src2"
+  } >"$want"
+  cmp "$want" "$file"
+  run --separate-stderr lib_env "$tmpdir" block_remove "$file"
+  [ "$status" -eq 0 ]
+  cmp "$orig" "$file"
+  [ ! -e "$BATS_TEST_TMPDIR/none" ]
+}
+
+# The read-back: a mv that says 0 and moves nothing must not pass for a write.
+@test "a mv that exits 0 without moving makes block_apply and block_remove exit 1, file unchanged" {
+  local stub="$BATS_TEST_TMPDIR/stub"
+  mkdir "$stub"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >>"%s/mv.log"\nexit 0\n' "$stub" >"$stub/mv"
+  chmod +x "$stub/mv"
+  stock >"$file"
+  cp "$file" "$orig"
+  run --separate-stderr lib_env "PATH=$stub:$PATH" block_apply "$file" "$src"
+  refused
+  cmp "$orig" "$file"
+  run --separate-stderr lib_env "PATH=$stub:$PATH" block_apply "$home/new.toml" "$src"
+  refused
+  [ ! -e "$home/new.toml" ]
+  {
+    stock
+    block "$src"
+  } >"$file"
+  cp "$file" "$orig"
+  run --separate-stderr lib_env "PATH=$stub:$PATH" block_apply "$file" "$src2"
+  refused
+  cmp "$orig" "$file"
+  run --separate-stderr lib_env "PATH=$stub:$PATH" block_remove "$file"
+  refused
+  cmp "$orig" "$file"
+  # the stub was the mv each call reached, and no temp file stays behind
+  [ "$(wc -l <"$stub/mv.log")" -eq 4 ]
+  [ "$(ls -A "$home")" = config.toml ]
+}

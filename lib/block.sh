@@ -12,7 +12,7 @@ BLOCK_END='# <<< pc-oc wiring <<<'
 
 # _block_scan <file>: set _BLOCK_STATE to absent | present | malformed and, when present,
 # _BLOCK_B and _BLOCK_E to the line numbers of BEGIN and END. A missing file is absent.
-# Returns 1 when <file> exists and is not a readable regular file.
+# Returns 1 when <file> exists and is not a readable regular file, or the scan gives no state.
 _block_scan() {
   local out
   _BLOCK_STATE=absent _BLOCK_B=0 _BLOCK_E=0
@@ -31,7 +31,13 @@ _block_scan() {
       else if (nb == 1 && ne == 1 && lb < le) print "present", lb, le
       else print "malformed 0 0"
     }' <"$1"; } 2>/dev/null)" || return 1
-  read -r _BLOCK_STATE _BLOCK_B _BLOCK_E <<<"$out" || return 1
+  # IFS pinned: a caller's IFS (IFS=$'\n\t', local IFS=,) would leave all three fields in the state
+  IFS=' ' read -r _BLOCK_STATE _BLOCK_B _BLOCK_E <<<"$out" || return 1
+  # any other state is a failed scan, never "nothing to do"
+  case "$_BLOCK_STATE" in
+    absent | present | malformed) ;;
+    *) return 1 ;;
+  esac
 }
 
 # _block_unterminated <file>: return 0 when <file> is not empty and its last byte is not a newline.
@@ -112,7 +118,8 @@ block_apply() {
   # checked before the mv, so a bad render never replaces <file>
   block_matches "$tmp" "$src" || _block_fail "$tmp" "cannot write $file"
   mv -f -- "$tmp" "$file" 2>/dev/null || _block_fail "$tmp" "cannot write $file"
-  block_matches "$file" "$src" || die block "readback of $file failed"
+  # <tmp> is still there only when mv said 0 and did not move it
+  block_matches "$file" "$src" || _block_fail "$tmp" "readback of $file failed"
 }
 
 # block_remove <file>: delete BEGIN, the body and END. If only whitespace is left, delete the file.
@@ -138,8 +145,8 @@ block_remove() {
   if [[ "$rc" -eq 0 ]]; then
     chmod --reference="$file" -- "$tmp" 2>/dev/null || _block_fail "$tmp" "cannot set the mode of $file"
     mv -f -- "$tmp" "$file" 2>/dev/null || _block_fail "$tmp" "cannot write $file"
-    _block_scan "$file" || die block "readback of $file failed"
-    [[ "$_BLOCK_STATE" == absent ]] || die block "readback of $file failed"
+    _block_scan "$file" || _block_fail "$tmp" "readback of $file failed"
+    [[ "$_BLOCK_STATE" == absent ]] || _block_fail "$tmp" "readback of $file failed"
   elif [[ "$rc" -eq 1 ]]; then
     rm -f -- "$tmp" || :
     rm -f -- "$file" 2>/dev/null || die block "cannot remove $file"
