@@ -337,46 +337,37 @@ rule_undo() {
 }
 
 @test "README.md is ASCII only" {
-  skip "contract #146 pending"
   check rule_ascii
 }
 
 @test "README.md has the eleven sections, numbered and titled, in order" {
-  skip "contract #146 pending"
   check rule_sections
 }
 
 @test "README.md sections 2 to 9 each have the four fields" {
-  skip "contract #146 pending"
   check rule_fields
 }
 
 @test "README.md names only repo paths that exist in the tree" {
-  skip "contract #146 pending"
   check rule_paths
 }
 
 @test "README.md names only pc-oc commands the entry point accepts" {
-  skip "contract #146 pending"
   check rule_commands
 }
 
 @test "README.md keeps the commands in the order of the pass" {
-  skip "contract #146 pending"
   check rule_order
 }
 
 @test "README.md has no number followed by a tuning unit" {
-  skip "contract #146 pending"
   check rule_units
 }
 
 @test "README.md section 1 has the no-update line" {
-  skip "contract #146 pending"
   check rule_no_update
 }
 
 @test "README.md section 11 names revert all by the installed path" {
-  skip "contract #146 pending"
   check rule_undo
 }
