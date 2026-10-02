@@ -163,8 +163,8 @@ Before 6a: close every game and every program that uses the graphics card, a bro
   - A memory line may end in ` core_clock_delta=<n>`.
   - At the end there may be a line that holds `gpu: search: the core load ran at the power limit, so the core clock was not checked against the offset`, and one that holds `gpu: search: core offset <n> MHz moved the core clock by <d> MHz under the memory load`.
   - These are not errors. The first line says that the core load never showed the core at its top clock with the offset. The second says how far the offset moved the core clock while the memory load ran. The Cyberpunk benchmark of 6h is then the only check of the core offset at top clock under a real game load. Do not skip 6h.
-- Do: 6e. Copy the log and the result now: `cp /var/lib/pc-oc/gpu/search/log /var/lib/pc-oc/gpu/search/result ~/pc-oc-send/`.
-- See: `ls ~/pc-oc-send` shows `log` and `result`. If cp says `Permission denied`, type the same command with sudo in front, and report that it was needed.
+- Do: 6e. Copy the whole search directory now: `cp -r /var/lib/pc-oc/gpu/search ~/pc-oc-send/`.
+- See: `ls ~/pc-oc-send/search` shows `baseline`, `log` and `result`, with a few more entries of the search beside them. Do not open the entry `timer`: it is a pipe, not a file. If cp says `Permission denied`, type the same command with sudo in front, and report that it was needed.
 - Do: 6f. Apply the result: `sudo /usr/local/lib/pc-oc/pc-oc apply gpu`. Plain terminal, no pipe, as in 6c. This is gpu/offsets.md step 12.
 - See: one line, `gpu: offsets core=<n> mem=<m> from search result`, with the two numbers of the result.
 - Do: 6g. Check: `./pc-oc probe gpu`. This is gpu/offsets.md step 13.
@@ -185,10 +185,10 @@ What to do when a step of this section fails:
   - The line holds `ZERO FAILED` in capitals: an offset may still be set. Run `sudo reboot`.
   - The line says `apply the power limit first`: do 6c, then 6d.
   - The line says `offsets are set by something else`: the result of an earlier search is set on the card. See 6c.
-  - The line says `nothing was set`, or names the unit of the memory offset, or says to report before the search runs again: do not run the search again. Copy the log if there is one, `cp /var/lib/pc-oc/gpu/search/log ~/pc-oc-send/`, go on with section 7, and send the line.
+  - The line says `nothing was set`, or names the unit of the memory offset, or says to report before the search runs again: do not run the search again. Do 6e; the copy holds no `result` then. Go on with section 7, and send the line.
 - If it fails: 6h shows a crash, a freeze, a broken picture, or the scan prints `result.stability.journal=FAIL`: the searched offsets do not hold in the game. Take them off the card as below; it is the card part of [section 11](#11-undo-everything). There is no "one step lower": the pass does not try smaller offsets and does not search again.
   - Run `sudo /usr/local/lib/pc-oc/pc-oc revert gpu`. The card is at stock then, and the boot unit is disabled.
-  - Run `sudo rm -r /var/lib/pc-oc/gpu/search`. The log and the result are in `~/pc-oc-send` since 6e.
+  - Run `sudo rm -r /var/lib/pc-oc/gpu/search`. The copy of 6e is in `~/pc-oc-send/search`.
   - Write down the time and what you saw. Then go on with section 7, with the card at stock, and say so when you send the results.
 - If it fails: the desktop does not come up after a reboot: [gpu/offsets.md, Result](gpu/offsets.md#result), step 14, which starts with step 9.
   - At the boot menu, add `systemd.mask=pc-oc-gpu.service` to the kernel command line. That boot skips the unit.
@@ -268,7 +268,7 @@ The files stay where they are. Name them in your report, and copy the ones outsi
 - The report file: applied.md in `reports/`. Say which status 8b printed.
 - The results directory of 7e, whole: `results/<date>-applied`.
 - The readings: the three new files in `bios/readings/`, one per BIOS runbook. With them, everything a line marked "Report:" in [bios/power-limits.md](bios/power-limits.md), [bios/undervolt.md](bios/undervolt.md) and [bios/ram.md](bios/ram.md) asks for: slot numbers, the BIOS version, probe outputs, gate result lines, on-screen names. Photos of the BIOS screens help.
-- The search `result` and `log`, both whole. They are in `/var/lib/pc-oc/gpu/search/`, and since 6e in `~/pc-oc-send`.
+- The search files `result`, `log` and `baseline`, all whole. They are in `/var/lib/pc-oc/gpu/search/`, and since 6e in `~/pc-oc-send/search`.
 - Every line the search printed that is not a step line.
 - The line of 6f and the whole output of 6g.
 - What the part "What the first run measures" of [gpu/offsets.md](gpu/offsets.md) asks for in its line "Report:".
@@ -290,7 +290,7 @@ Each part can be undone by itself. To undo the whole pass, do all four parts.
    - A line that starts with `pc-oc: all:` names the parts that did not revert. Send the whole output.
 2. The wiring alone: `./pc-oc revert toolchain`, as yourself, without sudo.
    - See: per file `toolchain: unwired` with the path, or `toolchain: nothing to remove` when part 1 took the block out already.
-3. The search result. Part 1 keeps it, so a later apply would set the searched offsets again. To remove it: do 6e if it is not done, then `sudo rm -r /var/lib/pc-oc/gpu/search`.
+3. The search result. Part 1 keeps it, so a later apply would set the searched offsets again. To remove it: do 6e if it is not done, so that the copy is in `~/pc-oc-send/search`, then `sudo rm -r /var/lib/pc-oc/gpu/search`.
 4. The BIOS. Load the saved profile, then save and exit.
    - For the whole pass: the slot named pre-power-limits, from step 1 of [bios/power-limits.md](bios/power-limits.md). It holds the BIOS as it was before the pass. How to load a slot: step 2 of [CMOS clear recovery](bios/power-limits.md#cmos-clear-recovery).
    - For the undervolt alone: [Step 7: Roll back to stock](bios/undervolt.md#step-7-roll-back-to-stock). It also names the menu line that loads a slot.
