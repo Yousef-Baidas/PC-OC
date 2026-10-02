@@ -14,7 +14,9 @@ bats_require_minimum_version 1.5.0
 #   /etc/passwd, /var/lib and the kernel's boot_id: fixtures and scratch.
 # The step lengths come from fixtures/search/search.values: the ticket's offsets with
 # seconds of 2 to 7, so the arguments of a load tell a step (core 2 3, mem 4 6 1) from a
-# soak (5 and 7 seconds) and a whole search takes about a second.
+# soak (5 and 7 seconds) and a whole search takes about a second. load_grace_s is 3600
+# there, so the cap of Amendment 4 fires only where a case sets its own seconds: cases 19
+# and 20 run a mock load that does take time (hang=, deaf) and wait for it in real time.
 
 load fixtures/search/helper
 
@@ -23,11 +25,15 @@ setup() {
 }
 
 teardown() {
-  # a mock load that a failing case 17 left running must not outlive the test
+  # a mock load that a failing case 17, 19 or 20 left running must not outlive the test.
+  # KILL, as the load of cases 19 and 20 obeys nothing else; only a pid that still is the
+  # mock load of this test's tree gets it, as a pid may have gone to another process.
   local pid
   [[ -e "$MOCK/load.pids" ]] || return 0
   for pid in $(<"$MOCK/load.pids"); do
-    kill -TERM "$pid" 2>/dev/null || true
+    if { tr '\0' ' ' <"/proc/$pid/cmdline"; } 2>/dev/null | grep -qF " $REPO/gpu/load.sh "; then
+      kill -KILL "$pid" 2>/dev/null || true
+    fi
   done
 }
 
@@ -123,31 +129,67 @@ load_gone() {
   done
 }
 
-# stopped <TERM|INT|HUP>: the signal reaches the search while the load of the core step
-# at 120 runs, a load that goes on for 30 s unless it is told to stop. The search ends it,
-# waits for it, runs zero and exits, all within 10 s (Amendment 3, ruling 1).
+# gone_at_zero: no process of the mock load's hang= calls was there, as a zombie either,
+# when the last zero ran
+gone_at_zero() {
+  local last
+  last="$(grep '^zero ' "$MOCK/nvml.loads" | tail -n 1)"
+  if [[ "$last" != "zero alive=" ]]; then
+    printf 'processes of the load still there at the last zero: %s\n' "${last#zero alive=}" >&2
+    return 1
+  fi
+}
+
+# stopped <TERM|INT|HUP> [deaf]: the signal reaches the search while the load of the core
+# step at 120 runs, a load that goes on for 30 s unless it is told to stop; with deaf, one
+# that goes on even then, as the two processes under it do. The search ends it, waits for
+# it, runs zero and exits, all within 10 s (Amendment 3, ruling 1; Amendment 4, point 4).
 stopped() {
-  local start=$SECONDS last
-  plan "core@120/0 signal=$1 hang=30"
+  local start=$SECONDS pids=2
+  [[ -z "${2-}" ]] || pids=3
+  plan "core@120/0 signal=$1 hang=30${2:+ $2}"
   search
   if ((SECONDS - start >= 10)); then
     printf 'the search took %s s after the signal\n' "$((SECONDS - start))" >&2
     return 1
   fi
   [ "$(<"$MOCK/signal.sent")" = "$1" ]
-  [ "$(wc -w <"$MOCK/load.pids")" -eq 2 ]
+  [ "$(wc -w <"$MOCK/load.pids")" -eq "$pids" ]
   [ "$status" -ne 0 ]
   last_load "core 2 3 @120/0 pass"
   ends_at_zero
   # the load and its child were gone, reaped too, when the last zero ran
-  last="$(grep '^zero ' "$MOCK/nvml.loads" | tail -n 1)"
-  if [[ "$last" != "zero alive=" ]]; then
-    printf 'processes of the load still there at the last zero: %s\n' "${last#zero alive=}" >&2
-    return 1
-  fi
+  gone_at_zero
   load_gone
   grep -Eq '(^|[[:space:]])core=120([[:space:]]|$)' "$STATE/pending"
   no_result
+}
+
+# term_then_kill: the deaf load of this start was sent TERM before any other signal and
+# went on, and the last helper call came 4 s or more after that: the 5 s the ticket gives
+# a load to end before KILL, less one for a script that counts whole seconds
+term_then_kill() {
+  local told zeroed
+  told="$(sed -En '1s/^TERM [0-9]+ ([0-9]+)$/\1/p' "$MOCK/load.heard" 2>/dev/null || true)"
+  [[ -n "$told" ]] || {
+    printf 'the load noted no TERM ahead of any other signal (none sent, or KILL at once): %s\n' \
+      "$(cat "$MOCK/load.heard" 2>&1)" >&2
+    return 1
+  }
+  zeroed="$(date -r "$MOCK/nvml.calls" +%s%3N)"
+  ((zeroed - told >= 4000)) || {
+    printf 'the last helper call came %s ms after TERM reached the load\n' "$((zeroed - told))" >&2
+    return 1
+  }
+}
+
+# timeout_said <mhz>: one stderr line of the last run has the word timeout and names the
+# step by its offset
+timeout_said() {
+  grep -v '^mock ' <<<"$stderr" | grep -iw 'timeout' | grep -Eq "(^|[^0-9])$1([^0-9]|\$)" || {
+    printf 'no stderr line with the word timeout and %s:\n%s\n' "$1" "$stderr" >&2
+    return 1
+  }
 }
 
 # shouted: stderr names "sudo reboot" and says something in capitals
@@ -656,6 +698,17 @@ shouted() {
   done
 }
 
+@test "search: search.values without load_grace_s, with it twice, or with a value outside 1 to 3600 or the ticket's pattern is refused (#135 case 21)" {
+  skip "contract #135 pending"
+  # a key the file lacks is not taken from the environment either
+  values_refused "load_grace_s missing" '/^load_grace_s=/d' load_grace_s=120
+  values_refused "load_grace_s twice" '/^load_grace_s=/p'
+  values_refused "load_grace_s twice, two values" 's/^(load_grace_s)=3600(.*)$/\1=120\2\n\1=60\2/'
+  for value in 0 3601 "" 01 1s -1; do
+    values_refused "load_grace_s=$value" "s/^load_grace_s=3600/load_grace_s=$value/"
+  done
+}
+
 @test "search: search.values with every bound reached is accepted: one core step at 300 and one memory step at 2000, margins of 15 (#135 case 9)" {
   skip "contract #135 pending"
   values_with 's/^core_(start|max)_mhz=[0-9]+/core_\1_mhz=300/
@@ -819,6 +872,77 @@ mem 3600 3600 1 @285/1985 pass" ]
 @test "search: SIGHUP during a load that would go on for 30 s ends the same way (#135 case 17)" {
   skip "contract #135 pending"
   stopped HUP
+}
+
+@test "search: a load that ignores TERM, as its child does, and is not back warm-up + load + load_grace_s after its start: TERM, 5 s, KILL to all it started, zero, exit 1 and the word timeout, within 15 s; the next start does not repeat the step and ends a memory load by the same cap (#135 case 19)" {
+  skip "contract #135 pending"
+  start=$SECONDS
+  values_with 's/^(core|mem)_(warmup|load)_s=[0-9]+/\1_\2_s=1/; s/^load_grace_s=3600/load_grace_s=1/'
+  plan 'core@120/0 hang=30 deaf'
+  search
+  if ((SECONDS - start >= 15)); then
+    printf 'the search took %s s\n' "$((SECONDS - start))" >&2
+    return 1
+  fi
+  status_is 1
+  [ "$(wc -w <"$MOCK/load.pids")" -eq 3 ]
+  last_load "core 1 1 @120/0 pass"
+  ends_at_zero
+  # the load, its child and the child of that child were gone, reaped too, at the last zero
+  gone_at_zero
+  load_gone
+  term_then_kill
+  timeout_said 120
+  not_passed 120 0
+  grep -Eq '(^|[[:space:]])core=120([[:space:]]|$)' "$STATE/pending"
+  no_result
+  lock_free
+  # the step counts as failed: the next start goes on with the memory phase, where a load
+  # that would go on for 30 s but obeys TERM is ended 3 s after its start. The 5 s are for
+  # a load that does not obey: with this one gone, the search is back before 7 s are over
+  next_start
+  start=$SECONDS
+  plan 'mem@0/200 hang=30'
+  search
+  if ((SECONDS - start >= 7)); then
+    printf 'the second start took %s s\n' "$((SECONDS - start))" >&2
+    return 1
+  fi
+  status_is 1
+  [ -z "$(loads | grep -E '^core 1 1 @(120|150|180|210|240)/0 ' || true)" ]
+  logged 120 0 'fail|invalid'
+  last_load "mem 1 1 1 @0/200 pass"
+  [ "$(<"$MOCK/load.stopped")" = TERM ]
+  ends_at_zero
+  gone_at_zero
+  load_gone
+  timeout_said 200
+  not_passed 0 200
+  grep -Eq '(^|[[:space:]])mem=200([[:space:]]|$)' "$STATE/pending"
+  no_result
+}
+
+@test "search: a soak load that takes 6 s, where warm-up + soak seconds + load_grace_s is 8, is left to end and its pass counts (#135 case 19)" {
+  skip "contract #135 pending"
+  # 6 s is more than warm-up + core_soak_s (5), than warm-up + core_load_s + load_grace_s
+  # (5) and than load_grace_s alone: a cap made of any of these ends this load
+  values_with 's/^core_(warmup|load)_s=[0-9]+/core_\1_s=1/; s/^core_soak_s=5/core_soak_s=4/
+    s/^load_grace_s=3600/load_grace_s=3/'
+  plan 'core@210/1300 hang=6'
+  search
+  status_is 0
+  [ "$(wc -w <"$MOCK/load.pids")" -eq 2 ]
+  [ ! -e "$MOCK/load.stopped" ]
+  [ "$(loads | grep -c '^core 1 4 @210/1300 pass$')" -eq 1 ]
+  result_is 210 1300
+  load_gone
+  ends_at_zero
+}
+
+@test "search: SIGTERM during a load that ignores TERM, as its child does: KILL 5 s later to all the load started, then zero; back within 10 s, nothing of the load is left (#135 case 20)" {
+  skip "contract #135 pending"
+  stopped TERM deaf
+  term_then_kill
 }
 
 @test "search: every load, the check included, went through setpriv with the calling uid and gid and env -i, and none was started by uid 0 directly (#135 case 12)" {
@@ -1016,7 +1140,7 @@ mem 3600 3600 1 @285/1985 pass" ]
 
 @test "search.values: every line is key=value with a # src: id that resolves in sources/manifest.tsv (#135 case 15)" {
   skip "contract #135 pending"
-  [ "$(wc -l <"$ROOT/gpu/search.values")" -eq 17 ]
+  [ "$(wc -l <"$ROOT/gpu/search.values")" -eq 18 ]
   while IFS= read -r line; do
     [[ "$line" =~ ^[a-z_]+=(0|[1-9][0-9]{0,3})[[:space:]]+#\ src:\ ([a-z0-9-]+)$ ]] || {
       echo "not key=value  # src: <id>: $line" >&2
@@ -1029,12 +1153,12 @@ mem 3600 3600 1 @285/1985 pass" ]
   done <"$ROOT/gpu/search.values"
 }
 
-@test "search.values: the shipped file holds the ticket's seventeen numbers, once each (#135 interface)" {
+@test "search.values: the shipped file holds the ticket's eighteen numbers, once each (#135 interface)" {
   skip "contract #135 pending"
   for pair in core_start_mhz=90 core_step_mhz=30 core_max_mhz=240 core_margin_mhz=30 \
     core_warmup_s=30 core_load_s=120 core_soak_s=600 mem_start_mhz=200 mem_step_mhz=100 \
     mem_max_mhz=1500 mem_margin_mhz=200 mem_warmup_s=30 mem_load_s=90 mem_soak_s=360 \
-    mem_drop_pct=3 mem_device_index=1 soak_backoffs=3; do
+    mem_drop_pct=3 mem_device_index=1 soak_backoffs=3 load_grace_s=120; do
     [ "$(grep -c "^${pair%%=*}=" "$ROOT/gpu/search.values")" -eq 1 ]
     grep -Eq "^$pair([[:space:]]|\$)" "$ROOT/gpu/search.values"
   done

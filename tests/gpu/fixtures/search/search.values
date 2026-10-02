@@ -15,3 +15,4 @@ mem_soak_s=7  # src: research-111
 mem_drop_pct=3  # src: research-111
 mem_device_index=1  # src: research-111
 soak_backoffs=3  # src: research-111
+load_grace_s=3600  # src: research-111

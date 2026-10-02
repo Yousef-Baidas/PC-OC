@@ -17,8 +17,11 @@
 #   events       "load <arguments>" per call, shared with the other mocks, in call order
 #   search.pid   written by guard.sh: the process a signal= action signals
 #   signal.sent  the signals that were delivered
-#   load.pids    "<pid> <pid of its child>" of every call with hang=, alive until it ends
+#   load.pids    "<pid> <pid of its child>" of every call with hang=, alive until it ends;
+#                with deaf a third pid, the child of that child
 #   load.stopped the signal that ended a hang= call early
+#   load.heard   "<signal> <ms since the call began> <ms since the epoch>" per signal a
+#                deaf call was sent and did not obey
 #   snapshot     a copy of /var/lib/pc-oc as it was while a call with snapshot ran
 # Actions: fail (result=fail reason=errors, exit 1) | xid (fail, reason=xid, exit 1) |
 #   invalid (result=invalid reason=limited, exit 3) | <key>=<value> (replace that line) |
@@ -26,8 +29,12 @@
 #   empty (no stdout, exit 0) | rc=<exit code> | signal=<TERM|INT|HUP> | snapshot |
 #   hang=<seconds> (go on for that long, with a child process as gpu_burn would be, unless
 #   TERM, INT or HUP says stop: then end the child, take 0.2 s and exit 3 with an invalid
-#   block, as the real gpu/load.sh ends its tool and leaves)
+#   block, as the real gpu/load.sh ends its tool and leaves) |
+#   deaf (with hang=: TERM, INT and HUP end nothing. The call notes the signal and goes
+#   on; its child and the child of that child, as timeout and the tool are under the real
+#   runner, ignore all three. Only KILL ends them, and each of the three needs its own)
 set -u
+began="${EPOCHREALTIME/[.,]/}"
 s=/var/lib/pc-oc-test-mock
 state=/var/lib/pc-oc/gpu/search
 [[ -e "$s/scratch" ]] || {
@@ -90,7 +97,7 @@ keys=(result reason pstate_min core_mhz_max mem_mhz_max limited xid)
 [[ "$kind" != mem ]] || keys+=(read_gbs)
 keys+=(log)
 extra=()
-rc=0 empty="" signal="" snapshot="" hang="" child=""
+rc=0 empty="" signal="" snapshot="" hang="" deaf="" child=""
 
 # act <action>...: apply the actions of one plan line
 act() {
@@ -106,6 +113,7 @@ act() {
       times=*) ;;
       signal=*) signal="${a#signal=}" ;;
       hang=*) hang="${a#hang=}" ;;
+      deaf) deaf=1 ;;
       rc=*) rc="${a#rc=}" ;;
       dup=*) extra+=("${a#dup=}") ;;
       drop=*)
@@ -145,6 +153,10 @@ if [[ -e "$s/load.plan" ]]; then
   done <"$s/load.plan"
 fi
 record "${block[result]}"
+[[ -z "$deaf" || -n "$hang" ]] || {
+  echo "mock load.sh: deaf needs hang= in load.plan" >&2
+  exit 96
+}
 
 if [[ -n "$snapshot" ]]; then
   /usr/bin/rm -rf "$s/snapshot"
@@ -166,7 +178,37 @@ stopped() {
   exit 3
 }
 
-if [[ -n "$hang" ]]; then
+# heard <signal>: a deaf call was told to stop and goes on
+# shellcheck disable=SC2329 # run by the traps below
+heard() {
+  local now="${EPOCHREALTIME/[.,]/}"
+  printf '%s %s %s\n' "$1" "$(((now - began) / 1000))" "$((now / 1000))" >>"$s/load.heard"
+}
+
+if [[ -n "$deaf" ]]; then
+  (
+    trap '' TERM INT HUP
+    (read -rt "$hang" _ <>"$s/wait.$$") &
+    echo "$!" >"$s/below.$$"
+    wait
+  ) &
+  child=$!
+  # all three pids are on record before the search can be told anything
+  tries=0
+  until [[ -s "$s/below.$$" ]]; do
+    tries=$((tries + 1))
+    ((tries < 500)) || {
+      echo "mock load.sh: the child of the child did not start" >&2
+      exit 96
+    }
+    read -rt 0.01 _ <>"$s/wait.$$" || true
+  done
+  echo "$$ $child $(<"$s/below.$$")" >>"$s/load.pids"
+  /usr/bin/rm -f "$s/below.$$"
+  trap 'heard TERM' TERM
+  trap 'heard INT' INT
+  trap 'heard HUP' HUP
+elif [[ -n "$hang" ]]; then
   (read -rt "$hang" _ <>"$s/wait.$$") &
   child=$!
   echo "$$ $child" >>"$s/load.pids"
@@ -179,7 +221,14 @@ if [[ -n "$signal" ]]; then
   # without hang= the load goes on for a moment after the signal reached the search
   [[ -n "$hang" ]] || read -rt 0.3 _ <>"$s/wait.$$" || true
 fi
-[[ -z "$hang" ]] || wait "$child" || true
+if [[ -n "$deaf" ]]; then
+  # a signal that is only noted ends the wait, not the child
+  while kill -0 "$child" 2>/dev/null; do
+    wait "$child" || true
+  done
+elif [[ -n "$hang" ]]; then
+  wait "$child" || true
+fi
 /usr/bin/rm -f "$s/wait.$$"
 
 echo "mock load.sh: burning (stderr is not part of the result block)" >&2
