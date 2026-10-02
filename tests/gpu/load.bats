@@ -85,13 +85,21 @@ verdict() {
 
 @test "load core: gpu_burn outliving the timeout gives invalid, though it printed an OK summary (#134 case 7)" {
   skip "contract #134 pending"
-  # the mock timeout checks nothing; it cuts the ticket's warm-up + load + 30 s to 2 s
+  # the mock timeout checks nothing; it cuts the ticket's warm-up + load + 60 s to 2 s
   cp /usr/bin/timeout "$BATS_TEST_TMPDIR/real-timeout"
   export MOCK_REAL_TIMEOUT="$BATS_TEST_TMPDIR/real-timeout"
   use_mocks timeout
   MOCK_BURN_OUT="$FIX/core/hang.out" load_sh core 1 1
   verdict 3 invalid
-  [ "$(cat "$MOCK_STATE/timeout.duration")" = 32 ]
+  [ "$(cat "$MOCK_STATE/timeout.duration")" = 62 ]
+}
+
+@test "load core: samples taken after warm-up + load, while gpu_burn waits out its shutdown, do not change the result (#134 case 11)" {
+  skip "contract #134 pending"
+  MOCK_BURN_OUT="$FIX/core/slow-exit.out" MOCK_SMI_ROWS="$FIX/smi/limit-late.rows" load_sh core 1 1
+  verdict 0 pass
+  [ "$(value limited)" = 0 ]
+  [ "$(value core_mhz_max)" = 2520 ]
 }
 
 @test "load mem: exit 65 with throughput lines gives pass and read_gbs is the median after the warm-up (#134 case 8)" {
@@ -202,12 +210,12 @@ verdict() {
   [ "$(cat "$MOCK_STATE/memtest_vulkan.args")" = 3 ]
 }
 
-@test "load core: gpu_burn ran with its build directory as cwd and -m 80% (#134 case 12)" {
+@test "load core: gpu_burn ran with its build directory as cwd, -m 80% and -stts 5 (#134 case 12)" {
   skip "contract #134 pending"
   load_sh core 1 1
   verdict 0 pass
   [ "$(cat "$MOCK_STATE/gpu_burn.cwd")" = "$(cd "$BUILD" && pwd -P)" ]
-  [ "$(cat "$MOCK_STATE/gpu_burn.args")" = $'-m\n80%\n2' ]
+  [ "$(cat "$MOCK_STATE/gpu_burn.args")" = $'-m\n80%\n-stts\n5\n2' ]
 }
 
 @test "load: uid 0 is refused before any tool runs (#134 case 13)" {

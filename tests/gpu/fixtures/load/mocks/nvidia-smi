@@ -6,10 +6,12 @@
 # wants one process per sample, so a failing sample is a failing exit code.
 # Env: MOCK_STATE (dir: nvidia-smi.calls one line per call, nvidia-smi.post the number of
 # after-warm-up rows served, start written by the load mock), MOCK_SMI_ROWS (scenario).
-# Scenario lines: "<warm|post> <pstate> <core MHz> <mem MHz> <W> <C> <reasons bitmask>".
+# Scenario lines: "<warm|post|late> <pstate> <core MHz> <mem MHz> <W> <C> <reasons bitmask>".
 # The warm row answers until the load mock has run for 0.5 s (and before it starts). The
 # post rows answer after that, one per call in file order, the last one repeating; a call
-# between 0.5 s and 0.9 s gets the current post row without using it up. "post fail" makes
+# between 0.5 s and 0.9 s gets the current post row without using it up. A "late" row
+# answers every call once the load mock's run time (state/end_ms) has passed, in place of
+# the post rows. "post fail" makes
 # that call fail like a lost GPU; "post unknown" prints [Unknown Error] in every field.
 # Reason bits (nvml.h nvmlClocksEventReason*): 0x1 gpu_idle, 0x2
 # applications_clocks_setting, 0x4 sw_power_cap, 0x8 hw_slowdown, 0x10 sync_boost, 0x20
@@ -50,15 +52,20 @@ if [[ -r "$MOCK_STATE/start" ]]; then
   start="$(<"$MOCK_STATE/start")"
   elapsed_ms=$(((${EPOCHREALTIME/./} - ${start/./}) / 1000))
 fi
-warm=() post=()
+warm=() post=() late=()
 while read -r phase rest; do
   case "$phase" in
     warm) warm+=("$rest") ;;
     post) post+=("$rest") ;;
+    late) late+=("$rest") ;;
   esac
 done <"$MOCK_SMI_ROWS"
+end_ms=""
+[[ ! -r "$MOCK_STATE/end_ms" ]] || end_ms="$(<"$MOCK_STATE/end_ms")"
 if ((elapsed_ms < 500)) && ((${#warm[@]})); then
   row="${warm[0]}"
+elif [[ -n "$end_ms" ]] && ((elapsed_ms >= end_ms)) && ((${#late[@]})); then
+  row="${late[0]}"
 else
   served=0
   [[ ! -r "$MOCK_STATE/nvidia-smi.post" ]] || served="$(<"$MOCK_STATE/nvidia-smi.post")"

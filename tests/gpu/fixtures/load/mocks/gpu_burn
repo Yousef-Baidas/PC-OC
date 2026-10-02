@@ -7,7 +7,8 @@
 # replay), MOCK_BURN_EXIT (exit code, default 0: the real main() returns 0 on every path
 # that reaches the summary).
 # Fixture lines are "<ms since start>|<printf %b text>". The time may be written "end-<ms>"
-# or "end": counted from the run time the tool was given (its last argument, in seconds),
+# or "end", or "end+<ms>" for after the run time (the tool lingering through its SIGTERM
+# wait, with the summary already printed): counted from the run time the tool was given (its last argument, in seconds),
 # so one fixture serves a 2 s and a 3 s run. The text "@hang" sleeps until killed (40 s,
 # longer than any timeout the tests allow).
 set -u
@@ -19,9 +20,11 @@ printf '%s\n' "$EPOCHREALTIME" >"$MOCK_STATE/start"
 start_us="${EPOCHREALTIME/./}"
 end_ms=2000
 [[ ! "${*: -1}" =~ ^[0-9]+$ ]] || end_ms=$((${*: -1} * 1000))
+printf '%s\n' "$end_ms" >"$MOCK_STATE/end_ms"
 while IFS='|' read -r at text; do
   [[ "$at" != end ]] || at="$end_ms"
   [[ ! "$at" =~ ^end-([0-9]+)$ ]] || at=$((end_ms - BASH_REMATCH[1]))
+  [[ ! "$at" =~ ^end\+([0-9]+)$ ]] || at=$((end_ms + BASH_REMATCH[1]))
   [[ "$at" =~ ^[0-9]+$ ]] || continue
   wait_ms=$((at - (${EPOCHREALTIME/./} - start_us) / 1000))
   ((wait_ms <= 0)) || sleep "$(printf '%d.%03d' $((wait_ms / 1000)) $((wait_ms % 1000)))"
