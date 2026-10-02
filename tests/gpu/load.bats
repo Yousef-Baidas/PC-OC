@@ -402,7 +402,6 @@ keys() {
 # tool that lost its device does, and that case stays fail.
 
 @test "#140 case 1: core: a complete OK output from a load that ended 1.5 s into core 1 3 gives invalid, reason=short, exit 3" {
-  skip "contract #140 pending"
   MOCK_BURN_RUN_MS=1500 load_sh core 1 3
   verdict 3 invalid
   block_ok 8
@@ -413,14 +412,12 @@ keys() {
 }
 
 @test "#140 case 1: core: a load that ended half a second before the end of core 1 1, after the last sample, is short as well" {
-  skip "contract #140 pending"
   MOCK_BURN_RUN_MS=1500 load_sh core 1 1
   verdict 3 invalid
   [ "$(value reason)" = short ]
 }
 
 @test "#140 case 1: core: a FAULTY summary and exit status 1 from a load that ended early give invalid, reason=short, not fail" {
-  skip "contract #140 pending"
   MOCK_BURN_EXIT=1 MOCK_BURN_RUN_MS=1500 MOCK_BURN_OUT="$FIX/core/faulty.out" load_sh core 1 3
   verdict 3 invalid
   [ "$(value reason)" = short ]
@@ -428,14 +425,12 @@ keys() {
 }
 
 @test "#140 case 1: a new NVRM: Xid line keeps its place: a load that ended early gives fail, reason=xid" {
-  skip "contract #140 pending"
   MOCK_BURN_RUN_MS=1500 MOCK_JOURNAL_AFTER="$FIX/journal/xid.txt" load_sh core 1 3
   verdict 1 fail
   [ "$(value reason)" = xid ]
 }
 
 @test "#140 case 2: mem: a read line after the warm-up and status 65 from a load that ended 1.7 s into mem 1 3 gives invalid, reason=short, exit 3" {
-  skip "contract #140 pending"
   MOCK_MEMTEST_RUN_MS=1700 load_sh mem 1 3 1
   verdict 3 invalid
   block_ok 9
@@ -446,7 +441,6 @@ keys() {
 }
 
 @test "#140 case 2: mem: status 67 from a load that ended early gives invalid, reason=short, not fail" {
-  skip "contract #140 pending"
   MOCK_MEMTEST_EXIT=67 MOCK_MEMTEST_RUN_MS=1700 load_sh mem 1 3 1
   verdict 3 invalid
   [ "$(value reason)" = short ]
@@ -454,7 +448,6 @@ keys() {
 }
 
 @test "#140 case 3: the core and mem pass fixtures, run for their full time, still pass, with the key set of #134" {
-  skip "contract #140 pending"
   load_sh core 1 1
   verdict 0 pass
   [ "$(value reason)" = ok ]
@@ -467,7 +460,6 @@ keys() {
 }
 
 @test "#140 case 4: each of the seven limit reasons alone, Active in a sample after the warm-up, gives invalid, reason=limited" {
-  skip "contract #140 pending"
   missed=""
   for column in board_limit:0x200 reliability:0x400 sw_power_cap:0x4 hw_slowdown:0x8 \
     sw_thermal_slowdown:0x20 hw_thermal_slowdown:0x40 hw_power_brake_slowdown:0x80; do
@@ -486,7 +478,6 @@ keys() {
 }
 
 @test "#140 case 5: all seven limit reasons Active during the warm-up only: pass, limited=0" {
-  skip "contract #140 pending"
   # 0x6ec: the seven bits of case 4
   smi_rows 0x6ec 0x0
   load_sh core 1 1
@@ -495,7 +486,6 @@ keys() {
 }
 
 @test "#140 case 6: every sample's --query-gpu holds the seven limit reason fields and none of gpu_idle, applications_clocks_setting, sync_boost, which do not limit" {
-  skip "contract #140 pending"
   # 0x13: gpu_idle, applications_clocks_setting and sync_boost, Active after the warm-up
   smi_rows 0x0 0x13
   load_sh core 1 1
@@ -526,14 +516,12 @@ keys() {
 }
 
 @test "#140 case 7a: core: an OK summary and no progress line with an error count gives invalid (lead ruling 2 on #134)" {
-  skip "contract #140 pending"
   MOCK_BURN_OUT="$FIX/core/no-progress.out" load_sh core 1 1
   verdict 3 invalid
   grep -q -x $'\tGPU 0: OK' "$(value log)/tool.out"
 }
 
 @test "#140 case 7b: journalctl exiting 1 with -- No entries -- and text on stderr gives invalid, reason=journal" {
-  skip "contract #140 pending"
   MOCK_JOURNAL_ERR="$FIX/journal/truncated.err" load_sh core 1 1
   verdict 3 invalid
   [ "$(value reason)" = journal ]
@@ -541,7 +529,6 @@ keys() {
 }
 
 @test "#140 case 7c: journalctl exiting 1 with another line next to -- No entries -- on stdout gives invalid, reason=journal" {
-  skip "contract #140 pending"
   MOCK_JOURNAL_NOMATCH="$FIX/journal/header-no-entries.txt" load_sh core 1 1
   verdict 3 invalid
   [ "$(value reason)" = journal ]
@@ -549,7 +536,6 @@ keys() {
 }
 
 @test "#140 case 7d: a sample during the warm-up that cannot be parsed, or that fails, gives invalid (#134 amendment 1, ruling 6)" {
-  skip "contract #140 pending"
   for row in unknown fail; do
     echo "warm-up sample: $row"
     rm -f "$MOCK_STATE"/*
@@ -558,4 +544,42 @@ keys() {
     load_sh core 1 1
     verdict 3 invalid
   done
+}
+
+# Own cases for #140: where reason=short stands among the invalid reasons the contract
+# leaves open (journal, sample and nosample come first), and what the log keeps.
+
+@test "load: a load that ended early and a journal that cannot be read give invalid, reason=journal (#140)" {
+  MOCK_BURN_RUN_MS=1500 MOCK_JOURNAL_ERR="$FIX/journal/truncated.err" load_sh core 1 3
+  verdict 3 invalid
+  [ "$(value reason)" = journal ]
+}
+
+@test "load: a failed sample, after which load.sh ends the load itself, gives invalid, reason=sample, not short (#140)" {
+  MOCK_SMI_ROWS="$FIX/smi/fail-post.rows" load_sh core 1 3
+  verdict 3 invalid
+  [ "$(value reason)" = sample ]
+}
+
+@test "load: a load that ended during the warm-up gives invalid, reason=nosample (#140)" {
+  # the pass fixture's last timed line is at 1.3 s, so the mock ends at 1.5 s of a 2 s warm-up
+  MOCK_BURN_RUN_MS=1500 load_sh core 2 1
+  verdict 3 invalid
+  [ "$(value reason)" = nosample ]
+}
+
+@test "load mem: a short load still reports the read speed it measured, and the log keeps the ms at which the load was seen to end (#140)" {
+  MOCK_MEMTEST_RUN_MS=1700 load_sh mem 1 3 1
+  verdict 3 invalid
+  [ "$(value reason)" = short ]
+  awk -v v="$(value read_gbs)" 'BEGIN { exit !(v == 50) }'
+  ended="$(<"$(value log)/ended")"
+  echo "ended at $ended ms"
+  ((ended >= 1700 && ended < 4000))
+  rm -f "$MOCK_STATE"/*
+  load_sh mem 1 1 1
+  verdict 0 pass
+  ended="$(<"$(value log)/ended")"
+  echo "ended at $ended ms"
+  ((ended >= 2000))
 }

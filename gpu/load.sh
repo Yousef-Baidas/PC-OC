@@ -19,12 +19,15 @@ set -euo pipefail
 #   invalid  build memtest icd (the piece check names), log, journal, sample (nvidia-smi
 #            failed or printed something else), nosample (none after the warm-up),
 #            interrupted, internal
-#   fail     xid; core: faulty (FAULTY summary), errors (a non-zero error count);
-#            mem: errors (Error found, or status bit 1), device-lost
+#   fail     xid; mem: device-lost
+#   invalid  short (the load ended before warm-up + load seconds, whatever it printed and
+#            whatever its status)
+#   fail     core: faulty (FAULTY summary), errors (a non-zero error count);
+#            mem: errors (Error found, or status bit 1)
 #   invalid  core: timeout (killed by timeout), output, died (a burn process died), summary
 #            (not exactly one summary line, GPU 0: OK), progress (no error count seen);
 #            mem: exit (status not 65), output, noread (no read speed after the warm-up)
-#   invalid  limited (a power or thermal limit reason was active after the warm-up)
+#   invalid  limited (a clock limit reason was active after the warm-up)
 #   pass     ok
 # shellcheck source=../lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
@@ -50,14 +53,16 @@ MEMTEST_ERRORS_BIT=2
 MEMTEST_CLEAN=65
 # nvidia-smi --query-gpu fields (smi; each is in `nvidia-smi --help-query-gpu` of driver
 # 615.71): the performance state, the graphics and memory clocks in MHz, the board power in
-# W, the core temperature in C, then the power and thermal clock event reasons, each
-# "Active" or "Not Active".
+# W, the core temperature in C, then the seven clock event reasons that are a limit (power,
+# thermal, the board-level voltage limit, reliability), each "Active" or "Not Active". The
+# other three, gpu_idle, applications_clocks_setting and sync_boost, are not read.
 SMI_FIELDS=pstate,clocks.current.graphics,clocks.current.memory,power.draw,temperature.gpu
 SMI_FIELDS+=,clocks_event_reasons.sw_power_cap,clocks_event_reasons.hw_slowdown
 SMI_FIELDS+=,clocks_event_reasons.hw_thermal_slowdown
 SMI_FIELDS+=,clocks_event_reasons.hw_power_brake_slowdown
 SMI_FIELDS+=,clocks_event_reasons.sw_thermal_slowdown
-SAMPLE_RE='^P([0-9]{1,2}), ([0-9]+), ([0-9]+), [0-9]+(\.[0-9]+)?, [0-9]+((, (Active|Not Active)){5})$'
+SMI_FIELDS+=,clocks_event_reasons.board_limit,clocks_event_reasons.reliability
+SAMPLE_RE='^P([0-9]{1,2}), ([0-9]+), ([0-9]+), [0-9]+(\.[0-9]+)?, [0-9]+((, (Active|Not Active)){7})$'
 # a sample that hangs (a card off the bus) is a failed sample; our own choice of 5 s
 SMI_TIMEOUT_S=5
 
@@ -163,6 +168,7 @@ sample() {
   ((pstate >= pstate_min)) || pstate_min="$pstate"
   ((10#${BASH_REMATCH[2]} <= core_mhz_max)) || core_mhz_max=$((10#${BASH_REMATCH[2]}))
   ((10#${BASH_REMATCH[3]} <= mem_mhz_max)) || mem_mhz_max=$((10#${BASH_REMATCH[3]}))
+  # the seven reason columns as one string: one Active in any of them is a limit
   [[ "${BASH_REMATCH[5]}" != *", Active"* ]] || limited=1
 }
 
@@ -210,10 +216,10 @@ core_verdict() {
   ((progress > 0)) || finish invalid progress
 }
 
-# mem_verdict: finish on what memtest_vulkan printed and its status byte; returns when it
-# is clean. Read speed lines (src/main.rs:1085 at v0.5.0):
+# read_speed: set read_gbs to the median read speed memtest_vulkan printed after the
+# warm-up, when it printed one. Read speed lines (src/main.rs:1085 at v0.5.0):
 # "… written:<n>GB<n>GB/sec        checked:<n>GB<n>GB/sec", each <n> padded with spaces.
-mem_verdict() {
+read_speed() {
   local speeds
   speeds="$(awk -v from="$((warmup * 1000))" '
     $1 + 0 >= from && match($0, /checked: *[0-9.]+GB *[0-9]+(\.[0-9]+)?GB\/sec/) {
@@ -225,9 +231,11 @@ mem_verdict() {
   [[ -z "$speeds" ]] || read_gbs="$(awk '
     { v[NR] = $1 }
     END { printf "%.2f\n", NR % 2 ? v[(1 + NR) / 2] : (v[NR / 2] + v[1 + NR / 2]) / 2 }' <<<"$speeds")"
-  if grep -q -F ERROR_DEVICE_LOST "$log_dir/tool.out" "$log_dir/tool.err"; then
-    finish fail device-lost
-  fi
+}
+
+# mem_verdict: finish on what memtest_vulkan printed and its status byte; returns when it
+# is clean
+mem_verdict() {
   if grep -q -F "Error found" "$log_dir/tool.out" "$log_dir/tool.err"; then
     finish fail errors
   fi
@@ -271,7 +279,7 @@ fi
 warmup="$2"
 total=$(($2 + $3))
 pstate_min="" core_mhz_max="" mem_mhz_max="" limited="" xid="" read_gbs="" log_dir=""
-emitted="" load_pid="" stamp_pid="" interrupted="" output_complete=""
+emitted="" load_pid="" stamp_pid="" interrupted="" output_complete="" ended_ms=""
 trap on_exit EXIT
 trap 'interrupted=1' INT TERM HUP
 
@@ -354,6 +362,8 @@ if [[ -n "$sample_bad" || -n "$interrupted" ]]; then
   stop_load
 else
   wait "$load_pid" || status=$?
+  # when the load was seen to have ended, on the clock of the sample loop
+  ended_ms=$(((${EPOCHREALTIME/[.,]/} - start_us) / 1000))
   if [[ -n "$interrupted" ]]; then
     stop_load
   else
@@ -372,6 +382,7 @@ else
 fi
 rm -f "$log_dir/pipe" || :
 printf '%s\n' "$status" >"$log_dir/status"
+printf '%s\n' "$ended_ms" >"$log_dir/ended"
 
 journal_bad="" code=0
 journalctl -k --after-cursor "$cursor" -g 'NVRM: Xid' \
@@ -392,6 +403,15 @@ fi
 [[ -z "$sample_bad" ]] || finish invalid sample
 [[ -n "$pstate_min" ]] || finish invalid nosample
 ((xid == 0)) || finish fail xid
+if [[ "$kind" == mem ]]; then
+  read_speed
+  # a lost device ends the load early by its nature and is evidence against the clocks
+  if grep -q -F ERROR_DEVICE_LOST "$log_dir/tool.out" "$log_dir/tool.err"; then
+    finish fail device-lost
+  fi
+fi
+# no slack: a load that did not run its whole time proves nothing, whatever it printed
+((ended_ms >= total * 1000)) || finish invalid short
 if [[ "$kind" == core ]]; then core_verdict; else mem_verdict; fi
 ((limited == 0)) || finish invalid limited
 finish pass ok
