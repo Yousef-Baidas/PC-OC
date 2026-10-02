@@ -47,6 +47,14 @@ EOF
   [[ "$stderr" == usage:* ]]
 }
 
+# Contract #126
+@test "the usage line names the search gpu form" {
+  skip "contract #126 pending"
+  run --separate-stderr "$root/pc-oc"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == usage:*"search gpu"* ]]
+}
+
 @test "unknown verb prints usage and exits 2" {
   run --separate-stderr "$root/pc-oc" tune cpu
   [ "$status" -eq 2 ]
