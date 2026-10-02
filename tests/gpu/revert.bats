@@ -110,7 +110,6 @@ CALLS=$'systemctl stop pc-oc-gpu.service\nnvml zero\nsystemctl disable pc-oc-gpu
 }
 
 @test "#127, amended by #142: revert gpu with the unit installed but not enabled calls stop, zero and disable once each, no systemctl cat, and exits 0" {
-  skip "contract #142 pending"
   tuned 216.00 120 500 disabled
   set_snapshot 150.00
   run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
@@ -125,7 +124,6 @@ CALLS=$'systemctl stop pc-oc-gpu.service\nnvml zero\nsystemctl disable pc-oc-gpu
 }
 
 @test "#127 amendment 5, amended by #142: revert gpu with the unit installed calls systemctl stop, nvml zero and systemctl disable, each once and in that order with no systemctl cat before them, and then restores the power limit" {
-  skip "contract #142 pending"
   tuned 216.00 120 500 enabled
   set_snapshot 150.00
   run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
@@ -146,7 +144,6 @@ CALLS=$'systemctl stop pc-oc-gpu.service\nnvml zero\nsystemctl disable pc-oc-gpu
 }
 
 @test "#127 amendment 5, amended by #142: revert gpu never asks is-enabled and never calls systemctl cat, and every systemctl call it makes is stop or disable of pc-oc-gpu.service" {
-  skip "contract #142 pending"
   for unit in enabled disabled missing; do
     for fail in "" MOCK_FAIL_STOP MOCK_FAIL_DISABLE; do
       for snapshot in yes no; do
@@ -167,7 +164,6 @@ CALLS=$'systemctl stop pc-oc-gpu.service\nnvml zero\nsystemctl disable pc-oc-gpu
 }
 
 @test "#127 amendment 5, amended by #142: revert gpu whose stop fails still zeroes the offsets, disables the unit and restores the power limit, exits 1 and names the stop; its calls are stop, zero, disable with no systemctl cat" {
-  skip "contract #142 pending"
   tuned 216.00 120 500 enabled
   set_snapshot 150.00
   export MOCK_FAIL_STOP=1
@@ -183,7 +179,6 @@ CALLS=$'systemctl stop pc-oc-gpu.service\nnvml zero\nsystemctl disable pc-oc-gpu
 }
 
 @test "#127 amendment 5, amended by #142: revert gpu without a snapshot whose stop fails still zeroes the offsets and disables the unit, exits 1 and names the stop; its calls are stop, zero, disable with no systemctl cat" {
-  skip "contract #142 pending"
   tuned 150.00 120 500 enabled
   export MOCK_FAIL_STOP=1
   run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
@@ -243,7 +238,6 @@ CALLS=$'systemctl stop pc-oc-gpu.service\nnvml zero\nsystemctl disable pc-oc-gpu
 }
 
 @test "#127 amendment 5, amended by #142: revert gpu with the unit not installed calls neither stop nor disable, and systemctl not at all" {
-  skip "contract #142 pending"
   tuned 216.00 120 500 missing
   set_snapshot 150.00
   run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
@@ -401,7 +395,6 @@ CALLS=$'systemctl stop pc-oc-gpu.service\nnvml zero\nsystemctl disable pc-oc-gpu
 }
 
 @test "#127 own, amended by #142: revert gpu with the unit not installed says nothing of its own about the unit, and no line of systemctl is in its output since it asks none" {
-  skip "contract #142 pending"
   tuned 216.00 120 500 missing
   set_snapshot 150.00
   run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
@@ -429,7 +422,6 @@ set_root_snapshot() {
 SYSTEMCTL_CAT='^systemctl( .*)? cat( |$)'
 
 @test "#142 case 5: as root revert gpu with a search result present leaves it byte for byte as it was, with a snapshot and without" {
-  skip "contract #142 pending"
   tuned 216.00 210 1300 enabled
   set_result 210 1300
   cp "$RESULT" "$BATS_TEST_TMPDIR/before"
@@ -452,7 +444,6 @@ SYSTEMCTL_CAT='^systemctl( .*)? cat( |$)'
 }
 
 @test "#142 case 5: as root apply gpu from a search result and then revert gpu: offsets zeroed, unit disabled, limit back, snapshot gone, the result as it was" {
-  skip "contract #142 pending"
   set_values 216 120 500
   set_result 210 1300
   cp "$RESULT" "$BATS_TEST_TMPDIR/before"
@@ -470,7 +461,6 @@ SYSTEMCTL_CAT='^systemctl( .*)? cat( |$)'
 }
 
 @test "#142 case 5: revert gpu does not judge the result: one that apply would refuse is left as it was and revert still exits 0" {
-  skip "contract #142 pending"
   tuned 216.00 210 1300 enabled
   result_lines 'core_offset_mhz=-30' 'garbage'
   chmod 0666 "$RESULT"
@@ -494,7 +484,6 @@ SYSTEMCTL_CAT='^systemctl( .*)? cat( |$)'
 }
 
 @test "#142 case 6: revert gpu with the unit file present and every systemctl call failing still attempts stop and disable, zeroes the offsets, restores the limit, names both as failed and exits 1" {
-  skip "contract #142 pending"
   tuned 216.00 120 500 missing
   unit_file present
   set_snapshot 150.00
@@ -509,7 +498,6 @@ SYSTEMCTL_CAT='^systemctl( .*)? cat( |$)'
 }
 
 @test "#142 case 6: the same without a snapshot: stop and disable attempted and named as failed, offsets zeroed, exit 1" {
-  skip "contract #142 pending"
   tuned 150.00 120 500 missing
   unit_file present
   run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
@@ -522,7 +510,6 @@ SYSTEMCTL_CAT='^systemctl( .*)? cat( |$)'
 }
 
 @test "#142 case 6: revert gpu with no unit file makes no systemctl call at all, zeroes the offsets, restores the limit and exits 0, even when systemctl would answer for an enabled unit" {
-  skip "contract #142 pending"
   tuned 216.00 120 500 enabled
   unit_file absent
   set_snapshot 150.00
@@ -547,7 +534,6 @@ SYSTEMCTL_CAT='^systemctl( .*)? cat( |$)'
 }
 
 @test "#142 case 6: revert gpu counts a dangling symlink at the unit path as installed: stop, zero, disable" {
-  skip "contract #142 pending"
   tuned 216.00 120 500 enabled
   unit_file dangling
   set_snapshot 150.00
@@ -559,7 +545,6 @@ SYSTEMCTL_CAT='^systemctl( .*)? cat( |$)'
 }
 
 @test "#142 case 6: as root pc-oc revert gpu decides by the unit file the same way: none, no systemctl call; present with systemctl failing, stop and disable named and exit 1" {
-  skip "contract #142 pending"
   tuned 216.00 120 500 enabled
   unit_file absent
   set_root_snapshot 150.00
@@ -579,7 +564,6 @@ SYSTEMCTL_CAT='^systemctl( .*)? cat( |$)'
 }
 
 @test "#142 case 6: revert gpu never calls systemctl cat: unit file present, absent or dangling, systemctl answering enabled, disabled or failing, with a snapshot and without" {
-  skip "contract #142 pending"
   for file in present absent dangling; do
     for unit in enabled disabled missing; do
       for snapshot in yes no; do
@@ -603,8 +587,57 @@ SYSTEMCTL_CAT='^systemctl( .*)? cat( |$)'
 }
 
 @test "#142 case 8: gpu/revert.sh names the unit file by the one path os/install.sh installs it to, with no variable in front" {
-  skip "contract #142 pending"
   want="$(installed_unit_path)"
   [ "$want" = /etc/systemd/system/pc-oc-gpu.service ]
   [ "$(named_unit_paths "$BATS_TEST_DIRNAME/../../gpu/revert.sh")" = "$want" ]
+}
+
+# Worker cases for #142: what the contract leaves open and gpu/revert.sh settles.
+
+# CALLER_ENVS: what a caller may leave in the environment, one env(1) argument each; none
+# of it may change what revert does
+CALLER_ENVS=('IFS=0123456789=_ms' 'POSIXLY_CORRECT=1' 'TMPDIR=/nonexistent/pc-oc-142'
+  'SHELLOPTS=noglob:posix:physical' 'CDPATH=/etc' 'GLOBIGNORE=*')
+
+@test "#142 own: as root revert gpu makes the same calls and leaves the result alone whatever IFS, POSIXLY_CORRECT, TMPDIR, SHELLOPTS, CDPATH or GLOBIGNORE the caller left in the environment: unit file present, and absent" {
+  set_result 210 1300
+  cp "$RESULT" "$BATS_TEST_TMPDIR/before"
+  for env in "${CALLER_ENVS[@]}" all; do
+    args=("$env")
+    [ "$env" != all ] || args=("${CALLER_ENVS[@]}")
+    reset_logs
+    tuned 216.00 210 1300 enabled
+    set_root_snapshot 150.00
+    run --separate-stderr in_ns_root /usr/bin/env "${args[@]}" /usr/bin/bash "$REPO/pc-oc" revert gpu
+    [ "$status" -eq 0 ] || printf 'env %s: status %s\n%s\n' "$env" "$status" "$stderr" >&2
+    [ "$status" -eq 0 ]
+    [ "$(grep -v '^nvidia-smi ' "$MOCK_STATE/order")" = "$CALLS" ]
+    [ "$(cat "$MOCK_STATE/offsets")" = "0 0" ]
+    [ "$(cat "$MOCK_STATE/unit")" = "disabled" ]
+    [ "$(cat "$MOCK_STATE/pl")" = "150.00" ]
+    [ ! -e "$BATS_TEST_TMPDIR/varlib/pc-oc/gpu/stock" ]
+    [ "$output$stderr" = "" ]
+    cmp "$RESULT" "$BATS_TEST_TMPDIR/before"
+    reset_logs
+    tuned 216.00 210 1300 enabled
+    unit_file absent
+    run --separate-stderr in_ns_root /usr/bin/env "${args[@]}" /usr/bin/bash "$REPO/pc-oc" revert gpu
+    [ "$status" -eq 0 ]
+    [ "$(logged '^systemctl')" -eq 0 ]
+    [ "$(logged '^nvml zero$')" -eq 1 ]
+    [ "$(cat "$MOCK_STATE/offsets")" = "0 0" ]
+    [ "$(cat "$MOCK_STATE/unit")" = "enabled" ]
+    cmp "$RESULT" "$BATS_TEST_TMPDIR/before"
+  done
+}
+
+@test "#142 own: revert gpu counts a directory at the unit path as installed, like any other file there: stop, zero, disable" {
+  tuned 216.00 120 500 enabled
+  rm -f "$UNIT_FILE"
+  mkdir "$UNIT_FILE"
+  set_snapshot 150.00
+  run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
+  [ "$status" -eq 0 ]
+  [ "$(grep -v '^nvidia-smi ' "$MOCK_STATE/order")" = "$CALLS" ]
+  [ "$(cat "$MOCK_STATE/unit")" = "disabled" ]
 }

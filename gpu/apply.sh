@@ -1,8 +1,11 @@
 #!/usr/bin/bash
 set -euo pipefail
-# Apply gpu/values: the power limit via nvidia-smi -pl, read back; then the two clock
+# Apply the power limit of gpu/values via nvidia-smi -pl, read back; then the two clock
 # offsets through nvml.py (ADR 0003), which reads each write back itself; then make sure
 # the boot unit is enabled. The unit is never started: at boot this script is its start.
+# The offsets are those of the search result (gpu/search.sh) when a result path exists,
+# and those of gpu/values only when none does: a result that cannot be trusted is refused
+# before anything is written, never replaced by gpu/values.
 here="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=../lib/common.sh
 source "$here/../lib/common.sh"
@@ -32,17 +35,118 @@ back_out() {
   die gpu "$1; nvml.py zero failed as well, clock offsets may still be set: run pc-oc revert gpu"
 }
 
-pl_w="" core_offset_mhz="" mem_offset_mhz=""
+# search_result <path>: judge the search result at <path> and set result_state to
+#   none     nothing is at <path>: the offsets come from gpu/values
+#   good     result_core and result_mem hold its two offsets
+#   refused  result_why says what is wrong, and nothing of the file may be used
+# The directory and then the file are judged by owner, type and mode before the file is
+# opened (stat without -L reads a symlink itself), and the content as a whole before a
+# number leaves here: exactly the three lines gpu/search.sh writes, to the byte. The
+# numbers are matched text and are only ever arguments of nvml.py, whose caps hold.
+# The content is read with probe_read, so a probe that opened the file names it in its
+# header; in apply that record is never printed.
+# This function stands in gpu/apply.sh and gpu/probe.sh with the same text
+# (tests/gpu/apply.bats compares them): no file that both could source is installed.
+# shellcheck disable=SC2034 # apply reads the two numbers, probe does not
+search_result() {
+  local LC_ALL=C path="$1" dir="${1%/*}" up st uid mode
+  local re_stat='^([0-9]+) ([0-9a-f]+)$'
+  local re_lines=$'^core_offset_mhz=(0|[1-9][0-9]{0,3})\nmem_offset_mhz=(0|[1-9][0-9]{0,3})\nfinished=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\n$'
+  # refused until proven otherwise: a return that sets nothing is a refusal
+  result_state=refused result_why="" result_core="" result_mem=""
+
+  if [[ ! -e "$path" && ! -L "$path" ]]; then
+    # "not there" is only known when the first directory above that exists can be searched
+    up="$dir"
+    while [[ ! -e "$up" && ! -L "$up" && "$up" == */* ]]; do up="${up%/*}"; done
+    if [[ -d "$up" && ! -x "$up" ]]; then
+      result_why="cannot tell whether there is a search result at $path: no permission to look into $up"
+      return 0
+    fi
+    result_state=none
+    return 0
+  fi
+
+  result_why="search result $path refused: "
+  if ! st="$(LC_ALL=C /usr/bin/stat -c '%u %f' -- "$dir" 2>/dev/null)" || [[ ! "$st" =~ $re_stat ]]; then
+    result_why+="cannot read owner and mode of $dir"
+    return 0
+  fi
+  uid="${BASH_REMATCH[1]}" mode="$((16#${BASH_REMATCH[2]}))"
+  if (((mode & 0xF000) != 0x4000)); then
+    result_why+="$dir is not a directory"
+    return 0
+  elif [[ "$uid" != 0 ]]; then
+    result_why+="$dir belongs to uid $uid, not to uid 0"
+    return 0
+  elif (((mode & 022) != 0)); then
+    result_why+="$dir is writable by group or others"
+    return 0
+  fi
+
+  if ! st="$(LC_ALL=C /usr/bin/stat -c '%u %f' -- "$path" 2>/dev/null)" || [[ ! "$st" =~ $re_stat ]]; then
+    result_why+="cannot read its owner and mode"
+    return 0
+  fi
+  uid="${BASH_REMATCH[1]}" mode="$((16#${BASH_REMATCH[2]}))"
+  if (((mode & 0xF000) != 0x8000)); then
+    result_why+="it is not a regular file"
+    return 0
+  elif [[ "$uid" != 0 ]]; then
+    result_why+="it belongs to uid $uid, not to uid 0"
+    return 0
+  elif (((mode & 022) != 0)); then
+    result_why+="it is writable by group or others"
+    return 0
+  fi
+
+  # probe_read would end the script on a file it cannot read
+  if [[ ! -r "$path" ]]; then
+    result_why+="no permission to read it"
+    return 0
+  fi
+  probe_read "$path"
+  # bash keeps the bytes up to the first NUL byte, and what follows one would go unjudged.
+  # read returns 0 only when it met its delimiter, which here is that byte
+  if { read -r -d '' _ <"$path"; } 2>/dev/null; then
+    result_why+="it holds a NUL byte"
+    return 0
+  fi
+  if [[ ! "$PROBE_CONTENT" =~ $re_lines ]]; then
+    result_why+="it is not the three lines gpu/search.sh writes (core_offset_mhz=, mem_offset_mhz=, finished=)"
+    return 0
+  fi
+  result_core="${BASH_REMATCH[1]}" result_mem="${BASH_REMATCH[2]}"
+  result_state=good result_why=""
+}
+
+pl_w="" values_core="" values_mem=""
 [[ -r "$here/values" ]] || die gpu "cannot read $here/values"
 while IFS= read -r line || [[ -n "$line" ]]; do
   if [[ "$line" =~ ^pl_w=([1-9][0-9]{0,3})([[:space:]]|$) ]]; then pl_w="${BASH_REMATCH[1]}"; fi
   # the helper takes 0 or a positive whole number of MHz and holds the caps (nvml-offset-t)
-  if [[ "$line" =~ ^core_offset_mhz=(0|[1-9][0-9]{0,3})([[:space:]]|$) ]]; then core_offset_mhz="${BASH_REMATCH[1]}"; fi
-  if [[ "$line" =~ ^mem_offset_mhz=(0|[1-9][0-9]{0,3})([[:space:]]|$) ]]; then mem_offset_mhz="${BASH_REMATCH[1]}"; fi
+  if [[ "$line" =~ ^core_offset_mhz=(0|[1-9][0-9]{0,3})([[:space:]]|$) ]]; then values_core="${BASH_REMATCH[1]}"; fi
+  if [[ "$line" =~ ^mem_offset_mhz=(0|[1-9][0-9]{0,3})([[:space:]]|$) ]]; then values_mem="${BASH_REMATCH[1]}"; fi
 done <"$here/values"
 [[ -n "$pl_w" ]] || die gpu "no pl_w in $here/values"
-[[ -n "$core_offset_mhz" ]] || die gpu "no core_offset_mhz in $here/values (0, or 1 to 9999 with no sign and no leading zero)"
-[[ -n "$mem_offset_mhz" ]] || die gpu "no mem_offset_mhz in $here/values (0, or 1 to 9999 with no sign and no leading zero)"
+[[ -n "$values_core" ]] || die gpu "no core_offset_mhz in $here/values (0, or 1 to 9999 with no sign and no leading zero)"
+[[ -n "$values_mem" ]] || die gpu "no mem_offset_mhz in $here/values (0, or 1 to 9999 with no sign and no leading zero)"
+
+# the two offsets get their value here and nowhere else: from the result when a result
+# path exists, from gpu/values when none does, and from neither when the result is refused
+state="$(pc_oc_state)" || die gpu "pc_oc_state failed"
+search_result "$state/gpu/search/result"
+case "$result_state" in
+  none)
+    core_offset_mhz="$values_core" mem_offset_mhz="$values_mem"
+    from="gpu/values"
+    ;;
+  good)
+    core_offset_mhz="$result_core" mem_offset_mhz="$result_mem"
+    from="search result"
+    ;;
+  *) die gpu "$result_why; nothing was written, and gpu/values is not used in its place" ;;
+esac
 
 pl_check "$pl_w"
 
@@ -50,7 +154,12 @@ pl_check "$pl_w"
 # anything is read from the card for the snapshot or written to it
 systemctl cat "$unit" >/dev/null || die gpu "boot unit not installed: run sudo os/install.sh"
 
-stock="$(pc_oc_state)/gpu/stock"
+# the one line of stdout, before anything is created or written: an apply that cannot say
+# where its offsets come from does not set them
+printf 'gpu: offsets core=%s mem=%s from %s\n' "$core_offset_mhz" "$mem_offset_mhz" "$from" ||
+  die gpu "cannot write to stdout, nothing was written"
+
+stock="$state/gpu/stock"
 made=""
 if [[ ! -e "$stock" ]]; then
   snap="$(bash "$here/probe.sh")" || die gpu "probe failed"

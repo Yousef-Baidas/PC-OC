@@ -3,7 +3,9 @@ set -euo pipefail
 # Undo apply in four parts: stop the boot unit, zero the clock offsets through nvml.py
 # (ADR 0003), disable the unit, restore the stock power limit recorded in the snapshot and
 # drop the snapshot. Every part runs even when an earlier one failed; the failed parts are
-# named at the end. The unit is never started.
+# named at the end. The unit is never started. The search result (gpu/search.sh) is a
+# measurement, not a setting: revert neither reads nor removes it, and with the unit
+# disabled nothing sets its offsets again until the next apply.
 here="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=../lib/common.sh
 source "$here/../lib/common.sh"
@@ -34,10 +36,13 @@ pl_restore() {
   rmdir -- "$(dirname "$stock")" 2>/dev/null || :
 }
 
-# cat alone decides whether the unit is installed; one that is not has nothing to stop or
-# disable. Its stderr is left: it says why the unit counts as not installed
+# installed is the unit file where os/install.sh puts it, a dangling symlink included, and
+# not an answer of the system manager: a systemctl that cannot reach systemd fails every
+# question, and "not installed" read from that would skip stop and disable and leave an
+# enabled unit behind an exit 0. A unit that is not installed has nothing to stop or
+# disable, and systemctl is not called at all
 installed=""
-if systemctl cat "$unit" >/dev/null; then installed=1; fi
+if [[ -e "/etc/systemd/system/$unit" || -L "/etc/systemd/system/$unit" ]]; then installed=1; fi
 
 # first, before the zero: the unit restarts on failure, and a restart systemd still has
 # pending, or a start that is still running, would set the offsets again. stop cancels the
