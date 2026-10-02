@@ -119,7 +119,8 @@ if [ -n "$base_name" ]; then
   done
   for key in "${AXES[@]}"; do
     nv="${nset[$key]-n/a}" bv="${bset[$key]-n/a}"
-    if [ "$nv" = "$bv" ]; then
+    # an axis missing on either side differs, even from a value spelled n/a
+    if [ -n "${nset[$key]+x}" ] && [ -n "${bset[$key]+x}" ] && [ "$nv" = "$bv" ]; then
       same+=("$key")
     else
       differ+=("$key")
@@ -152,7 +153,7 @@ trap 'rm -f "$tmp"' EXIT
     printf '\n## Comparability\n\n%s' "$notcomp"
     if [ "${#same[@]}" -gt 0 ]; then
       printf 'Same on: %s' "${same[0]}"
-      printf ', %s' "${same[@]:1}"
+      [ "${#same[@]}" -eq 1 ] || printf ', %s' "${same[@]:1}"
       printf '\n'
     fi
   fi
