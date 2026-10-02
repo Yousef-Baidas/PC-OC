@@ -2127,3 +2127,112 @@ end_lines() {
   no_load
   said 'could not be printed'
 }
+
+# The two stand-ins below are bound for the test that asks for them only: guard.sh binds
+# every file of $GUARD_MOCKS, which is this test's own copy of the mocks.
+
+# sync_mock: /usr/bin/sync is a stand-in that returns at once and records each call as
+# "sync <arguments> @<core>/<mem>" in the events, the offsets being those the mock helper
+# holds at that moment
+sync_mock() {
+  cat >"$GUARD_MOCKS/sync" <<'MOCK'
+#!/usr/bin/bash
+# pc-oc-test-mock
+set -u
+s=/var/lib/pc-oc-test-mock
+[[ -e "$s/scratch" ]] || exit 96
+core=0 mem=0
+[[ ! -e "$s/nvml.core" ]] || core="$(<"$s/nvml.core")"
+[[ ! -e "$s/nvml.mem" ]] || mem="$(<"$s/nvml.mem")"
+printf 'sync %s @%s/%s\n' "$*" "$core" "$mem" >>"$s/events"
+exit 0
+MOCK
+  chmod +x "$GUARD_MOCKS/sync"
+}
+
+# date_mock <n> <signal>: /usr/bin/date is a stand-in that prints a fixed time; its nth
+# call sends the signal to the search first, so the signal is there while log_step writes
+# the line of that call
+date_mock() {
+  cat >"$GUARD_MOCKS/date" <<'MOCK'
+#!/usr/bin/bash
+# pc-oc-test-mock
+set -u
+s=/var/lib/pc-oc-test-mock
+[[ -e "$s/scratch" ]] || exit 96
+printf 'date %s\n' "$*" >>"$s/events"
+if [[ -e "$s/date.signal" ]]; then
+  read -r nth signal <"$s/date.signal"
+  if [[ "$(grep -c '^date ' "$s/events")" == "$nth" ]]; then
+    kill -s "$signal" "$(<"$s/search.pid")"
+    printf '%s\n' "$signal" >"$s/date.sent"
+  fi
+fi
+echo 2026-01-01T00:00:00Z
+MOCK
+  chmod +x "$GUARD_MOCKS/date"
+  printf '%s %s\n' "$1" "$2" >"$MOCK/date.signal"
+}
+
+# syncs_of_log: the recorded sync calls of this start that name the log
+syncs_of_log() {
+  calls sync | grep -E '(^| )[^ ]*/log @' || true
+}
+
+@test "search: own: #150: no sync stands between a set offset and its zero that was not there before: none ahead of the zero of a start that finds a pending step, none on the way out after a signal, and the log is synced once, ahead of the end lines" {
+  sync_mock
+  # a start that finds the pending step of a killed start, core 150 still set
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  search
+  status_is 0
+  [ "$(sed -n '/^nvml zero$/q;p' "$MOCK/events" | grep -c '^sync ')" -eq 0 ]
+  [ "$(first '^sync ')" -gt "$(first '^nvml zero$')" ]
+  logged 150 0 fail crash
+  ends_at_zero
+  # TERM during a load: nothing is synced from the start of that load to the zero
+  fresh
+  signalled TERM
+  [ -z "$(syncs_of_log)" ]
+  [ "$(tac "$MOCK/events" | sed -n '/^setpriv /q;p' | grep -c '^sync ')" -eq 0 ]
+  logged 120 0 invalid signal
+  # a search to its end: every step line is in the log, which is synced once, behind the
+  # result file and ahead of the end lines
+  fresh
+  search
+  all_passed
+  [ "$(wc -l <"$STATE/log")" -eq 24 ]
+  [ "$(syncs_of_log | wc -l)" -eq 1 ]
+  [ "$(calls sync | tail -n 1)" = "$(syncs_of_log)" ]
+  [[ "$(calls sync | tail -n 2 | head -n 1)" == "-- /var/lib/pc-oc/gpu/search @"* ]]
+}
+
+@test "search: own: #150: a signal that arrives while the line of a step is written does not log the step twice: the line stands once with its verdict, the search ends there, and zero runs" {
+  # the two baseline lines take the first two calls of date, the core step at 90 the third
+  date_mock 3 INT
+  search
+  [ "$(<"$MOCK/date.sent")" = INT ]
+  status_is 1
+  said 'got a signal'
+  ends_at_zero
+  [ "$(grep -c ' phase=core core=90 mem=0 result=' "$STATE/log")" -eq 1 ]
+  logged 90 0 pass ok
+  # the search ends at that line, not at the next load: nothing is set after it
+  [ "$(calls nvml | grep -c '^set ')" -eq 2 ]
+  [ "$(wc -l <"$STATE/log")" -eq 3 ]
+  # the same while the start that finds a pending step writes its crash line, core 150 set
+  fresh
+  rm "$GUARD_MOCKS/date"
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  date_mock 1 TERM
+  search
+  [ "$(<"$MOCK/date.sent")" = TERM ]
+  status_is 1
+  said 'got a signal'
+  ends_at_zero
+  [ "$(grep -c ' phase=core core=150 mem=0 result=' "$STATE/log")" -eq 1 ]
+  logged 150 0 fail crash
+  no_set
+  no_load
+}

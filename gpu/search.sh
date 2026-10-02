@@ -153,14 +153,18 @@ put() {
 }
 
 # log_step <result> <reason> [field]: one line of the log for the step at hand, and the same
-# on stdout; the field of #150, with its leading space, ends both. The line goes onto the
-# disk as far as that can be had: report reads its two lines from the log, and the start
-# after a freeze must find them (a sync that fails here is caught by the one before report).
+# on stdout; the field of #150, with its leading space, ends both. Nothing here may wait:
+# on_exit and the start that finds a pending step call it with an offset set, ahead of zero.
+# A signal is only noted until the line is written and known to be: on_exit would write
+# the step a second time otherwise.
 log_step() {
+  local held="$hold"
+  hold=1
   printf '%s result=%s reason=%s%s\n' "$step" "$1" "$2" "${3-}" || unheard=1
   printf '%s %s result=%s reason=%s%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$step" "$1" "$2" "${3-}" >>"$state/log"
-  sync -- "$state/log" 2>/dev/null || true
   step_logged=1
+  hold="$held"
+  [[ -n "$hold" || -z "$signalled" ]] || stop "got a signal: the search ends here. $again"
 }
 
 # load_ended: the load has left; as a child not yet waited for it is a zombie then
@@ -222,6 +226,7 @@ on_exit() {
   local status=$?
   trap '' INT TERM HUP
   set +e
+  hold=1
   if [[ -n "$timer_pid" ]]; then
     kill -KILL "$timer_pid" 2>/dev/null
     wait "$timer_pid" 2>/dev/null
