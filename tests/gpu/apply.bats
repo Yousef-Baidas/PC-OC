@@ -283,6 +283,77 @@ FAKE
   no_start "$BATS_TEST_TMPDIR/planted"
 }
 
+@test "harness: the systemctl mock's term, hup and int actions do the enable or the is-enabled and then reach a gpu/apply.sh that traps them, but not before set mem is logged" {
+  # a stand-in apply: asks is-enabled before the offsets, as the snapshot's probe does,
+  # then sets one offset, then calls the verb the case passes
+  cat >"$REPO/gpu/apply.sh" <<'FAKE'
+trap 'echo got-TERM; exit 7' TERM
+trap 'echo got-HUP; exit 7' HUP
+trap 'echo got-INT; exit 7' INT
+systemctl is-enabled --quiet pc-oc-gpu.service
+echo "early-$?"
+/usr/bin/python3 -I "$(dirname "$0")/nvml.py" set mem 5 >/dev/null
+systemctl "$@" pc-oc-gpu.service
+echo not-reached
+FAKE
+  for sig in TERM HUP INT; do
+    reset_logs
+    printf 'disabled\n' >"$MOCK_STATE/unit"
+    export MOCK_SYSTEMCTL="enable=${sig,,}"
+    run --separate-stderr in_ns bash "$REPO/gpu/apply.sh" enable
+    [ "$status" -eq 7 ]
+    [ "$output" = "early-1"$'\n'"got-$sig" ]
+    [[ "$(cat "$MOCK_STATE/signalled")" =~ ^$sig\ [0-9]+$ ]]
+    [ "$(cat "$MOCK_STATE/unit")" = "enabled" ]
+
+    reset_logs
+    printf 'disabled\n' >"$MOCK_STATE/unit"
+    export MOCK_SYSTEMCTL="is-enabled=${sig,,}"
+    run --separate-stderr in_ns bash "$REPO/gpu/apply.sh" is-enabled --quiet
+    [ "$status" -eq 7 ]
+    [ "$output" = "early-1"$'\n'"got-$sig" ]
+    [[ "$(cat "$MOCK_STATE/signalled")" =~ ^$sig\ [0-9]+$ ]]
+    [ "$(logged "$IS_ENABLED")" -eq 2 ]
+    [ "$(cat "$MOCK_STATE/unit")" = "disabled" ]
+  done
+  # a refused enable signals too, and changes nothing
+  reset_logs
+  printf 'disabled\n' >"$MOCK_STATE/unit"
+  export MOCK_SYSTEMCTL='enable=term' MOCK_FAIL_ENABLE=1
+  run --separate-stderr in_ns bash "$REPO/gpu/apply.sh" enable
+  [ "$status" -eq 7 ]
+  [[ "$(cat "$MOCK_STATE/signalled")" =~ ^TERM\ [0-9]+$ ]]
+  [ "$(cat "$MOCK_STATE/unit")" = "disabled" ]
+  # an entry the mock does not know is an error of the case, not a silent no-op
+  export MOCK_SYSTEMCTL='enable=quit'
+  run --separate-stderr in_ns /usr/bin/systemctl enable pc-oc-gpu.service
+  [ "$status" -eq 94 ]
+}
+
+@test "harness: the systemctl mock logs stop and changes nothing on it, refuses it for a unit that is not installed or with MOCK_FAIL_STOP=1, and the start check does not trip on it" {
+  for state in enabled disabled; do
+    printf '%s\n' "$state" >"$MOCK_STATE/unit"
+    run --separate-stderr in_ns /usr/bin/systemctl stop pc-oc-gpu.service
+    [ "$status" -eq 0 ]
+    [ -z "$output$stderr" ]
+    [ "$(cat "$MOCK_STATE/unit")" = "$state" ]
+  done
+  export MOCK_FAIL_STOP=1
+  run --separate-stderr in_ns /usr/bin/systemctl stop pc-oc-gpu.service
+  [ "$status" -eq 1 ]
+  [ "$stderr" = "mock systemctl: refused" ]
+  unset MOCK_FAIL_STOP
+  printf 'missing\n' >"$MOCK_STATE/unit"
+  run --separate-stderr in_ns /usr/bin/systemctl stop pc-oc-gpu.service
+  [ "$status" -eq 1 ]
+  [ "$(logged '^systemctl stop pc-oc-gpu\.service$')" -eq 4 ]
+  [ "$(wc -l <"$MOCK_STATE/order")" -eq 4 ]
+  no_start "$MOCK_STATE/order"
+  printf 'systemctl stop --now pc-oc-gpu.service\n' >"$BATS_TEST_TMPDIR/planted"
+  run no_start "$BATS_TEST_TMPDIR/planted"
+  [ "$status" -eq 1 ]
+}
+
 # Contract #127: gpu/apply.sh sets the clock offsets through nvml.py and enables the boot unit.
 
 @test "#127 case 1: apply gpu with offsets 120 and 500 writes the limit, reads it back, sets core then mem, checks then enables the unit, and exits 0" {
@@ -542,6 +613,101 @@ signalled() {
   [ -n "$zeroed" ]
   [ -n "$not_zeroed" ]
   [ "$zeroed" != "$not_zeroed" ]
+}
+
+# Amendment 5: once set core and set mem have both exited 0 the apply is committed. TERM,
+# HUP and INT are ignored from there to the end, and the back-out never runs after that.
+
+# committed <signal> <verb>: an apply that gets <signal> from the systemctl mock during its
+# own <verb> call, which comes after both sets, ends as an apply that got no signal: exit 0,
+# the calls of case 1 and no other, both offsets as set, the unit enabled, no zero
+committed() {
+  reset_logs
+  tuned 150.00 0 0 disabled
+  set_values 216 120 500
+  export MOCK_SYSTEMCTL="$2=${1,,}"
+  run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
+  [[ "$(cat "$MOCK_STATE/signalled")" =~ ^$1\ [0-9]+$ ]]
+  [ "$status" -eq 0 ]
+  [ "$(logged '^nvml zero$')" -eq 0 ]
+  want=$'nvidia-smi -pl 216\nnvidia-smi --query-gpu=power.limit --format=csv,noheader,nounits\nnvml set core 120\nnvml set mem 500\nsystemctl is-enabled --quiet pc-oc-gpu.service\nsystemctl enable pc-oc-gpu.service'
+  [ "$(sed -n '/^nvidia-smi -pl /,$p' "$MOCK_STATE/order")" = "$want" ]
+  [ "$(cat "$MOCK_STATE/pl")" = "216.00" ]
+  [ "$(cat "$MOCK_STATE/offsets")" = "120 500" ]
+  [ "$(cat "$MOCK_STATE/unit")" = "enabled" ]
+}
+
+@test "#127 amendment 5: apply gpu that gets TERM during enable exits 0 with the unit enabled, both offsets as set and no zero call" {
+  skip "contract #127 pending"
+  committed TERM enable
+}
+
+@test "#127 amendment 5: apply gpu that gets HUP during enable exits 0 with the unit enabled, both offsets as set and no zero call" {
+  skip "contract #127 pending"
+  committed HUP enable
+}
+
+@test "#127 amendment 5: apply gpu that gets INT during enable exits 0 with the unit enabled, both offsets as set and no zero call" {
+  skip "contract #127 pending"
+  committed INT enable
+}
+
+@test "#127 amendment 5: apply gpu that gets TERM, HUP or INT after set mem returned, while it asks is-enabled, still enables the unit, exits 0 and calls no zero" {
+  skip "contract #127 pending"
+  committed TERM is-enabled
+  committed HUP is-enabled
+  committed INT is-enabled
+}
+
+@test "#127 amendment 5: apply gpu with the unit already enabled that gets TERM while it asks is-enabled exits 0 with both offsets as set, no zero and no enable" {
+  skip "contract #127 pending"
+  tuned 150.00 0 0 enabled
+  set_values 216 120 500
+  export MOCK_SYSTEMCTL='is-enabled=term'
+  run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
+  [[ "$(cat "$MOCK_STATE/signalled")" =~ ^TERM\ [0-9]+$ ]]
+  [ "$status" -eq 0 ]
+  [ "$(logged '^nvml zero$')" -eq 0 ]
+  [ "$(logged "$SWITCH")" -eq 0 ]
+  [ "$(cat "$MOCK_STATE/offsets")" = "120 500" ]
+  [ "$(cat "$MOCK_STATE/unit")" = "enabled" ]
+}
+
+@test "#127 amendment 5: apply gpu whose enable fails while TERM arrives ends as a failed enable without a signal: exit 1, the same message, both offsets left set, no zero" {
+  skip "contract #127 pending"
+  set_values 216 120 500
+  export MOCK_FAIL_ENABLE=1
+  run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 1 ]
+  [ "$(logged '^systemctl enable pc-oc-gpu\.service$')" -eq 1 ]
+  [ "$(logged '^nvml zero$')" -eq 0 ]
+  [ "$(cat "$MOCK_STATE/offsets")" = "120 500" ]
+  plain="$(own_messages)"
+  [ -n "$plain" ]
+  reset_logs
+  tuned 150.00 0 0 disabled
+  export MOCK_SYSTEMCTL='enable=term'
+  run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
+  [[ "$(cat "$MOCK_STATE/signalled")" =~ ^TERM\ [0-9]+$ ]]
+  [ "$status" -eq 1 ]
+  [ "$(logged '^systemctl enable pc-oc-gpu\.service$')" -eq 1 ]
+  [ "$(logged '^nvml zero$')" -eq 0 ]
+  [ "$(cat "$MOCK_STATE/offsets")" = "120 500" ]
+  [ "$(cat "$MOCK_STATE/unit")" = "disabled" ]
+  [ "$(own_messages)" = "$plain" ]
+}
+
+@test "#127 amendment 5: apply gpu with both offsets 0 and the unit disabled sets both to 0, then checks and enables the unit once, and exits 0" {
+  skip "contract #127 pending"
+  tuned 150.00 120 500 disabled
+  set_values 216 0 0
+  run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 0 ]
+  want=$'nvidia-smi -pl 216\nnvidia-smi --query-gpu=power.limit --format=csv,noheader,nounits\nnvml set core 0\nnvml set mem 0\nsystemctl is-enabled --quiet pc-oc-gpu.service\nsystemctl enable pc-oc-gpu.service'
+  [ "$(sed -n '/^nvidia-smi -pl /,$p' "$MOCK_STATE/order")" = "$want" ]
+  [ "$(logged "$ENABLE")" -eq 1 ]
+  [ "$(cat "$MOCK_STATE/offsets")" = "0 0" ]
+  [ "$(cat "$MOCK_STATE/unit")" = "enabled" ]
 }
 
 @test "#127 case 15: no systemctl call of a first apply, a repeat apply, a failed apply or a signalled apply has start or --now in it" {
