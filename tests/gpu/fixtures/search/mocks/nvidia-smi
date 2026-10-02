@@ -1,0 +1,28 @@
+#!/usr/bin/bash
+# pc-oc-test-mock
+# Mock nvidia-smi for tests/gpu/search.bats (contract #135); guard.sh binds it over
+# /usr/bin/nvidia-smi. It answers the one query pl_verify makes (gpu/pl.sh),
+#   --query-gpu=power.limit --format=csv,noheader,nounits
+# with the content of smi.limit. Any other call, a setting above all, is recorded and
+# exits 9 with nothing on stdout.
+# State directory: /var/lib/pc-oc-test-mock
+#   events          "nvidia-smi <arguments>" per call
+#   smi.limit       the power limit read back, for example 216.00
+#   nvidia-smi.env  the environment of every call
+set -u
+s=/var/lib/pc-oc-test-mock
+[[ -e "$s/scratch" ]] || {
+  echo "mock nvidia-smi: $s is not the test scratch" >&2
+  exit 96
+}
+{
+  echo "-- nvidia-smi $*"
+  /usr/bin/env
+} >>"$s/nvidia-smi.env"
+printf 'nvidia-smi %s\n' "$*" >>"$s/events"
+if [[ "$*" == "--query-gpu=power.limit --format=csv,noheader,nounits" ]]; then
+  cat "$s/smi.limit"
+  exit 0
+fi
+echo "mock nvidia-smi: unexpected args: $*" >&2
+exit 9

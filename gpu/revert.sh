@@ -1,8 +1,9 @@
 #!/usr/bin/bash
 set -euo pipefail
-# Undo apply in three parts: zero the clock offsets through nvml.py (ADR 0003), disable the
-# boot unit, restore the stock power limit recorded in the snapshot and drop the snapshot.
-# Every part runs even when an earlier one failed; the failed parts are named at the end.
+# Undo apply in four parts: stop the boot unit, zero the clock offsets through nvml.py
+# (ADR 0003), disable the unit, restore the stock power limit recorded in the snapshot and
+# drop the snapshot. Every part runs even when an earlier one failed; the failed parts are
+# named at the end. The unit is never started.
 here="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=../lib/common.sh
 source "$here/../lib/common.sh"
@@ -33,12 +34,24 @@ pl_restore() {
   rmdir -- "$(dirname "$stock")" 2>/dev/null || :
 }
 
+# cat alone decides whether the unit is installed; one that is not has nothing to stop or
+# disable. Its stderr is left: it says why the unit counts as not installed
+installed=""
+if systemctl cat "$unit" >/dev/null; then installed=1; fi
+
+# first, before the zero: the unit restarts on failure, and a restart systemd still has
+# pending, or a start that is still running, would set the offsets again. stop cancels the
+# one and ends the other; it starts nothing
+if [[ -n "$installed" ]]; then
+  systemctl stop "$unit" || failed+="${failed:+, }boot unit $unit not stopped"
+fi
+
 # needs no snapshot: zero is the stock offset of every performance state
 /usr/bin/python3 -I "$here/nvml.py" zero >/dev/null || failed+="${failed:+, }clock offsets not zeroed"
 
-# is-enabled is 0 only for an enabled unit; one that is not installed has nothing to
-# disable. The unit is not stopped: it is a oneshot that has already exited
-if systemctl is-enabled --quiet "$unit"; then
+# always, without asking is-enabled: an error of that question would read as "not enabled",
+# and disable of a unit that is not enabled changes nothing and exits 0
+if [[ -n "$installed" ]]; then
   systemctl disable "$unit" || failed+="${failed:+, }boot unit $unit not disabled"
 fi
 

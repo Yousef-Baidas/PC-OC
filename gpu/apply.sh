@@ -81,6 +81,10 @@ pl_verify "$pl_w"
 nvml set core "$core_offset_mhz" >/dev/null || back_out "core_offset_mhz $core_offset_mhz not set"
 nvml set mem "$mem_offset_mhz" >/dev/null || back_out "mem_offset_mhz $mem_offset_mhz not set"
 
+# both sets exited 0: the apply is committed. TERM, HUP and INT are ignored to the end, so
+# the back-out never runs once enable may have been called and its message stays true
+trap '' TERM HUP INT
+
 if ! systemctl is-enabled --quiet "$unit"; then
   systemctl enable "$unit" || die gpu "cannot enable $unit: the offsets are set but will not be set again at boot"
 fi

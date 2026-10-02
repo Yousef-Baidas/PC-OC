@@ -31,7 +31,7 @@ gpu_tree() {
   : >"$BATS_TEST_TMPDIR/varlib/.pc-oc-test-mock"
   export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
   export PC_OC_STATE="$BATS_TEST_TMPDIR/state"
-  unset MOCK_NVML MOCK_FAIL_ENABLE MOCK_FAIL_DISABLE
+  unset MOCK_NVML MOCK_SYSTEMCTL MOCK_FAIL_ENABLE MOCK_FAIL_DISABLE MOCK_FAIL_STOP
 }
 
 # in_ns <cmd>...: run <cmd> as the calling user in a private mount namespace where the
@@ -106,8 +106,10 @@ reset_logs() {
   rm -f "$MOCK_STATE/signalled"
 }
 
-# EREs for the order log: a call that enables the unit, that disables it, or either.
-# is-enabled is none of them.
+# EREs for the order log: a call that enables the unit, that disables it, either, one that
+# stops it, and one that asks is-enabled. is-enabled is none of the first four.
 ENABLE='^systemctl( .*)? enable( |$)'
 DISABLE='^systemctl( .*)? disable( |$)'
 SWITCH='^systemctl( .*)? (enable|disable)( |$)'
+STOP='^systemctl( .*)? stop( |$)'
+IS_ENABLED='^systemctl( .*)? is-enabled( |$)'
