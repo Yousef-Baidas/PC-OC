@@ -113,3 +113,30 @@ verify_in_fake_root() {
   [ "$status" -ne 0 ]
   [[ "$output" == *"/usr/local/lib/pc-oc/pc-oc"* ]]
 }
+
+# Amendment 2: the retry and timeout lines that make a failed boot visible
+@test "the unit is byte-identical to the fixture" {
+  skip "contract #124 pending"
+  [ -r "$unit" ]
+  cmp "$unit" "$BATS_TEST_DIRNAME/fixtures/systemd/pc-oc-gpu.service"
+}
+
+@test "the unit has TimeoutStartSec=60, StartLimitIntervalSec=infinity and StartLimitBurst=6" {
+  skip "contract #124 pending"
+  only TimeoutStartSec 'TimeoutStartSec=60'
+  only StartLimitIntervalSec 'StartLimitIntervalSec=infinity'
+  only StartLimitBurst 'StartLimitBurst=6'
+}
+
+@test "the unit has Restart=on-failure and RestartSec=10" {
+  skip "contract #124 pending"
+  only Restart 'Restart=on-failure'
+  only RestartSec 'RestartSec=10'
+}
+
+@test "the unit has no TimeoutStopSec, ExecStop or KillMode line" {
+  skip "contract #124 pending"
+  none TimeoutStopSec
+  none ExecStop
+  none KillMode
+}

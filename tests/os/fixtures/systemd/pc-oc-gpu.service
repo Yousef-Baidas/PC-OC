@@ -2,13 +2,14 @@
 [Unit]
 Description=pc-oc: GPU power limit and clock offsets at boot
 ConditionPathExists=/usr/local/lib/pc-oc/pc-oc
-StartLimitIntervalSec=120
+StartLimitIntervalSec=infinity
 StartLimitBurst=6
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/local/lib/pc-oc/pc-oc apply gpu
+TimeoutStartSec=60
 Restart=on-failure
 RestartSec=10
 NoNewPrivileges=yes
