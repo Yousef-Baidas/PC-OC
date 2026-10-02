@@ -286,7 +286,6 @@ FAKE
 # Contract #127: gpu/apply.sh sets the clock offsets through nvml.py and enables the boot unit.
 
 @test "#127 case 1: apply gpu with offsets 120 and 500 writes the limit, reads it back, sets core then mem, checks then enables the unit, and exits 0" {
-  skip "contract #127 pending"
   set_values 216 120 500
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 0 ]
@@ -298,7 +297,6 @@ FAKE
 }
 
 @test "#127 case 2: apply gpu with both offsets 0 still calls set core 0 and set mem 0" {
-  skip "contract #127 pending"
   set_values 216 0 0
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 0 ]
@@ -308,7 +306,6 @@ FAKE
 }
 
 @test "#127 case 3: apply gpu with the unit already enabled does not call enable" {
-  skip "contract #127 pending"
   set_values 216 120 500
   printf 'enabled\n' >"$MOCK_STATE/unit"
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
@@ -321,7 +318,6 @@ FAKE
 }
 
 @test "#127 case 4: apply gpu with the unit not installed exits 1 naming os/install.sh, with no -pl, no helper call and no snapshot" {
-  skip "contract #127 pending"
   set_values 216 120 500
   printf 'missing\n' >"$MOCK_STATE/unit"
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
@@ -336,7 +332,6 @@ FAKE
 }
 
 @test "#127: apply gpu asks systemctl cat for the unit before the first -pl" {
-  skip "contract #127 pending"
   set_values 216 120 500
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 0 ]
@@ -347,7 +342,6 @@ FAKE
 }
 
 @test "#127 case 5: apply gpu whose set mem exits 1 exits 1, names the memory offset, zeroes the offsets once and does not enable the unit" {
-  skip "contract #127 pending"
   set_values 216 120 500
   export MOCK_NVML='set mem=fail'
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
@@ -363,7 +357,6 @@ FAKE
 }
 
 @test "#127: apply gpu whose set core exits 1 exits 1, names the core offset, never calls set mem, zeroes once and does not enable the unit" {
-  skip "contract #127 pending"
   set_values 216 120 500
   export MOCK_NVML='set core=fail'
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
@@ -376,7 +369,6 @@ FAKE
 }
 
 @test "#127: apply gpu whose set mem fails keeps the stock snapshot, since the power limit was written" {
-  skip "contract #127 pending"
   set_values 216 120 500
   export MOCK_NVML='set mem=fail'
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
@@ -387,7 +379,6 @@ FAKE
 }
 
 @test "#127: apply gpu whose power-limit read-back differs sets no offset and does not enable the unit" {
-  skip "contract #127 pending"
   ln -sf "$MOCK_DIR/nvidia-smi-ignore-pl" "$BATS_TEST_TMPDIR/bin/nvidia-smi"
   set_values 216 120 500
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
@@ -398,7 +389,6 @@ FAKE
 }
 
 @test "#127: apply gpu whose enable fails exits 1 with its own pc-oc: gpu: line" {
-  skip "contract #127 pending"
   set_values 216 120 500
   export MOCK_FAIL_ENABLE=1
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
@@ -423,7 +413,6 @@ refused_values() {
 }
 
 @test "#127 case 6: apply gpu with no mem_offset_mhz in values exits 1 before any write" {
-  skip "contract #127 pending"
   refused_values mem_offset_mhz 'pl_w=216  # src: smi' 'core_offset_mhz=120  # src: nvml-offset-t'
   # the same harness does write once the file is whole
   set_values 216 120 500
@@ -433,12 +422,10 @@ refused_values() {
 }
 
 @test "#127 case 6: apply gpu with core_offset_mhz=12a exits 1 before any write" {
-  skip "contract #127 pending"
   refused_values core_offset_mhz 'pl_w=216  # src: smi' 'core_offset_mhz=12a  # src: nvml-offset-t' 'mem_offset_mhz=500  # src: nvml-offset-t'
 }
 
 @test "#127 case 6: apply gpu refuses each offset that is not 0|[1-9][0-9]{0,3}, and a missing core_offset_mhz, before any write" {
-  skip "contract #127 pending"
   refused_values core_offset_mhz 'pl_w=216  # src: smi' 'mem_offset_mhz=500  # src: nvml-offset-t'
   for bad in 0500 -30 +30 12345 120.5 "" " 120" 0x10; do
     refused_values core_offset_mhz 'pl_w=216  # src: smi' "core_offset_mhz=$bad  # src: nvml-offset-t" 'mem_offset_mhz=500  # src: nvml-offset-t'
@@ -447,7 +434,6 @@ refused_values() {
 }
 
 @test "#127 case 13: apply gpu whose set mem is killed (137) calls zero once, exits 1 and does not enable the unit" {
-  skip "contract #127 pending"
   set_values 216 120 500
   export MOCK_NVML='set mem=kill'
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
@@ -461,7 +447,6 @@ refused_values() {
 }
 
 @test "#127 amendment 1: apply gpu's message after a failed set differs with whether nvml.py zero exited 0" {
-  skip "contract #127 pending"
   set_values 216 120 500
   export MOCK_NVML='set mem=fail'
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
@@ -498,13 +483,11 @@ signalled() {
 }
 
 @test "#127 case 14: apply gpu that gets TERM during set core calls zero once, exits non-zero and does not enable the unit" {
-  skip "contract #127 pending"
   signalled TERM 'set core=term'
   [ "$(logged '^nvml set mem ')" -eq 0 ]
 }
 
 @test "#127 amendment 3: apply gpu that gets HUP or INT during a set, or TERM during set mem, does the same" {
-  skip "contract #127 pending"
   signalled HUP 'set core=hup'
   signalled INT 'set core=int'
   signalled TERM 'set mem=term'
@@ -513,7 +496,6 @@ signalled() {
 }
 
 @test "#127 amendment 3: apply gpu that gets TERM during the -pl write calls zero once, sets no offset, exits non-zero and does not enable the unit" {
-  skip "contract #127 pending"
   ln -sf "$MOCK_DIR/nvidia-smi-term-pl" "$BATS_TEST_TMPDIR/bin/nvidia-smi"
   set_values 216 120 500
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
@@ -526,7 +508,6 @@ signalled() {
 }
 
 @test "#127 amendment 3: apply gpu's message after TERM differs with whether nvml.py zero exited 0" {
-  skip "contract #127 pending"
   set_values 216 120 500
   export MOCK_NVML='set core=term'
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
@@ -545,7 +526,6 @@ signalled() {
 }
 
 @test "#127 case 15: no systemctl call of a first apply, a repeat apply, a failed apply or a signalled apply has start or --now in it" {
-  skip "contract #127 pending"
   set_values 216 120 500
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 0 ]
@@ -569,7 +549,6 @@ signalled() {
 }
 
 @test "#127: apply gpu starts the helper as /usr/bin/python3 -I <its own dir>/nvml.py, every time" {
-  skip "contract #127 pending"
   set_values 216 120 500
   run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
   [ "$status" -eq 0 ]
@@ -578,7 +557,6 @@ signalled() {
 }
 
 @test "#127: as root pc-oc apply gpu then revert gpu set and clear the offsets and the unit through the /usr/bin mocks" {
-  skip "contract #127 pending"
   set_values 216 120 500
   stock="$BATS_TEST_TMPDIR/varlib/pc-oc/gpu/stock"
   run --separate-stderr in_ns_root /usr/bin/bash "$REPO/pc-oc" apply gpu
@@ -599,7 +577,6 @@ signalled() {
 }
 
 @test "#127 case 12: gpu/values has core_offset_mhz=0 and mem_offset_mhz=0, each citing an id of sources/manifest.tsv" {
-  skip "contract #127 pending"
   values="$BATS_TEST_DIRNAME/../../gpu/values"
   manifest="$BATS_TEST_DIRNAME/../../sources/manifest.tsv"
   for key in core_offset_mhz mem_offset_mhz; do
@@ -613,4 +590,90 @@ signalled() {
       cut -f1 "$manifest" | grep -qxF -- "$id"
     done
   done
+}
+
+# Worker cases for #127: what the contract leaves open and gpu/apply.sh settles.
+
+@test "#127 own: apply gpu that gets TERM exits 1 with one line of its own naming TERM, and keeps the snapshot of the limit it wrote" {
+  set_values 216 120 500
+  export MOCK_NVML='set core=term'
+  run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 1 ]
+  [ "$(own_messages)" = "pc-oc: gpu: got TERM; clock offsets zeroed, boot unit left as it was" ]
+  [ "$(cat "$MOCK_STATE/pl")" = "216.00" ]
+  grep -q '^gpu.pl_w=150' "$PC_OC_STATE/gpu/stock"
+}
+
+@test "#127 own: apply gpu whose set mem dies of the TERM that reaches apply too calls zero once, not once per reason" {
+  # systemd signals every process of the unit: the helper ends with 143 and apply gets
+  # the same TERM, so the trap and the failed-set branch both want the zero
+  cat >"$REPO/gpu/nvml.py" <<'STUB'
+#!/usr/bin/env bash
+# pc-oc-test-mock
+if [[ "$*" == "set mem "* ]]; then
+  printf 'nvml %s\n' "$*" >>"$MOCK_STATE/order"
+  source "$MOCK_DIR/signal.bash"
+  signal_apply TERM
+  exit 143
+fi
+exec /usr/bin/bash "$MOCK_DIR/nvml-stub.bash" "$@"
+STUB
+  set_values 216 120 500
+  run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
+  [[ "$(cat "$MOCK_STATE/signalled")" =~ ^TERM\ [0-9]+$ ]]
+  [ "$status" -eq 1 ]
+  [ "$(logged '^nvml set mem 500$')" -eq 1 ]
+  [ "$(logged '^nvml zero$')" -eq 1 ]
+  [ "$(tail -n 1 <(grep '^nvml ' "$MOCK_STATE/order"))" = "nvml zero" ]
+  [ "$(cat "$MOCK_STATE/offsets")" = "0 0" ]
+  [ "$(own_messages | wc -l)" -eq 1 ]
+  [ "$(logged "$ENABLE")" -eq 0 ]
+}
+
+@test "#127 own: apply gpu whose power-limit read-back dies of the TERM that reaches apply too still calls zero once and sets no offset" {
+  rm "$BATS_TEST_TMPDIR/bin/nvidia-smi"
+  cat >"$BATS_TEST_TMPDIR/bin/nvidia-smi" <<'MOCK'
+#!/usr/bin/env bash
+if [[ "$*" == "--query-gpu=power.limit "* ]]; then
+  printf 'nvidia-smi %s\n' "$*" >>"$MOCK_STATE/order"
+  source "$MOCK_DIR/signal.bash"
+  signal_apply TERM
+  exit 143
+fi
+exec "$MOCK_DIR/nvidia-smi" "$@"
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/nvidia-smi"
+  set_values 216 120 500
+  run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
+  [[ "$(cat "$MOCK_STATE/signalled")" =~ ^TERM\ [0-9]+$ ]]
+  [ "$status" -eq 1 ]
+  [ "$(cat "$MOCK_STATE/calls")" = "-pl 216" ]
+  [ "$(logged '^nvml zero$')" -eq 1 ]
+  [ "$(logged '^nvml set ')" -eq 0 ]
+  [ "$(own_messages)" = "pc-oc: gpu: got TERM; clock offsets zeroed, boot unit left as it was" ]
+  [ "$(logged "$ENABLE")" -eq 0 ]
+}
+
+@test "#127 own: apply gpu whose -pl fails or reads back wrong calls no nvml zero: only a set or a signal is followed by one" {
+  for mock in nvidia-smi-fail-pl nvidia-smi-ignore-pl; do
+    reset_logs
+    ln -sf "$MOCK_DIR/$mock" "$BATS_TEST_TMPDIR/bin/nvidia-smi"
+    tuned 150.00 120 500 disabled
+    set_values 216 120 500
+    run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
+    [ "$status" -eq 1 ]
+    [ "$(cat "$MOCK_STATE/calls")" = "-pl 216" ]
+    [ "$(logged '^nvml (set|zero)')" -eq 0 ]
+    [ "$(cat "$MOCK_STATE/offsets")" = "120 500" ]
+  done
+}
+
+@test "#127 own: apply gpu whose enable fails leaves the offsets it set and says they will not be set again at boot" {
+  set_values 216 120 500
+  export MOCK_FAIL_ENABLE=1
+  run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 1 ]
+  [ "$(logged '^nvml zero$')" -eq 0 ]
+  [ "$(cat "$MOCK_STATE/offsets")" = "120 500" ]
+  [[ "$(own_messages)" == *"cannot enable pc-oc-gpu.service"*"boot"* ]]
 }

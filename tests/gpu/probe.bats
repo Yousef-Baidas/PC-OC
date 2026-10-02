@@ -113,7 +113,6 @@ header_bytes() {
 # alone are restated here for 16 keys and two more sources.
 
 @test "#127 case 11: probe gpu prints the six offsets and boot_unit after the nine keys, 16 key lines in all, unsupported passed through" {
-  skip "contract #127 pending"
   mixed_get
   run --separate-stderr in_ns bash "$PROBE"
   [ "$status" -eq 0 ]
@@ -131,7 +130,6 @@ header_bytes() {
 }
 
 @test "#127 case 11: probe gpu prints boot_unit as enabled, disabled or missing and exits 0 for each" {
-  skip "contract #127 pending"
   for state in enabled disabled missing; do
     printf '%s\n' "$state" >"$MOCK_STATE/unit"
     run --separate-stderr in_ns bash "$PROBE"
@@ -144,7 +142,6 @@ header_bytes() {
 }
 
 @test "#127 case 11: probe gpu exits 1 with its own pc-oc: gpu: line when a get line reads offset=abc" {
-  skip "contract #127 pending"
   mixed_get
   sed -i '1s/.*/p0.core offset=abc min=0 max=1/' "$MOCK_STATE/get"
   run --separate-stderr in_ns bash "$PROBE"
@@ -155,7 +152,6 @@ header_bytes() {
 }
 
 @test "#127: probe gpu exits 1 on each get line that is neither an integer offset nor unsupported, and on a missing line" {
-  skip "contract #127 pending"
   for bad in 'p1.mem offset= min=-2000 max=6000' 'p1.mem offset=1.5 min=-2000 max=6000' 'p1.mem offset=12abc min=-2000 max=6000' 'p1.mem' 'garbage'; do
     mixed_get
     sed -i "4s/.*/$bad/" "$MOCK_STATE/get"
@@ -173,7 +169,6 @@ header_bytes() {
 }
 
 @test "#127: probe gpu exits 1 with its own pc-oc: gpu: line when nvml.py get exits 1" {
-  skip "contract #127 pending"
   export MOCK_NVML='get=fail'
   run --separate-stderr in_ns bash "$PROBE"
   [ "$status" -eq 1 ]
@@ -189,7 +184,6 @@ header_bytes() {
 }
 
 @test "#127: probe gpu only reads: the helper as /usr/bin/python3 -I <its own dir>/nvml.py get, no set, no zero, no enable, no disable" {
-  skip "contract #127 pending"
   printf 'enabled\n' >"$MOCK_STATE/unit"
   printf '120 500\n' >"$MOCK_STATE/offsets"
   run --separate-stderr in_ns bash "$PROBE"
@@ -207,7 +201,6 @@ header_bytes() {
 }
 
 @test "#127: probe gpu line 1 names nvidia-smi and one more source at least, 16 keys, and no fewer bytes than nvidia-smi and nvml.py get printed" {
-  skip "contract #127 pending"
   mixed_get
   run --separate-stderr in_ns bash "$PROBE"
   [ "$status" -eq 0 ]
@@ -220,7 +213,6 @@ header_bytes() {
 }
 
 @test "#127: probe gpu with nvidia-smi output lacking a trailing newline gives a bytes= one lower" {
-  skip "contract #127 pending"
   run --separate-stderr in_ns bash "$PROBE"
   [ "$status" -eq 0 ]
   with_newline="$(header_bytes)"
@@ -236,7 +228,6 @@ STUB
 }
 
 @test "#127: probe gpu with nvidia-smi output ending in a blank line gives the 16 keys and a bytes= one higher" {
-  skip "contract #127 pending"
   run --separate-stderr in_ns bash "$PROBE"
   [ "$status" -eq 0 ]
   with_newline="$(header_bytes)"
@@ -251,4 +242,32 @@ STUB
   [ "$(header_bytes)" -eq "$((with_newline + 1))" ]
   [ "$((${#lines[@]} - 1))" -eq 16 ]
   [[ "$output" == *$'\ngpu.pl_max_w=216.00'* ]]
+}
+
+# Worker cases for #127: what the contract leaves open and gpu/probe.sh settles.
+
+@test "#127 own: probe gpu exits 1 on a repeated get line, a seventh line, a blank line and a number with a leading zero or a minus zero" {
+  for bad in 'p0.core offset=120 min=-1000 max=1000' 'p3.mem offset=0 min=-2000 max=6000' '' 'p2.mem offset=007 min=-2000 max=6000' 'p2.mem offset=-0 min=-2000 max=6000'; do
+    mixed_get
+    # the first three are one line more with all six still there; the last two stand in
+    # for line 6, which is p2.mem
+    case "$bad" in
+      p0.core* | p3.mem*) printf '%s\n' "$bad" >>"$MOCK_STATE/get" ;;
+      '') sed -i '3G' "$MOCK_STATE/get" ;;
+      *) sed -i "6s/.*/$bad/" "$MOCK_STATE/get" ;;
+    esac
+    [ "$(wc -l <"$MOCK_STATE/get")" -ge 6 ]
+    run --separate-stderr in_ns bash "$PROBE"
+    [ "$status" -eq 1 ]
+    [ "$output" = "" ]
+    [ -n "$(own_messages)" ]
+  done
+}
+
+@test "#127 own: probe gpu line 1 names the nvidia-smi it ran and /usr/bin/python3, and bytes= is what the two printed, to the byte" {
+  mixed_get
+  run --separate-stderr in_ns bash "$PROBE"
+  [ "$status" -eq 0 ]
+  printed="$(($("$STUB_DIR/nvidia-smi" | wc -c) + $(wc -c <"$MOCK_STATE/get")))"
+  [ "${lines[0]}" = "source=$STUB_DIR/nvidia-smi,/usr/bin/python3 bytes=$printed items=16" ]
 }

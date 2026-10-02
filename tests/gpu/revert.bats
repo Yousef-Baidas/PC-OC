@@ -18,7 +18,6 @@ setup() {
 }
 
 @test "#127 case 7: revert gpu with a snapshot records zero, disable and the power-limit restore, removes the snapshot and exits 0" {
-  skip "contract #127 pending"
   tuned 216.00 120 500 enabled
   set_snapshot 150.00
   run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
@@ -34,7 +33,6 @@ setup() {
 }
 
 @test "#127: revert gpu zeroes the offsets, then disables the unit, then restores the power limit" {
-  skip "contract #127 pending"
   tuned 216.00 120 500 enabled
   set_snapshot 150.00
   run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
@@ -48,7 +46,6 @@ setup() {
 }
 
 @test "#127 case 8: revert gpu without a snapshot still records zero and disable, says nothing to revert and exits 0" {
-  skip "contract #127 pending"
   tuned 150.00 120 500 enabled
   run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
   [ "$status" -eq 0 ]
@@ -61,7 +58,6 @@ setup() {
 }
 
 @test "#127 case 9: revert gpu whose zero exits 1 still disables the unit and restores the power limit, exits 1 and names the offsets" {
-  skip "contract #127 pending"
   tuned 216.00 120 500 enabled
   set_snapshot 150.00
   export MOCK_NVML='zero=fail'
@@ -76,7 +72,6 @@ setup() {
 }
 
 @test "#127 case 9: revert gpu without a snapshot whose zero exits 1 still disables the unit, exits 1 and names the offsets" {
-  skip "contract #127 pending"
   tuned 150.00 120 500 enabled
   export MOCK_NVML='zero=fail'
   run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
@@ -86,7 +81,6 @@ setup() {
 }
 
 @test "#127 case 10: revert gpu with the unit not installed zeroes the offsets, restores the power limit and exits 0" {
-  skip "contract #127 pending"
   tuned 216.00 120 500 missing
   set_snapshot 150.00
   run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
@@ -103,7 +97,6 @@ setup() {
 }
 
 @test "#127: revert gpu with the unit installed but not enabled does not call disable" {
-  skip "contract #127 pending"
   tuned 216.00 120 500 disabled
   set_snapshot 150.00
   run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
@@ -115,7 +108,6 @@ setup() {
 }
 
 @test "#127: revert gpu whose disable fails still zeroes the offsets and restores the power limit, exits 1 and names the unit" {
-  skip "contract #127 pending"
   tuned 216.00 120 500 enabled
   set_snapshot 150.00
   export MOCK_FAIL_DISABLE=1
@@ -129,7 +121,6 @@ setup() {
 }
 
 @test "#127: revert gpu names only the parts that failed" {
-  skip "contract #127 pending"
   tuned 216.00 120 500 enabled
   set_snapshot 150.00
   export MOCK_FAIL_DISABLE=1
@@ -149,7 +140,6 @@ setup() {
 }
 
 @test "#127: revert gpu whose zero and disable both fail still restores the power limit, exits 1 and names both" {
-  skip "contract #127 pending"
   tuned 216.00 120 500 enabled
   set_snapshot 150.00
   export MOCK_NVML='zero=fail' MOCK_FAIL_DISABLE=1
@@ -162,7 +152,6 @@ setup() {
 }
 
 @test "#127: revert gpu whose power-limit restore fails has still zeroed the offsets and disabled the unit, exits 1 and keeps the snapshot" {
-  skip "contract #127 pending"
   ln -sf "$MOCK_DIR/nvidia-smi-ignore-pl" "$BATS_TEST_TMPDIR/bin/nvidia-smi"
   tuned 216.00 120 500 enabled
   set_snapshot 150.00
@@ -176,7 +165,6 @@ setup() {
 }
 
 @test "#127: revert gpu with a snapshot whose pl_w is out of range still zeroes the offsets and disables the unit, exits 1 and logs no -pl" {
-  skip "contract #127 pending"
   tuned 216.00 120 500 enabled
   set_snapshot 300.00
   run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
@@ -188,7 +176,6 @@ setup() {
 }
 
 @test "#127: revert gpu accepts a snapshot written before #127 (nine keys, no offsets, no boot_unit)" {
-  skip "contract #127 pending"
   tuned 216.00 120 500 enabled
   mkdir -p "$PC_OC_STATE/gpu"
   cp "$FIX/stock-pre-127" "$PC_OC_STATE/gpu/stock"
@@ -201,7 +188,6 @@ setup() {
 }
 
 @test "#127: revert gpu starts the helper as /usr/bin/python3 -I <its own dir>/nvml.py and never sets an offset or enables the unit" {
-  skip "contract #127 pending"
   tuned 216.00 120 500 enabled
   set_snapshot 150.00
   run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
@@ -210,4 +196,49 @@ setup() {
   [ "$(logged '^nvml set ')" -eq 0 ]
   [ "$(logged "$ENABLE")" -eq 0 ]
   no_start "$MOCK_STATE/order"
+}
+
+# Worker cases for #127: what the contract leaves open and gpu/revert.sh settles.
+
+@test "#127 own: revert gpu whose zero fails still drops the snapshot once the power limit is back, and a second revert zeroes again with nothing to restore" {
+  tuned 216.00 120 500 enabled
+  set_snapshot 150.00
+  export MOCK_NVML='zero=fail'
+  run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
+  [ "$status" -eq 1 ]
+  [ "$(cat "$MOCK_STATE/pl")" = "150.00" ]
+  [ ! -e "$PC_OC_STATE/gpu/stock" ]
+  reset_logs
+  unset MOCK_NVML
+  run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
+  [ "$status" -eq 0 ]
+  [ "$(logged '^nvml zero$')" -eq 1 ]
+  [ "$(cat "$MOCK_STATE/offsets")" = "0 0" ]
+  [ ! -s "$MOCK_STATE/calls" ]
+  grep -qxF 'pc-oc: gpu: nothing to revert' <<<"$stderr"
+}
+
+@test "#127 own: revert gpu whose power-limit restore fails names the power limit and neither the offsets nor the unit" {
+  ln -sf "$MOCK_DIR/nvidia-smi-ignore-pl" "$BATS_TEST_TMPDIR/bin/nvidia-smi"
+  tuned 216.00 120 500 enabled
+  set_snapshot 150.00
+  run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
+  [ "$status" -eq 1 ]
+  [ "$(own_messages | tail -n 1)" = "pc-oc: gpu: revert incomplete: power limit not restored, snapshot kept" ]
+  [[ "$(own_messages)" != *offset* ]]
+  [[ ! "$(own_messages)" =~ unit|pc-oc-gpu ]]
+}
+
+@test "#127 own: revert gpu whose three parts all fail names all three in its last line" {
+  ln -sf "$MOCK_DIR/nvidia-smi-fail-pl" "$BATS_TEST_TMPDIR/bin/nvidia-smi"
+  tuned 216.00 120 500 enabled
+  set_snapshot 150.00
+  export MOCK_NVML='zero=fail' MOCK_FAIL_DISABLE=1
+  run --separate-stderr in_ns bash "$REPO/gpu/revert.sh"
+  [ "$status" -eq 1 ]
+  [ "$(logged '^nvml zero$')" -eq 1 ]
+  [ "$(logged '^systemctl disable pc-oc-gpu\.service$')" -eq 1 ]
+  [ "$(cat "$MOCK_STATE/calls")" = "-pl 150" ]
+  [ "$(own_messages | tail -n 1)" = "pc-oc: gpu: revert incomplete: clock offsets not zeroed, boot unit pc-oc-gpu.service not disabled, power limit not restored, snapshot kept" ]
+  [ -f "$PC_OC_STATE/gpu/stock" ]
 }
