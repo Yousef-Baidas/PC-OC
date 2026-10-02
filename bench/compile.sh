@@ -15,6 +15,22 @@ if [[ ! "$runs" =~ ^[0-9]+$ ]] || [ "$runs" -lt 1 ]; then
   exit 2
 fi
 
+# a wired build environment skews the timing; refuse before any download or build (#118)
+wired=()
+for v in CC CXX LDFLAGS RUSTC_WRAPPER CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER; do
+  [ -z "${!v:-}" ] || wired+=("$v")
+done
+IFS=: read -ra path_dirs <<<"${PATH:-}:"
+for d in "${path_dirs[@]}"; do
+  case "${d%/}" in
+    /usr/lib/sccache/bin | /usr/lib/ccache/bin) wired+=("${d%/}") ;;
+  esac
+done
+if [ "${#wired[@]}" -gt 0 ]; then
+  echo "pc-oc: bench: wired build environment: ${wired[*]}" >&2
+  exit 1
+fi
+
 # read here, not in pin_get: its $(…) callers run it without errexit
 pin="$(<"$here/kernel.pin")" || die bench "kernel.pin: unreadable"
 
