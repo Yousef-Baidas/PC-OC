@@ -136,7 +136,6 @@ keys_17() {
 # alone are restated here for 16 keys and two more sources.
 
 @test "#127 case 11, amended by #142: probe gpu prints the six offsets, boot_unit and offsets_source after the nine keys, 17 key lines in all, unsupported passed through" {
-  skip "contract #142 pending"
   mixed_get
   run --separate-stderr in_ns bash "$PROBE"
   [ "$status" -eq 0 ]
@@ -155,7 +154,6 @@ keys_17() {
 }
 
 @test "#127 case 11, amended by #142: probe gpu prints boot_unit as enabled, disabled or missing and exits 0 for each; missing is the unit file gone, enabled and disabled are what is-enabled says" {
-  skip "contract #142 pending"
   for state in enabled disabled missing; do
     tuned 150.00 0 0 "$state"
     run --separate-stderr in_ns bash "$PROBE"
@@ -228,7 +226,6 @@ keys_17() {
 }
 
 @test "#127, amended by #142: probe gpu line 1 names nvidia-smi and one more source at least, 17 keys, and no fewer bytes than nvidia-smi and nvml.py get printed" {
-  skip "contract #142 pending"
   mixed_get
   run --separate-stderr in_ns bash "$PROBE"
   [ "$status" -eq 0 ]
@@ -241,7 +238,6 @@ keys_17() {
 }
 
 @test "#127, amended by #142: probe gpu with nvidia-smi output lacking a trailing newline gives a bytes= one lower, with 17 keys counted" {
-  skip "contract #142 pending"
   run --separate-stderr in_ns bash "$PROBE"
   [ "$status" -eq 0 ]
   with_newline="$(header_bytes)"
@@ -257,7 +253,6 @@ STUB
 }
 
 @test "#127, amended by #142: probe gpu with nvidia-smi output ending in a blank line gives the 17 keys and a bytes= one higher" {
-  skip "contract #142 pending"
   run --separate-stderr in_ns bash "$PROBE"
   [ "$status" -eq 0 ]
   with_newline="$(header_bytes)"
@@ -295,7 +290,6 @@ STUB
 }
 
 @test "#127 own, amended by #142: probe gpu with no search result names the nvidia-smi it ran and /usr/bin/python3 in line 1, 17 keys, and bytes= is what the two printed, to the byte" {
-  skip "contract #142 pending"
   mixed_get
   run --separate-stderr in_ns bash "$PROBE"
   [ "$status" -eq 0 ]
@@ -309,7 +303,6 @@ STUB
 # /var/lib.
 
 @test "#142 case 7: probe gpu prints offsets_source=values as its 17th and last key when there is no search result, as the user and as root" {
-  skip "contract #142 pending"
   run --separate-stderr in_ns bash "$PROBE"
   keys_17 values
   root_probe
@@ -322,7 +315,6 @@ STUB
 }
 
 @test "#142 case 7: as root probe gpu prints offsets_source=search for a result apply would use, 210 and 1300 or 0 and 0, and leaves the result as it was" {
-  skip "contract #142 pending"
   set_result 210 1300
   cp "$RESULT" "$BATS_TEST_TMPDIR/before"
   root_probe
@@ -338,7 +330,6 @@ STUB
 }
 
 @test "#142 case 7: as root probe gpu prints offsets_source=invalid and exits 0 for a result path apply would refuse: symlink, mode 0666, directory writable by others, missing key, key twice, bad number, no finished=, empty file, directory" {
-  skip "contract #142 pending"
   set_result 210 1300
   mv "$RESULT" "${RESULT%/*}/real"
   ln -s "${RESULT%/*}/real" "$RESULT"
@@ -379,7 +370,6 @@ STUB
 }
 
 @test "#142 case 7: probe gpu as the calling user prints offsets_source=invalid for the result in its own state dir, which uid 0 does not own" {
-  skip "contract #142 pending"
   RESULT="$USER_RESULT"
   set_result 210 1300
   run --separate-stderr in_ns bash "$PROBE"
@@ -387,7 +377,6 @@ STUB
 }
 
 @test "#142 case 7: probe gpu prints boot_unit=missing without a unit file even when systemctl answers for an enabled or a disabled unit, and never calls systemctl cat" {
-  skip "contract #142 pending"
   for state in enabled disabled; do
     reset_logs
     tuned 150.00 0 0 "$state"
@@ -404,7 +393,6 @@ STUB
 }
 
 @test "#142 case 7: probe gpu with the unit file present, or a dangling symlink in its place, takes enabled or disabled from is-enabled alone: a systemctl that fails every call gives disabled, not missing" {
-  skip "contract #142 pending"
   for file in present dangling; do
     reset_logs
     tuned 150.00 0 0 missing
@@ -423,8 +411,145 @@ STUB
 }
 
 @test "#142 case 8: gpu/probe.sh names the unit file by the one path os/install.sh installs it to, with no variable in front" {
-  skip "contract #142 pending"
   want="$(installed_unit_path)"
   [ "$want" = /etc/systemd/system/pc-oc-gpu.service ]
   [ "$(named_unit_paths "$BATS_TEST_DIRNAME/../../gpu/probe.sh")" = "$want" ]
+}
+
+# Worker cases for #142: what the contract leaves open and gpu/probe.sh settles. The
+# function that judges the result is the one of gpu/apply.sh (apply.bats holds the two
+# texts equal), so each refusal of its own is shown here once, as offsets_source=invalid.
+
+# CALLER_ENVS: what a caller may leave in the environment, one env(1) argument each; none
+# of it may change what probe prints
+CALLER_ENVS=('IFS=0123456789=_ms' 'POSIXLY_CORRECT=1' 'TMPDIR=/nonexistent/pc-oc-142'
+  'SHELLOPTS=noglob:posix:physical' 'CDPATH=/etc' 'GLOBIGNORE=*')
+
+# root_result: the result path uid 0 in the guard reads, which is $RESULT as gpu_tree left
+# it. The cases below take it from here: to shellcheck a read of RESULT in this file is a
+# read of what a contract case above assigned in its own subshell.
+root_result() {
+  printf '%s\n' "$BATS_TEST_TMPDIR/varlib/pc-oc/gpu/search/result"
+}
+
+# INVALID: what probe says on stderr for a refused result under root's state dir, up to the reason
+INVALID='pc-oc: gpu: search result /var/lib/pc-oc/gpu/search/result refused: '
+
+@test "#142 own: as root probe gpu names the result as its third source, with its bytes, when it opened it: for a good result and for one refused by its content, not for one refused by its mode" {
+  res="$(root_result)"
+  mixed_get
+  printed="$(($("$STUB_DIR/nvidia-smi" | wc -c) + $(wc -c <"$MOCK_STATE/get")))"
+  set_result 210 1300
+  root_probe
+  keys_17 search
+  [ "${lines[0]}" = "source=/usr/bin/nvidia-smi,/usr/bin/python3,/var/lib/pc-oc/gpu/search/result bytes=$((printed + 70)) items=17" ]
+  chmod 0666 "$res"
+  root_probe
+  keys_17 invalid
+  [ "${lines[0]}" = "source=/usr/bin/nvidia-smi,/usr/bin/python3 bytes=$printed items=17" ]
+  result_lines 'core_offset_mhz=210' 'mem_offset_mhz=1300'
+  root_probe
+  keys_17 invalid
+  [ "${lines[0]}" = "source=/usr/bin/nvidia-smi,/usr/bin/python3,/var/lib/pc-oc/gpu/search/result bytes=$((printed + 40)) items=17" ]
+}
+
+@test "#142 own: probe gpu says on stderr, in one line, why the result is invalid, and nothing there for values or search" {
+  res="$(root_result)"
+  root_probe
+  keys_17 values
+  [ "$stderr" = "" ]
+  set_result 210 1300
+  root_probe
+  keys_17 search
+  [ "$stderr" = "" ]
+  chmod 0666 "$res"
+  root_probe
+  keys_17 invalid
+  [ "$stderr" = "${INVALID}it is writable by group or others" ]
+  mkdir -p "${USER_RESULT%/*}"
+  cp "$res" "$USER_RESULT"
+  chmod 0644 "$USER_RESULT"
+  run --separate-stderr in_ns bash "$PROBE"
+  keys_17 invalid
+  [ "$stderr" = "pc-oc: gpu: search result $USER_RESULT refused: ${USER_RESULT%/*} belongs to uid $(id -u), not to uid 0" ]
+}
+
+@test "#142 own: as root probe gpu prints offsets_source=invalid for a result whose directory is a symlink, a named pipe at the path, the three lines in another order, a fourth line and a NUL byte" {
+  res="$(root_result)"
+  set_result 210 1300
+  mv "${res%/*}" "${res%/*}.real"
+  ln -s "${res%/*}.real" "${res%/*}"
+  root_probe
+  keys_17 invalid
+  [ "$stderr" = "${INVALID}/var/lib/pc-oc/gpu/search is not a directory" ]
+  rm "${res%/*}"
+  mkdir "${res%/*}"
+  mkfifo -m 0644 "$res"
+  # an open of the pipe for reading would block for ever: timeout ends that with 124
+  run --separate-stderr in_ns_root /usr/bin/timeout 30 /usr/bin/bash "$REPO/pc-oc" probe gpu
+  keys_17 invalid
+  [ "$stderr" = "${INVALID}it is not a regular file" ]
+  result_lines 'mem_offset_mhz=1300' 'core_offset_mhz=210' 'finished=2026-10-02T09:14:07Z'
+  root_probe
+  keys_17 invalid
+  [ "$stderr" = "${INVALID}it is not the three lines gpu/search.sh writes (core_offset_mhz=, mem_offset_mhz=, finished=)" ]
+  result_lines 'core_offset_mhz=210' 'mem_offset_mhz=1300' 'finished=2026-10-02T09:14:07Z' 'note=x'
+  root_probe
+  keys_17 invalid
+  [[ "$stderr" == "${INVALID}it is not the three lines "* ]]
+  printf 'core_offset_mhz=210\nmem_offset_mhz=1300\nfinished=2026-10-02T09:14:07Z\n\x00core_offset_mhz=30\n' >"$res"
+  root_probe
+  keys_17 invalid
+  [ "$stderr" = "${INVALID}it holds a NUL byte" ]
+}
+
+@test "#142 own: as root probe gpu prints offsets_source=invalid and exits 0 for a result it has no permission to read: uid 0 without the capabilities that pass file modes, mode 0000" {
+  res="$(root_result)"
+  set_result 210 1300
+  chmod 0000 "$res"
+  run --separate-stderr in_ns_root /usr/bin/setpriv --bounding-set=-dac_override,-dac_read_search \
+    /usr/bin/bash "$REPO/pc-oc" probe gpu
+  keys_17 invalid
+  [ "$stderr" = "${INVALID}no permission to read it" ]
+  [[ "${lines[0]}" == "source=/usr/bin/nvidia-smi,/usr/bin/python3 bytes="* ]]
+}
+
+@test "#142 own: probe gpu prints offsets_source=invalid, not values, when a directory above the result path cannot be searched: as the calling user and as root" {
+  res="$(root_result)"
+  mkdir -p "$PC_OC_STATE/gpu" "${res%/search/result}"
+  chmod 0700 "$PC_OC_STATE/gpu" "${res%/search/result}"
+  subid_chown "$PC_OC_STATE/gpu"
+  subid_chown "${res%/search/result}"
+  run --separate-stderr in_ns bash "$PROBE"
+  user_status="$status" user_output="$output" user_stderr="$stderr"
+  root_probe
+  subid_restore
+  keys_17 invalid
+  [ "$stderr" = "pc-oc: gpu: cannot tell whether there is a search result at /var/lib/pc-oc/gpu/search/result: no permission to look into /var/lib/pc-oc/gpu" ]
+  [ "$user_status" -eq 0 ]
+  [ "$(tail -n 1 <<<"$user_output")" = "gpu.offsets_source=invalid" ]
+  [ "$user_stderr" = "pc-oc: gpu: cannot tell whether there is a search result at $USER_RESULT: no permission to look into $PC_OC_STATE/gpu" ]
+}
+
+@test "#142 own: as root probe gpu prints the same 18 lines whatever IFS, POSIXLY_CORRECT, TMPDIR, SHELLOPTS, CDPATH or GLOBIGNORE the caller left in the environment, for a good result and a refused one" {
+  res="$(root_result)"
+  for mode in 0644 0664; do
+    set_result 210 1300
+    chmod "$mode" "$res"
+    root_probe
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 18 ]
+    want_out="$output" want_err="$stderr"
+    for env in "${CALLER_ENVS[@]}" all; do
+      args=("$env")
+      [ "$env" != all ] || args=("${CALLER_ENVS[@]}")
+      run --separate-stderr in_ns_root /usr/bin/env "${args[@]}" /usr/bin/bash "$REPO/pc-oc" probe gpu
+      [ "$status" -eq 0 ] || printf 'env %s: status %s\n%s\n' "$env" "$status" "$stderr" >&2
+      [ "$status" -eq 0 ]
+      [ "$output" = "$want_out" ]
+      [ "$stderr" = "$want_err" ]
+    done
+  done
+  [ "$(tail -n 1 <<<"$want_out")" = "gpu.offsets_source=invalid" ]
+  [ -n "$want_err" ]
 }
