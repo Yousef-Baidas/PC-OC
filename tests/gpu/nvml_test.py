@@ -1,4 +1,4 @@
-"""Contract for gpu/nvml.py (ticket #123 with Amendment 1, ADR 0003).
+"""Contract for gpu/nvml.py (ticket #123 with Amendments 1 and 2, ADR 0003).
 
 Run as: /usr/bin/python3 -I -B tests/gpu/nvml_test.py
 
@@ -14,11 +14,13 @@ red-twice proof of this contract only; nothing in the repo sets it.
 
 import contextlib
 import ctypes
+import errno
 import hashlib
 import importlib.util
 import inspect
 import io
 import os
+import signal
 import string
 import sys
 import unittest
@@ -152,13 +154,19 @@ class FakeNvml:
     stuck:            (pstate, clock) keys whose write succeeds and changes nothing
     set_codes:        {n: code} the n-th Set call (1-based) returns code, writes nothing
     get_codes_after_set: {(pstate, clock): code} Get returns code once any Set was called
+    get_codes_after_write: {(pstate, clock): code} Get returns code once that offset was written
+    set_interrupts:   {n: what} the n-th Set call lands, then what arrives as the call
+                      returns: KeyboardInterrupt is raised, a signal number is sent to this
+                      process with signal.raise_signal
+    shutdown_raises:  nvmlShutdown raises this exception class and shuts nothing down
     count:            what nvmlDeviceGetCount returns
     init_error:       nvmlInit raises NVMLError(init_error)
     missing:          names the module does not have
     """
 
     def __init__(self, ranges=None, drop=(), clamp=None, stuck=(), set_codes=None,
-                 get_codes_after_set=None, count=1, init_error=None, missing=()):
+                 get_codes_after_set=None, get_codes_after_write=None, set_interrupts=None,
+                 shutdown_raises=None, count=1, init_error=None, missing=()):
         self.ranges = dict(CARD_RANGES)
         self.ranges.update(ranges or {})
         for key in [k for k in self.ranges if k[0] in drop]:
@@ -168,6 +176,9 @@ class FakeNvml:
         self.stuck = set(stuck)
         self.set_codes = dict(set_codes or {})
         self.get_codes_after_set = dict(get_codes_after_set or {})
+        self.get_codes_after_write = dict(get_codes_after_write or {})
+        self.set_interrupts = dict(set_interrupts or {})
+        self.shutdown_raises = shutdown_raises
         self.count = count
         self.init_error = init_error
         self.missing = set(missing)
@@ -206,6 +217,20 @@ class FakeNvml:
     def gets(self):
         return [call[1:] for call in self.calls if call[0] == "lib.get"]
 
+    @property
+    def written(self):
+        """Every (pstate, clock) a Set reached the library for."""
+        return {(pstate, clock) for clock, pstate, *_ in self.sets}
+
+    @property
+    def zeroed(self):
+        """Every (pstate, clock) a Set of 0 reached the library for."""
+        return {(pstate, clock) for clock, pstate, mhz, _ in self.sets if mhz == 0}
+
+    @property
+    def signals(self):
+        return [what for what in self.set_interrupts.values() if isinstance(what, int)]
+
     # pynvml-shaped functions
 
     def _init(self):
@@ -217,6 +242,9 @@ class FakeNvml:
 
     def _shutdown(self):
         self.calls.append(("nvmlShutdown",))
+        if self.shutdown_raises is not None:
+            self.calls.append(("nvmlShutdown.failed", self.shutdown_raises.__name__))
+            raise self.shutdown_raises("nvmlShutdown: raised by the fake")
         if not self.initialised:
             raise NVMLError(UNINITIALIZED)
         self.initialised = False
@@ -304,6 +332,8 @@ class FakeNvml:
         ret = self._precheck(device, struct, "nvmlDeviceGetClockOffsets")
         if ret == OK and self.sets:
             ret = self.get_codes_after_set.get(key, OK)
+        if ret == OK and key in self.written:
+            ret = self.get_codes_after_write.get(key, OK)
         if ret == OK:
             struct.clockOffsetMHz = self.offsets[key]
             struct.minClockOffsetMHz, struct.maxClockOffsetMHz = self.ranges[key]
@@ -322,6 +352,13 @@ class FakeNvml:
         if ret == OK and key not in self.stuck:
             self.offsets[key] = self.clamp.get((key, mhz), mhz)
         self.calls.append(("lib.set", struct.type, struct.pstate, mhz, ret))
+        what = self.set_interrupts.get(len(self.sets))
+        if what is not None:
+            self.calls.append(("interrupt", len(self.sets), what))
+            if isinstance(what, int):
+                signal.raise_signal(what)
+            else:
+                raise what()
         return ret
 
 
@@ -372,10 +409,57 @@ SCENARIOS = {
     "no_function_pointer": (["set", "core", "120"], {"missing": {"_nvmlGetFunctionPointer"}}, 13),
     "init_fails": (["set", "core", "120"], {"init_error": DRIVER_NOT_LOADED}, None),
     "nothing_supported": (["set", "core", "120"], {"drop": {P0, P1, P2}}, None),
+    # Amendment 2. A write of 120 on P0 and on P2 comes first in each `set`, so
+    # the third Set call is the first write of the roll-back.
+    "readback_105_stderr_broken": (["set", "core", "120"], {"clamp": {((P2, CORE), 120): 105}}, 14),
+    "readback_105_stderr_closed": (["set", "core", "120"], {"clamp": {((P2, CORE), 120): 105}}, 14),
+    "set_core_120_streams_broken": (["set", "core", "120"], {}, 15),
+    "set_core_120_streams_closed": (["set", "core", "120"], {}, 15),
+    "roll_back_interrupted": (["set", "core", "120"], {"clamp": {((P2, CORE), 120): 105},
+                                                       "set_interrupts": {3: KeyboardInterrupt}}, 16),
+    "zero_interrupted": (["zero"], {"set_interrupts": {1: KeyboardInterrupt}}, 17),
+    "shutdown_raises": (["set", "core", "120"], {"shutdown_raises": RuntimeError}, 18),
+    "readback_unsupported": (["set", "core", "120"],
+                             {"get_codes_after_write": {(P2, CORE): NOT_SUPPORTED}}, 19),
+    "sigterm_in_second_write": (["set", "core", "120"], {"set_interrupts": {2: signal.SIGTERM}}, 20),
+    "sighup_in_second_write": (["set", "core", "120"], {"set_interrupts": {2: signal.SIGHUP}}, 20),
+    "roll_back_write_fails": (["set", "core", "120"], {"clamp": {((P2, CORE), 120): 105},
+                                                       "set_codes": {3: UNKNOWN}}, None),
+    "zero_write_fails": (["zero"], {"set_codes": {1: UNKNOWN}}, None),
 }
 # Refusals that may come before or after nvmlInit; every other scenario of
 # cases 1 to 8 cannot be answered without it.
 INIT_OPTIONAL = {name for name, (_, _, case) in SCENARIOS.items() if case == 3}
+
+# Scenarios in which the helper cannot write its messages:
+# name: (streams that raise on write, exception class, its arguments).
+BROKEN = (BrokenPipeError, (errno.EPIPE, "Broken pipe"))
+CLOSED = (ValueError, ("I/O operation on closed file.",))
+DEAD_STREAMS = {
+    "readback_105_stderr_broken": (("stderr",), *BROKEN),
+    "readback_105_stderr_closed": (("stderr",), *CLOSED),
+    "set_core_120_streams_broken": (("stdout", "stderr"), *BROKEN),
+    "set_core_120_streams_closed": (("stdout", "stderr"), *CLOSED),
+}
+# The handlers a helper may replace; Run puts back what it found.
+SIGNALS = (signal.SIGHUP, signal.SIGINT, signal.SIGTERM)
+
+
+class DeadStream:
+    """A stdout or stderr that cannot be written: write and flush raise. `seen`
+    holds what state() returned at each attempt to write."""
+
+    def __init__(self, kind, args, state):
+        self.kind, self.args, self.state = kind, args, state
+        self.closed = kind is ValueError
+        self.seen = []
+
+    def write(self, text):
+        self.seen.append(self.state())
+        raise self.kind(*self.args)
+
+    def flush(self):
+        raise self.kind(*self.args)
 
 
 def load_helper():
@@ -388,20 +472,46 @@ def load_helper():
 
 
 class Run:
+    """One call of main(). `out` and `err` are None for a stream that could not
+    be written, and `err_seen` then holds the offsets at each attempt to write
+    to stderr. In a scenario of Amendment 2 (cases 14 and up) an exception out
+    of main() is kept in `raised`. A signal the scenario sends lands in
+    `unhandled` when the helper has no handler for it; the handlers found
+    before the call are back in place after it, whatever the helper installed."""
+
     def __init__(self, name):
-        argv, settings, _ = SCENARIOS[name]
+        argv, settings, case = SCENARIOS[name]
         self.name = name
         self.fake = FakeNvml(**settings)
+        self.raised = None
+        self.unhandled = []
         helper = load_helper()
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            try:
-                self.status = helper.main(list(argv), self.fake.module)
-            except SystemExit as exit_:
-                raise AssertionError("main(%r) raised SystemExit(%r); it must return its exit code"
-                                     % (argv, exit_.code)) from None
-        self.out = out.getvalue()
-        self.err = err.getvalue()
+        dead, kind, args = DEAD_STREAMS.get(name, ((), None, None))
+        out, err = (DeadStream(kind, args, lambda: dict(self.fake.offsets)) if stream in dead
+                    else io.StringIO() for stream in ("stdout", "stderr"))
+        handlers = {sig: signal.getsignal(sig) for sig in SIGNALS}
+        try:
+            for sig in self.fake.signals:  # without this the default action ends the test run
+                signal.signal(sig, lambda signum, frame: self.unhandled.append(signum))
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                try:
+                    self.status = helper.main(list(argv), self.fake.module)
+                except SystemExit as exit_:
+                    raise AssertionError("main(%r) raised SystemExit(%r); it must return its exit"
+                                         " code" % (argv, exit_.code)) from None
+                except BaseException as raised:
+                    if case is None or case < 14:
+                        raise
+                    if isinstance(raised, KeyboardInterrupt) and not self.fake.count_of("interrupt"):
+                        raise  # a real Ctrl-C, not the fake's
+                    self.status, self.raised = None, raised
+        finally:
+            for sig, handler in handlers.items():
+                if handler is not None:
+                    signal.signal(sig, handler)
+        self.out = None if "stdout" in dead else out.getvalue()
+        self.err = None if "stderr" in dead else err.getvalue()
+        self.err_seen = err.seen if "stderr" in dead else None
 
 
 class Contract(unittest.TestCase):
@@ -410,6 +520,10 @@ class Contract(unittest.TestCase):
     def run_scenario(self, name):
         """Run one scenario and apply the rules that hold for every command."""
         run = Run(name)
+        self.assert_rules(run)
+        return run
+
+    def assert_rules(self, run):
         fake = run.fake
         self.assertIs(type(run.status), int, "main() returns an int")
         self.assertEqual(fake.misuse, [], "the fake library was called in a way the real one rejects")
@@ -419,16 +533,34 @@ class Contract(unittest.TestCase):
                              "only the graphics and memory clocks are ever read or written")
         inits = fake.count_of("nvmlInit") - fake.count_of("nvmlInit.failed")
         self.assertLessEqual(fake.count_of("nvmlInit"), 1, "nvmlInit is called at most once")
-        if inits:
+        if inits and fake.shutdown_raises is None:  # a shutdown that raised may be tried again
             self.assertEqual(fake.count_of("nvmlShutdown"), 1,
                              "nvmlShutdown is called exactly once when nvmlInit succeeded")
         if run.status == 0:
             self.assertEqual(run.err, "", "nothing on stderr on success")
-        else:
+        elif run.err is not None:  # None: this stderr could not be written
             self.assertNotEqual(run.err, "", "a failure says why on stderr")
             for line in run.err.splitlines():
                 self.assertTrue(line.startswith(PREFIX), "stderr line %r starts %r" % (line, PREFIX))
-        return run
+
+    def assert_rolled_back(self, run):
+        """The rule of Amendment 2: after the first write, any path but a clean
+        one ends with every offset the helper wrote at 0, and exit 1."""
+        fake = run.fake
+        written = sorted(fake.written)
+        self.assertNotEqual(written, [], "the fixture's writes happened")
+        self.assertEqual({key: fake.offsets[key] for key in written}, dict.fromkeys(written, 0),
+                         "every offset the helper wrote is 0 at the end")
+        self.assertIsNone(run.raised, "main() returns its exit code; nothing is raised out of it")
+        self.assertEqual(run.status, 1)
+        self.assert_rules(run)
+
+    def assert_roll_back_came_first(self, run):
+        written = sorted(run.fake.written)
+        self.assertNotEqual(run.err_seen, [], "a failure tries to say why on stderr")
+        self.assertEqual({key: run.err_seen[0][key] for key in written}, dict.fromkeys(written, 0),
+                         "the roll-back runs before any message is written; these are the offsets"
+                         " at the first write to stderr")
 
     def assert_refused(self, run, statuses=(1,)):
         self.assertIn(run.status, statuses)
@@ -607,7 +739,103 @@ class Contract(unittest.TestCase):
         self.assert_refused(run)
         self.assertIn("_nvmlGetFunctionPointer", run.err, "the message names the missing name")
 
-    # Rules of the ticket's Interface and Amendment 1 that have no numbered case.
+    # 14 (Amendment 2)
+
+    def test_14_dead_stderr_does_not_stop_the_roll_back(self):
+        for name in ("readback_105_stderr_broken", "readback_105_stderr_closed"):
+            with self.subTest(name):
+                run = Run(name)
+                self.assertIn((CORE, P2, 120, OK), run.fake.sets,
+                              "the fixture's write of 120 on P2 happened")
+                self.assert_rolled_back(run)
+                self.assert_roll_back_came_first(run)
+
+    # 15 (Amendment 2)
+
+    def test_15_dead_stdout_and_stderr_roll_back_a_good_set(self):
+        for name in ("set_core_120_streams_broken", "set_core_120_streams_closed"):
+            with self.subTest(name):
+                run = Run(name)
+                self.assertEqual(sorted(run.fake.sets[:2]), [(CORE, P0, 120, OK), (CORE, P2, 120, OK)],
+                                 "the fixture's two writes of 120 happened")
+                self.assert_rolled_back(run)
+                self.assert_roll_back_came_first(run)
+
+    # 16 (Amendment 2)
+
+    def test_16_keyboard_interrupt_in_the_first_roll_back_write_does_not_skip_the_rest(self):
+        uninterrupted = Run("readback_105").fake.zeroed
+        run = Run("roll_back_interrupted")
+        self.assertEqual([mhz for _, _, mhz, _ in run.fake.sets[2:3]], [0],
+                         "the third Set call is the first write of the roll-back")
+        self.assertEqual(run.fake.count_of("interrupt"), 1, "the fixture's KeyboardInterrupt was raised")
+        self.assertEqual(run.fake.zeroed, uninterrupted,
+                         "the roll-back writes 0 where it does when nothing interrupts it")
+        self.assert_rolled_back(run)
+
+    # 17 (Amendment 2)
+
+    def test_17_keyboard_interrupt_in_the_first_write_of_zero_does_not_skip_the_rest(self):
+        run = Run("zero_interrupted")
+        self.assertEqual(run.fake.count_of("interrupt"), 1, "the fixture's KeyboardInterrupt was raised")
+        self.assertEqual(run.fake.zeroed, {(P0, CORE), (P0, MEM), (P2, CORE), (P2, MEM)},
+                         "zero writes 0 on both clocks of every supported pstate")
+        self.assert_rolled_back(run)
+        self.assert_all_zero(run.fake)
+
+    # 18 (Amendment 2)
+
+    def test_18_runtime_error_from_shutdown_rolls_back_a_good_set(self):
+        run = Run("shutdown_raises")
+        self.assertEqual(sorted(run.fake.sets[:2]), [(CORE, P0, 120, OK), (CORE, P2, 120, OK)],
+                         "the fixture's two writes of 120 happened")
+        self.assertIn(("nvmlShutdown.failed", "RuntimeError"), run.fake.calls,
+                      "the fixture's nvmlShutdown raised")
+        self.assert_rolled_back(run)
+
+    # 19 (Amendment 2)
+
+    def test_19_readback_not_supported_after_the_write_zeroes_p0_and_p2(self):
+        run = Run("readback_unsupported")
+        self.assertIn((CORE, P2, 120, OK), run.fake.sets, "the fixture's write of 120 on P2 happened")
+        self.assertIn((CORE, P2, NOT_SUPPORTED), run.fake.gets,
+                      "the fixture's read-back on P2 answered not supported")
+        self.assertLessEqual({(P0, CORE), (P2, CORE)}, run.fake.zeroed, "0 is written on P0 and on P2")
+        self.assert_rolled_back(run)
+
+    # 20 (Amendment 2)
+
+    def test_20_sigterm_and_sighup_in_the_second_write_roll_back(self):
+        for name, sig in (("sigterm_in_second_write", signal.SIGTERM),
+                          ("sighup_in_second_write", signal.SIGHUP)):
+            with self.subTest(name):
+                before = signal.getsignal(sig)
+                run = Run(name)
+                self.assertIs(signal.getsignal(sig), before, "the handler from before the run is back")
+                self.assertIn(("interrupt", 2, sig), run.fake.calls,
+                              "the fixture sent %s in the second write" % sig.name)
+                self.assertEqual(run.unhandled, [], "main() has its own handler in place before the"
+                                 " first write; this signal reached the test's")
+                self.assert_rolled_back(run)
+
+    # Rules of the ticket's Interface and of the amendments that have no numbered case.
+
+    def test_amendment_2_zero_writes_go_on_after_one_fails(self):
+        with self.subTest("roll_back_write_fails"):
+            unfailed = Run("readback_105").fake.zeroed
+            run = self.run_scenario("roll_back_write_fails")
+            self.assertEqual([(mhz, code) for _, _, mhz, code in run.fake.sets[2:3]], [(0, UNKNOWN)],
+                             "the fixture's first write of the roll-back failed")
+            self.assertEqual(run.fake.zeroed, unfailed,
+                             "the roll-back writes 0 where it does when no write fails")
+            self.assertEqual(run.status, 1)
+        with self.subTest("zero_write_fails"):
+            run = self.run_scenario("zero_write_fails")
+            self.assertEqual([(mhz, code) for _, _, mhz, code in run.fake.sets[:1]], [(0, UNKNOWN)],
+                             "the fixture's first write failed")
+            self.assertEqual(run.fake.zeroed, {(P0, CORE), (P0, MEM), (P2, CORE), (P2, MEM)},
+                             "zero writes 0 on both clocks of every supported pstate")
+            self.assertEqual(run.status, 1)
 
     def test_amendment_public_wrappers_are_never_called(self):
         for name in SCENARIOS:

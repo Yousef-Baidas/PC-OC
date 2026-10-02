@@ -9,6 +9,10 @@ bats_require_minimum_version 1.5.0
 # with mocks bind-mounted over /usr/bin/systemctl and /usr/bin/nvidia-smi and scratch over /var/lib,
 # and aborts (97) unless the mocks are in place. pc-oc pins PATH=/usr/bin, so only a mount keeps
 # the real tools out of reach.
+# Contract #117: as root, toolchain scripts are run through /usr/bin/setpriv as the calling user. In the
+# namespace setpriv is a mock that records its argument vector and then runs what follows the three
+# setpriv options, and /etc/passwd is a fixture, so the caller is uid 4242, gid 4343, home
+# /home/pc-oc-caller on any machine. Only uid 0 is mapped there, so the real setpriv could not drop.
 
 setup_file() {
   local f="$BATS_TEST_DIRNAME/../../pc-oc"
@@ -34,14 +38,37 @@ setup() {
     chmod +x "$BATS_TEST_TMPDIR/mocks/$m"
   done
   echo pc-oc-test-scratch >"$BATS_TEST_TMPDIR/varlib/marker"
+  # the log path is written into the mock: it must record even if pc-oc clears its environment
+  setpriv_log="$BATS_TEST_TMPDIR/setpriv.log"
+  cat >"$BATS_TEST_TMPDIR/mocks/setpriv" <<EOF
+#!/usr/bin/bash
+# pc-oc-test-mock
+{
+  printf '%s\n' "\$@"
+  echo argv-end
+} >>"$setpriv_log"
+[[ "\$1" == --reuid=* && "\$2" == --regid=* && "\$3" == --clear-groups ]] || exit 96
+shift 3
+exec "\$@"
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/mocks/setpriv"
+  caller_passwd='pc-oc-caller:x:4242:4343::/home/pc-oc-caller:/usr/bin/bash'
+  # a user named 12x has a home, so only the digit check stops SUDO_UID=12x; the lookup would not
+  printf '%s\n' 'root:x:0:0::/root:/usr/bin/bash' "$caller_passwd" \
+    '12x:x:4244:4343::/home/pc-oc-12x:/usr/bin/bash' >"$BATS_TEST_TMPDIR/passwd"
+  export SUDO_UID=4242 SUDO_GID=4343
   cat >"$BATS_TEST_TMPDIR/guard.sh" <<EOF
 #!/usr/bin/bash
 mount --bind "$BATS_TEST_TMPDIR/mocks/systemctl" /usr/bin/systemctl || exit 97
 mount --bind "$BATS_TEST_TMPDIR/mocks/nvidia-smi" /usr/bin/nvidia-smi || exit 97
+mount --bind "$BATS_TEST_TMPDIR/mocks/setpriv" /usr/bin/setpriv || exit 97
 mount --bind "$BATS_TEST_TMPDIR/varlib" /var/lib || exit 97
+mount --bind "$BATS_TEST_TMPDIR/passwd" /etc/passwd || exit 97
 [[ "\$(sed -n 2p /usr/bin/systemctl)" == "# pc-oc-test-mock" ]] || exit 97
 [[ "\$(sed -n 2p /usr/bin/nvidia-smi)" == "# pc-oc-test-mock" ]] || exit 97
+[[ "\$(sed -n 2p /usr/bin/setpriv)" == "# pc-oc-test-mock" ]] || exit 97
 [[ "\$(cat /var/lib/marker)" == pc-oc-test-scratch ]] || exit 97
+[[ "\$(/usr/bin/getent passwd 4242)" == "$caller_passwd" ]] || exit 97
 exec "\$@"
 EOF
 }
@@ -254,4 +281,144 @@ refused_env_euid() { # refused_env_euid <EUID value> <verb> <target>
   [ "${#lines[@]}" -eq 5 ]
   [[ "${lines[0]}" == "probe cpu "* ]]
   [[ "${lines[4]}" == "probe toolchain "* ]]
+}
+
+# Contract #117: toolchain scripts run as the calling user.
+# fake_recorder <component> <verb>: one line per run in $calls with the uid and environment it saw.
+# The log path is written into the script: under `env -i` no CALLS variable reaches it.
+fake_recorder() {
+  mkdir -p "$root/$1"
+  cat >"$root/$1/$2.sh" <<EOF
+#!/usr/bin/env bash
+echo "ran $1 $2 uid=\$(/usr/bin/id -u) HOME=\${HOME-unset} CALLER_MARK=\${CALLER_MARK-unset}" \\
+  "XDG_CONFIG_HOME=\${XDG_CONFIG_HOME-unset} CARGO_HOME=\${CARGO_HOME-unset}" \\
+  "SYSFS_ROOT=\${SYSFS_ROOT-unset} PC_OC_STATE=\${PC_OC_STATE-unset}" >>"$calls"
+EOF
+}
+
+# what a script run through the drop sees: the passwd home and nothing of the caller's
+dropped_env="HOME=/home/pc-oc-caller CALLER_MARK=unset XDG_CONFIG_HOME=unset CARGO_HOME=unset SYSFS_ROOT=unset PC_OC_STATE=unset"
+
+# one_drop <verb>: setpriv ran exactly once, with the contract's argument vector for toolchain/<verb>.sh
+one_drop() {
+  printf '%s\n' --reuid=4242 --regid=4343 --clear-groups /usr/bin/env -i HOME=/home/pc-oc-caller \
+    PATH=/usr/bin /usr/bin/bash "$root/toolchain/$1.sh" argv-end >"$BATS_TEST_TMPDIR/want-argv"
+  [ -e "$setpriv_log" ] || {
+    echo "setpriv never ran: toolchain/$1.sh was not dropped" >&3
+    return 1
+  }
+  diff "$BATS_TEST_TMPDIR/want-argv" "$setpriv_log" >&3
+}
+
+@test "non-root pc-oc apply toolchain runs toolchain/apply.sh once, as the caller" {
+  skip "contract #117 pending"
+  fake_all_loggers
+  fake_recorder toolchain apply
+  run --separate-stderr env HOME="$BATS_TEST_TMPDIR/home" "$root/pc-oc" apply toolchain
+  [ "$status" -eq 0 ]
+  [ "$(wc -l <"$calls")" -eq 1 ]
+  [[ "$(<"$calls")" == "ran toolchain apply uid=$(id -u) HOME=$BATS_TEST_TMPDIR/home "* ]]
+}
+
+# apply all is the #56 case above; with toolchain let through, the other components must still refuse
+@test "non-root pc-oc apply gpu refuses with the sudo hint and runs no component" {
+  skip "contract #117 pending"
+  refused apply gpu
+}
+
+# needs_caller <env arguments...>: as uid 0 with that environment, apply toolchain dies with the
+# contract's line and neither the script nor setpriv runs
+needs_caller() {
+  fake_all_loggers
+  fake_recorder toolchain apply
+  run --separate-stderr as_root env "$@" "$root/pc-oc" apply toolchain
+  [ "$status" -eq 1 ] || {
+    echo "root env $* apply toolchain exited $status, want 1; stderr '$stderr'" >&3
+    return 1
+  }
+  [ "$stderr" = "pc-oc: toolchain: needs the calling user: run it without sudo, or through sudo from your own account" ] || {
+    echo "root env $* apply toolchain stderr was '$stderr'" >&3
+    return 1
+  }
+  [ ! -e "$calls" ] || {
+    echo "root env $* apply toolchain ran: $(tr '\n' ';' <"$calls")" >&3
+    return 1
+  }
+  [ ! -e "$setpriv_log" ] || {
+    echo "root env $* apply toolchain called setpriv: $(tr '\n' ' ' <"$setpriv_log")" >&3
+    return 1
+  }
+}
+
+@test "as EUID 0 with SUDO_UID unset apply toolchain dies needing the calling user and runs nothing" {
+  skip "contract #117 pending"
+  needs_caller -u SUDO_UID
+}
+
+@test "as EUID 0 with SUDO_UID=0 apply toolchain dies needing the calling user and runs nothing" {
+  skip "contract #117 pending"
+  needs_caller SUDO_UID=0
+}
+
+@test "as EUID 0 with SUDO_UID=12x apply toolchain dies needing the calling user and runs nothing" {
+  skip "contract #117 pending"
+  needs_caller SUDO_UID=12x
+}
+
+@test "as EUID 0 with SUDO_GID unset apply toolchain dies needing the calling user and runs nothing" {
+  skip "contract #117 pending"
+  needs_caller -u SUDO_GID
+}
+
+@test "as EUID 0 apply toolchain calls setpriv with exactly the contract's argument vector and a clean environment" {
+  skip "contract #117 pending"
+  fake_all_loggers
+  fake_recorder toolchain apply
+  run --separate-stderr as_root env HOME="$BATS_TEST_TMPDIR/home" CALLER_MARK=set \
+    XDG_CONFIG_HOME="$BATS_TEST_TMPDIR/xdg" CARGO_HOME="$BATS_TEST_TMPDIR/cargo" \
+    SYSFS_ROOT="$SYSFS_ROOT" PC_OC_STATE="$PC_OC_STATE" "$root/pc-oc" apply toolchain
+  [ "$status" -eq 0 ]
+  one_drop apply
+  run grep -cE 'XDG_CONFIG_HOME|CARGO_HOME|SYSFS_ROOT|PC_OC_STATE|CALLER_MARK' "$setpriv_log"
+  [ "$output" = 0 ]
+  [ "$(wc -l <"$calls")" -eq 1 ]
+  [[ "$(<"$calls")" == "ran toolchain apply uid="*" $dropped_env" ]]
+}
+
+@test "as EUID 0 with SUDO_UID unset revert all still runs gpu's revert, exits 1 and names toolchain" {
+  skip "contract #117 pending"
+  fake_recorder gpu revert
+  fake_recorder toolchain revert
+  run --separate-stderr as_root env -u SUDO_UID "$root/pc-oc" revert all
+  [ "$status" -eq 1 ]
+  [ "$(wc -l <"$calls")" -eq 1 ]
+  [[ "$(<"$calls")" == "ran gpu revert uid=0 "* ]]
+  [ ! -e "$setpriv_log" ]
+  [[ "$stderr" == *"pc-oc: toolchain: needs the calling user: "* ]]
+  [ "${stderr_lines[-1]}" = "pc-oc: all: revert.sh failed: toolchain" ]
+}
+
+@test "as EUID 0 probe all drops for the toolchain probe only; the other probes run as root as today" {
+  skip "contract #117 pending"
+  local c
+  for c in cpu ram gpu os toolchain; do
+    fake_recorder "$c" probe
+  done
+  run --separate-stderr as_root env HOME="$BATS_TEST_TMPDIR/home" CALLER_MARK=set \
+    XDG_CONFIG_HOME="$BATS_TEST_TMPDIR/xdg" CARGO_HOME="$BATS_TEST_TMPDIR/cargo" "$root/pc-oc" probe all
+  [ "$status" -eq 0 ]
+  one_drop probe
+  mapfile -t ran <"$calls"
+  [ "${#ran[@]}" -eq 5 ]
+  # as today: the caller's environment passes through, minus the two test seams pc-oc unsets as root
+  local i=0 as_today="HOME=$BATS_TEST_TMPDIR/home CALLER_MARK=set XDG_CONFIG_HOME=$BATS_TEST_TMPDIR/xdg"
+  as_today+=" CARGO_HOME=$BATS_TEST_TMPDIR/cargo SYSFS_ROOT=unset PC_OC_STATE=unset"
+  for c in cpu ram gpu os; do
+    [ "${ran[i]}" = "ran $c probe uid=0 $as_today" ] || {
+      echo "probe $c ran as '${ran[i]}'" >&3
+      return 1
+    }
+    i=$((i + 1))
+  done
+  [[ "${ran[4]}" == "ran toolchain probe uid="*" $dropped_env" ]]
 }
