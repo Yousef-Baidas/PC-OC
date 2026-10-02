@@ -1,0 +1,9 @@
+cpu.model=Intel(R) Core(TM) i7-14700
+cpu.microcode=0x12f
+gpu.name=NVIDIA GeForce RTX 4070
+gpu.driver=580.82.09
+os.kernel=6.17.1-1-cachyos
+cpu.pl1_uw=65000000
+gpu.pl_w=160.00
+os.governor=powersave
+os.cmdline=quiet

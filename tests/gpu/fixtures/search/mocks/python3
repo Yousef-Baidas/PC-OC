@@ -1,0 +1,147 @@
+#!/usr/bin/bash
+# pc-oc-test-mock
+# Fake gpu/nvml.py for tests/gpu/search.bats (contract #135). guard.sh binds this file over
+# /usr/bin/python3, so "/usr/bin/python3 -I <tree>/gpu/nvml.py <command>" lands here: no
+# Python runs, NVML is never initialised and no driver is asked anything. It keeps the two
+# offsets in files, the way the driver keeps them between two helper runs, and answers in
+# the helper's format (#123): get prints p<n>.<core|mem> lines, set prints the three lines
+# of its clock, zero prints nothing; P1 is "unsupported" on this fake card.
+# Any other use of python3 is recorded as "python3 <args>" and exits 96.
+# State directory (fixed: the mock must record whatever environment it is given):
+# /var/lib/pc-oc-test-mock
+#   events        "nvml <command>" per call, shared with the other mocks, in call order
+#   nvml.calls    "<command> rc=<exit code> | <content of pending, or ABSENT>" per call
+#   nvml.loads    "<command> alive=<pids>" per call: the processes of load.pids (the mock
+#                 load's hang= calls) that were still there, zombies included
+#   nvml.core, nvml.mem   the offsets now (absent = 0)
+#   nvml.get      if present, get prints this file instead of the six lines
+#   nvml.fail     lines "<nth|all> <exit code> <command prefix>": the nth call (or every
+#                 call) whose command starts with the prefix fails with that code. A failing
+#                 set still leaves its offset written: only zero clears it.
+#   python3.argv  the whole argument list of every call
+#   python3.env   the environment of every call
+set -u
+s=/var/lib/pc-oc-test-mock
+[[ -e "$s/scratch" ]] || {
+  echo "mock python3: $s is not the test scratch" >&2
+  exit 96
+}
+{
+  echo "-- python3 $*"
+  /usr/bin/env
+} >>"$s/python3.env"
+export LC_ALL=C
+printf '%s\n' "$*" >>"$s/python3.argv"
+if [[ "${1-}" != -I || "${2-}" != */gpu/nvml.py ]]; then
+  printf 'python3 %s\n' "$*" >>"$s/events"
+  echo "mock python3: not the helper call: $*" >&2
+  exit 96
+fi
+shift 2
+printf 'nvml %s\n' "$*" >>"$s/events"
+
+alive=""
+if [[ -e "$s/load.pids" ]]; then
+  for pid in $(<"$s/load.pids"); do
+    ! kill -0 "$pid" 2>/dev/null || alive+=" $pid"
+  done
+fi
+printf '%s alive=%s\n' "$*" "${alive# }" >>"$s/nvml.loads"
+
+pending=ABSENT
+[[ ! -e /var/lib/pc-oc/gpu/search/pending ]] ||
+  pending="$(/usr/bin/tr '\n' ' ' </var/lib/pc-oc/gpu/search/pending)"
+
+# finish <exit code>: record the call and leave
+finish() {
+  printf '%s rc=%s | %s\n' "$command" "$1" "$pending" >>"$s/nvml.calls"
+  exit "$1"
+}
+
+# planned: print the exit code nvml.fail gives this call, or nothing
+planned() {
+  local nth code prefix n line=0 hit=""
+  [[ -e "$s/nvml.fail" ]] || return 0
+  while read -r nth code prefix; do
+    line=$((line + 1))
+    [[ "$command" == "$prefix" || "$command" == "$prefix "* ]] || continue
+    n=0
+    [[ ! -e "$s/nvml.seen.$line" ]] || n="$(<"$s/nvml.seen.$line")"
+    n=$((n + 1))
+    echo "$n" >"$s/nvml.seen.$line"
+    [[ "$nth" != all && "$nth" != "$n" ]] || hit="$code"
+  done <"$s/nvml.fail"
+  printf '%s' "$hit"
+}
+
+# offset <core|mem>: the offset held now
+offset() {
+  if [[ -e "$s/nvml.$1" ]]; then cat "$s/nvml.$1"; else echo 0; fi
+}
+
+# row <pstate> <core|mem>: one line of the helper's output
+row() {
+  local range="min=-500 max=500"
+  [[ "$2" == core ]] || range="min=-2000 max=3000"
+  if [[ "$1" == 1 ]]; then
+    printf 'p1.%s unsupported\n' "$2"
+  else
+    printf 'p%s.%s offset=%s %s\n' "$1" "$2" "$(offset "$2")" "$range"
+  fi
+}
+
+command="$*"
+code="$(planned)"
+case "${1-}" in
+  get)
+    [[ $# -eq 1 ]] || finish 2
+    if [[ -n "$code" ]]; then
+      echo "pc-oc: gpu: nvml: mock: get fails as planned" >&2
+      finish "$code"
+    fi
+    if [[ -e "$s/nvml.get" ]]; then
+      cat "$s/nvml.get"
+    else
+      for p in 0 1 2; do
+        row "$p" core
+        row "$p" mem
+      done
+    fi
+    finish 0
+    ;;
+  set)
+    [[ $# -eq 3 && ("$2" == core || "$2" == mem) && "$3" =~ ^(0|-?[1-9][0-9]*)$ ]] || {
+      echo "usage: nvml.py get | set core|mem <mhz> | zero" >&2
+      finish 2
+    }
+    cap=300
+    [[ "$2" == core ]] || cap=2000
+    if (($3 > cap || $3 < -cap)); then
+      echo "pc-oc: gpu: nvml: $2 offset $3 is outside the cap $cap" >&2
+      finish 1
+    fi
+    echo "$3" >"$s/nvml.$2"
+    if [[ -n "$code" ]]; then
+      echo "pc-oc: gpu: nvml: mock: set fails as planned, the offset stays written" >&2
+      finish "$code"
+    fi
+    for p in 0 1 2; do
+      row "$p" "$2"
+    done
+    finish 0
+    ;;
+  zero)
+    [[ $# -eq 1 ]] || finish 2
+    if [[ -n "$code" ]]; then
+      echo "pc-oc: gpu: nvml: zero: mock: fails as planned" >&2
+      finish "$code"
+    fi
+    echo 0 >"$s/nvml.core"
+    echo 0 >"$s/nvml.mem"
+    finish 0
+    ;;
+  *)
+    echo "usage: nvml.py get | set core|mem <mhz> | zero" >&2
+    finish 2
+    ;;
+esac

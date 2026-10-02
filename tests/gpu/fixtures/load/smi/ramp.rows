@@ -1,0 +1,6 @@
+# nvidia-smi scenario for mocks/nvidia-smi: <warm|post> <pstate> <core MHz> <mem MHz> <W> <C> <reasons>
+# The warm-up sample holds the lowest pstate and the highest clocks; after it the
+# values are pstate 2 then 3, core 2400 then 2520, memory 5001 then 4800.
+warm P0 3105 9001 120.10 50 0x0
+post P2 2400 5001 131.40 56 0x0
+post P3 2520 4800 131.40 58 0x0

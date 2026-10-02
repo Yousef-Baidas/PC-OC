@@ -1,0 +1,3 @@
+# src: cargo-config, sccache-rust
+[build]
+rustc-wrapper = "/usr/bin/sccache"

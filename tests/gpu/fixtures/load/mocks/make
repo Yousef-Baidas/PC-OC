@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# pc-oc-test-mock
+# Mock make for tests/gpu/burn-build.bats (contract #134); compiles nothing.
+# Env: MOCK_STATE (dir: make.calls one line per call, make.cwd the directory it built in,
+# make.env the CUDA variables it saw), MOCK_MAKE=ok|fail|no-binary (default ok).
+# Like the real make it stops when the directory has no Makefile. "ok" leaves gpu_burn and
+# compare.fatbin (COMPARE_KERNEL in gpu_burn-drv.cpp at the pinned commit); "no-binary"
+# exits 0 with only compare.fatbin; "fail" exits 2 and leaves nothing.
+set -u
+: "${MOCK_STATE:?}"
+printf '%s\n' "$*" >>"$MOCK_STATE/make.calls"
+dir=.
+: >"$MOCK_STATE/make.env"
+while (($#)); do
+  case "$1" in
+    -C | --directory)
+      dir="${2:-.}"
+      shift
+      ;;
+    -C?*) dir="${1#-C}" ;;
+    --directory=*) dir="${1#--directory=}" ;;
+    CUDAPATH=* | CCPATH=* | COMPUTE=*) printf 'arg %s\n' "$1" >>"$MOCK_STATE/make.env" ;;
+  esac
+  shift
+done
+env | grep -E '^(CUDAPATH|CCPATH|COMPUTE)=' | sed 's/^/env /' >>"$MOCK_STATE/make.env"
+cd "$dir" || exit 2
+pwd -P >"$MOCK_STATE/make.cwd"
+[[ -f Makefile ]] || {
+  echo "make: *** No targets specified and no makefile found.  Stop." >&2
+  exit 2
+}
+case "${MOCK_MAKE:-ok}" in
+  ok)
+    printf '#!/bin/false\n' >gpu_burn
+    chmod +x gpu_burn
+    : >compare.fatbin
+    ;;
+  no-binary) : >compare.fatbin ;;
+  *)
+    echo "make: *** [Makefile:55: gpu_burn-drv.o] Error 1" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,4 @@
+Oct 02 03:14:16 cachyos kernel: NVRM: GPU at PCI:0000:01:00: GPU-00000000-0000-0000-0000-000000000000
+Oct 02 03:14:16 cachyos kernel: NVRM: Xid (PCI:0000:01:00): 31, pid=4242, name=gpu_burn, Ch 00000008, intr 10000000. MMU Fault: ENGINE GRAPHICS GPCCLIENT_T1_0 faulted @ 0x1_01234000. Fault is of type FAULT_PDE ACCESS_TYPE_READ
+Oct 02 03:14:17 cachyos kernel: usb 1-4: reset high-speed USB device number 3 using xhci_hcd
+Oct 02 03:14:17 cachyos kernel: NVRM: Xid (PCI:0000:01:00): 13, pid=4242, name=gpu_burn, Graphics SM Warp Exception on (GPC 0, TPC 1, SM 0): Out Of Range Address

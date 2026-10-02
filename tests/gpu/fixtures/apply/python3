@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# pc-oc-test-mock
+# Mock python3 for the #127 contract. The scripts reach the helper only as
+# `/usr/bin/python3 -I <tree>/gpu/nvml.py <args>`, so this file stands where the
+# interpreter is (guard.sh binds it over /usr/bin/python3; it is also first on PATH) and
+# runs the tree's nvml.py, which is the Bash stub nvml-stub.bash. No Python runs and NVML
+# is never loaded.
+# Every call is appended to $MOCK_STATE/python3 as "<$0> <first argument> <real path of
+# the second>". Exit 96 = not called as `-I <the stub>`; nothing ran then.
+set -euo pipefail
+
+script=""
+if [[ $# -ge 2 ]]; then
+  script="$(/usr/bin/realpath -- "$2" 2>/dev/null)" || script="$2"
+fi
+printf '%s %s %s\n' "$0" "${1:-}" "$script" >>"$MOCK_STATE/python3"
+[[ "${1:-}" == -I && -f "$script" && "$(/usr/bin/sed -n 2p "$script")" == "# pc-oc-test-mock" ]] || {
+  echo "mock python3: want -I <the nvml.py stub>, got: $*" >&2
+  exit 96
+}
+exec /usr/bin/bash "$script" "${@:3}"

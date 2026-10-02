@@ -1,0 +1,6 @@
+# nvidia-smi scenario for mocks/nvidia-smi: <warm|post|late> <pstate> <core MHz> <mem MHz> <W> <C> <reasons>
+# Unlimited from the warm-up end to the end of the run; sw_power_cap (0x4) and
+# sw_thermal_slowdown (0x20) in the samples taken while gpu_burn waits out its shutdown.
+warm P8 210 405 14.80 39 0x1
+post P0 2520 8001 131.40 58 0x0
+late P0 2610 8001 160.02 83 0x24

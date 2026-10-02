@@ -1,0 +1,22 @@
+# gpu_burn output, timed: <ms since start>|<printf %b text>; "end-<ms>" and "end" count
+# from the run time the mock was given.
+# The formats are the printf strings of gpu_burn-drv.cpp at commit 3ead140 (lines 144-147,
+# 187-196, 552-592, 612, 660-664, 913-914); the "GPU 0: ... (UUID" line is what its
+# system("nvidia-smi -L") prints. Numbers, the date line and the timing (a run squeezed
+# into 2 s) are reconstruction, unverified against the real tool.
+# FAULTY summary alone: every progress line still has errors: 0.
+0|Using compare file: compare.fatbin\n
+0|Burning for 2 seconds.\n
+50|GPU 0: NVIDIA GeForce RTX 4060 Ti (UUID: GPU-00000000-0000-0000-0000-000000000000)\n
+150|Initialized device 0 with 7805 MB of memory (7404 MB available, using 5923 MB of it), using FLOATS\n
+150|Results are 268435456 bytes each, thus performing 20 iterations\n
+400|\r20.0%  proc'd: 20 (5861 Gflop/s)   errors: 0   temps: 52 C 
+400|\n\tSummary at:   Fri Oct  2 03:14:15 AM +03 2026\n\n
+800|\r40.0%  proc'd: 40 (5861 Gflop/s)   errors: 0   temps: 55 C 
+1300|\r65.0%  proc'd: 60 (5861 Gflop/s)   errors: 0   temps: 57 C 
+1300|\n\tSummary at:   Fri Oct  2 03:14:15 AM +03 2026\n\n
+end-300|\r85.0%  proc'd: 80 (5861 Gflop/s)   errors: 0   temps: 58 C 
+end-150|\r100.0%  proc'd: 100 (5861 Gflop/s)   errors: 0   temps: 58 C 
+end-100|\nKilling processes with SIGTERM (soft kill)\n
+end-50|Freed memory for dev 0\nUninitted cublas\ndone\n
+end|\nTested 1 GPUs:\n\tGPU 0: FAULTY\n

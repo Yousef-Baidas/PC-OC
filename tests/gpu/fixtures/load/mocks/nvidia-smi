@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# pc-oc-test-mock
+# Mock nvidia-smi for tests/gpu/load.bats (contract #134); never talks to a driver.
+# Answers one "--query-gpu=<fields> --format=csv[,noheader][,nounits]" sample per call;
+# any of the fields below, in any order. Loop mode (-l, -lms) is refused: the contract
+# wants one process per sample, so a failing sample is a failing exit code.
+# Env: MOCK_STATE (dir: nvidia-smi.calls one line per call, nvidia-smi.post the number of
+# after-warm-up rows served, start written by the load mock), MOCK_SMI_ROWS (scenario).
+# Scenario lines: "<warm|post|late> <pstate> <core MHz> <mem MHz> <W> <C> <reasons bitmask>".
+# The warm row answers until the load mock has run for 0.5 s (and before it starts). The
+# post rows answer after that, one per call in file order, the last one repeating; a call
+# between 0.5 s and 0.9 s gets the current post row without using it up. A "late" row
+# answers every call once the load mock's run time (state/end_ms) has passed, in place of
+# the post rows. "post fail" makes
+# that call fail like a lost GPU; "post unknown" prints [Unknown Error] in every field;
+# "warm fail" and "warm unknown" do the same to the warm-up calls.
+# Reason bits (nvml.h nvmlClocksEventReason*): 0x1 gpu_idle, 0x2
+# applications_clocks_setting, 0x4 sw_power_cap, 0x8 hw_slowdown, 0x10 sync_boost, 0x20
+# sw_thermal_slowdown, 0x40 hw_thermal_slowdown, 0x80 hw_power_brake_slowdown, 0x100
+# display_clock_setting, 0x200 board_limit, 0x400 reliability.
+# A row holds every reason as one bit and the answer has one column per reason field the
+# query names, in the query's order, so the same rows serve the five reason fields of #134
+# and the seven of #140. The two that #140 adds are, in `nvidia-smi --help-query-gpu` of
+# driver 615.71, "clocks_event_reasons.board_limit" and "clocks_event_reasons.reliability"
+# (each also under clocks_throttle_reasons.); that help has no display_clock_setting field.
+set -u
+export LC_ALL=C
+: "${MOCK_STATE:?}"
+printf '%s\n' "$*" >>"$MOCK_STATE/nvidia-smi.calls"
+unexpected() {
+  echo "mock nvidia-smi: unexpected args: $*" >&2
+  exit 2
+}
+all=("$@")
+fields="" format=""
+while (($#)); do
+  case "$1" in
+    --query-gpu=*) fields="${1#--query-gpu=}" ;;
+    --format=*) format="${1#--format=}" ;;
+    -i | --id) shift ;;
+    -i=* | --id=*) ;;
+    -L | --list-gpus)
+      echo "GPU 0: NVIDIA GeForce RTX 4060 Ti (UUID: GPU-00000000-0000-0000-0000-000000000000)"
+      exit 0
+      ;;
+    *) unexpected "${all[@]}" ;;
+  esac
+  shift
+done
+[[ -n "$fields" && ",$format," == *,csv,* ]] || unexpected "${all[@]}"
+header=1 units=1
+[[ ",$format," != *,noheader,* ]] || header=""
+[[ ",$format," != *,nounits,* ]] || units=""
+
+: "${MOCK_SMI_ROWS:?}"
+elapsed_ms=0
+if [[ -r "$MOCK_STATE/start" ]]; then
+  start="$(<"$MOCK_STATE/start")"
+  elapsed_ms=$(((${EPOCHREALTIME/./} - ${start/./}) / 1000))
+fi
+warm=() post=() late=()
+while read -r phase rest; do
+  case "$phase" in
+    warm) warm+=("$rest") ;;
+    post) post+=("$rest") ;;
+    late) late+=("$rest") ;;
+  esac
+done <"$MOCK_SMI_ROWS"
+end_ms=""
+[[ ! -r "$MOCK_STATE/end_ms" ]] || end_ms="$(<"$MOCK_STATE/end_ms")"
+if ((elapsed_ms < 500)) && ((${#warm[@]})); then
+  row="${warm[0]}"
+elif [[ -n "$end_ms" ]] && ((elapsed_ms >= end_ms)) && ((${#late[@]})); then
+  row="${late[0]}"
+else
+  served=0
+  [[ ! -r "$MOCK_STATE/nvidia-smi.post" ]] || served="$(<"$MOCK_STATE/nvidia-smi.post")"
+  ((served < ${#post[@]})) || served=$((${#post[@]} - 1))
+  row="${post[served]}"
+  ((elapsed_ms < 900)) || printf '%s\n' $((served + 1)) >"$MOCK_STATE/nvidia-smi.post"
+fi
+
+if [[ "$row" == fail ]]; then
+  echo "Unable to determine the device handle for GPU0000:01:00.0: Unknown Error"
+  exit 15
+fi
+read -r pstate core mem power temp reasons <<<"$row"
+[[ "$pstate" != unknown ]] || reasons=0
+
+# reason <bit>: Active or Not Active, as the per-reason fields print
+reason() {
+  if ((reasons & $1)); then echo "Active"; else echo "Not Active"; fi
+}
+# unit <value> <unit>: the value, with its unit unless nounits was asked
+unit() {
+  if [[ -n "$units" ]]; then echo "$1 $2"; else echo "$1"; fi
+}
+IFS=, read -r -a names <<<"$fields"
+out=() head=()
+for name in "${names[@]}"; do
+  name="${name// /}"
+  suffix=""
+  case "${name/#clocks_throttle_reasons./clocks_event_reasons.}" in
+    pstate) v="$pstate" ;;
+    clocks.current.graphics | clocks.gr | clocks.current.sm | clocks.sm)
+      v="$(unit "$core" MHz)" suffix=" [MHz]"
+      ;;
+    clocks.current.memory | clocks.mem) v="$(unit "$mem" MHz)" suffix=" [MHz]" ;;
+    clocks.current.video | clocks.video) v="$(unit 1185 MHz)" suffix=" [MHz]" ;;
+    power.draw | power.draw.instant | power.draw.average) v="$(unit "$power" W)" suffix=" [W]" ;;
+    power.limit) v="$(unit 160.00 W)" suffix=" [W]" ;;
+    temperature.gpu) v="$temp" ;;
+    utilization.gpu) v="$(unit 99 %)" suffix=" [%]" ;;
+    utilization.memory) v="$(unit 87 %)" suffix=" [%]" ;;
+    fan.speed) v="$(unit 62 %)" suffix=" [%]" ;;
+    memory.used) v="$(unit 6105 MiB)" suffix=" [MiB]" ;;
+    index) v=0 ;;
+    name) v="NVIDIA GeForce RTX 4060 Ti" ;;
+    timestamp) v="$(date '+%Y/%m/%d %H:%M:%S.%3N')" ;;
+    clocks_event_reasons.active) v="$(printf '0x%016x' "$reasons")" ;;
+    clocks_event_reasons.supported) v="0x00000000000007ff" ;;
+    clocks_event_reasons.gpu_idle) v="$(reason 0x1)" ;;
+    clocks_event_reasons.applications_clocks_setting) v="$(reason 0x2)" ;;
+    clocks_event_reasons.sw_power_cap) v="$(reason 0x4)" ;;
+    clocks_event_reasons.hw_slowdown) v="$(reason 0x8)" ;;
+    clocks_event_reasons.sync_boost) v="$(reason 0x10)" ;;
+    clocks_event_reasons.sw_thermal_slowdown) v="$(reason 0x20)" ;;
+    clocks_event_reasons.hw_thermal_slowdown) v="$(reason 0x40)" ;;
+    clocks_event_reasons.hw_power_brake_slowdown) v="$(reason 0x80)" ;;
+    clocks_event_reasons.board_limit) v="$(reason 0x200)" ;;
+    clocks_event_reasons.reliability) v="$(reason 0x400)" ;;
+    *)
+      printf 'Field "%s" is not a valid field to query.\n\n' "$name"
+      exit 2
+      ;;
+  esac
+  [[ "$pstate" != unknown ]] || v="[Unknown Error]"
+  [[ -n "$units" ]] || suffix=""
+  out+=("$v")
+  head+=("$name$suffix")
+done
+join() {
+  local first="$1" part
+  shift
+  printf '%s' "$first"
+  for part in "$@"; do printf ', %s' "$part"; done
+  printf '\n'
+}
+[[ -z "$header" ]] || join "${head[@]}"
+join "${out[@]}"

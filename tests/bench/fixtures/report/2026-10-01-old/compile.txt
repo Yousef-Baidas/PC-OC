@@ -1,0 +1,3 @@
+input.kernel_version=6.12.1
+input.runs=3
+result.compile.median_s=200

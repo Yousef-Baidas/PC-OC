@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# pc-oc-test-mock
+# Mock systemctl for the #127 contract: knows pc-oc-gpu.service and nothing else.
+# Every call is appended to $MOCK_STATE/order as "systemctl <args>". The unit's state is
+# the one word in $MOCK_STATE/unit: enabled | disabled | missing (not installed).
+# Verbs: cat, is-enabled (exit codes as systemctl(1) gives them: 0 enabled, 1 disabled,
+# 4 not-found), enable, disable, stop. Anything else exits 2.
+# stop starts nothing and leaves the word in $MOCK_STATE/unit as it is; for a unit that is
+# not installed it is refused, like enable and disable.
+# The real enable and disable print a "Created symlink" / "Removed" line on stderr; this
+# mock prints nothing on success, so the contract does not decide whether apply and revert
+# let that line through.
+# MOCK_FAIL_ENABLE=1 / MOCK_FAIL_DISABLE=1 / MOCK_FAIL_STOP=1: that verb exits 1 and
+# changes nothing.
+# MOCK_SYSTEMCTL: "<verb>=<action>" entries joined by ";", <verb> one of is-enabled,
+# enable. Actions:
+#   term, hup, int  the verb does its work (or is refused), then that signal goes to the
+#                   running gpu/apply.sh, then the mock exits as it would have without the
+#                   action. Only a call made once the order log holds an "nvml set mem"
+#                   line does this, so an is-enabled asked before the offsets were set (the
+#                   snapshot's probe asks one) is answered without a signal.
+set -euo pipefail
+
+printf 'systemctl %s\n' "$*" >>"$MOCK_STATE/order"
+
+verb="" unit="" quiet=""
+for arg in "$@"; do
+  case "$arg" in
+    -q | --quiet) quiet=1 ;;
+    -*) ;;
+    *)
+      if [[ -z "$verb" ]]; then verb="$arg"; else unit="$arg"; fi
+      ;;
+  esac
+done
+if [[ "$unit" != pc-oc-gpu.service ]]; then
+  echo "mock systemctl: unexpected args: $*" >&2
+  exit 2
+fi
+state="$(cat "$MOCK_STATE/unit")"
+
+action=""
+IFS=';' read -r -a plan <<<"${MOCK_SYSTEMCTL:-}"
+for entry in "${plan[@]}"; do
+  [[ "$entry" =~ ^(is-enabled|enable)=(term|hup|int)$ ]] || {
+    echo "mock systemctl: unknown entry in MOCK_SYSTEMCTL: $entry" >&2
+    exit 94
+  }
+  [[ "${BASH_REMATCH[1]}" != "$verb" ]] || action="${BASH_REMATCH[2]}"
+done
+
+# signal_caller: the action of MOCK_SYSTEMCTL for this verb, run once the verb is done
+signal_caller() {
+  [[ -n "$action" ]] || return 0
+  grep -q '^nvml set mem ' "$MOCK_STATE/order" || return 0
+  # shellcheck source=signal.bash
+  source "$MOCK_DIR/signal.bash"
+  signal_apply "${action^^}"
+}
+
+# refused: the line a failing verb prints; it names neither the unit nor the verb, so a
+# case that wants the caller to name the failed part cannot pass on this line
+refused() {
+  echo "mock systemctl: refused" >&2
+  signal_caller
+  exit 1
+}
+
+case "$verb" in
+  cat)
+    if [[ "$state" == missing ]]; then
+      echo "No files found for pc-oc-gpu.service." >&2
+      exit 1
+    fi
+    printf '# /etc/systemd/system/pc-oc-gpu.service\n[Service]\nType=oneshot\n'
+    ;;
+  is-enabled)
+    case "$state" in
+      enabled) code=0 ;;
+      disabled) code=1 ;;
+      *) state=not-found code=4 ;;
+    esac
+    [[ -n "$quiet" ]] || printf '%s\n' "$state"
+    signal_caller
+    exit "$code"
+    ;;
+  enable)
+    [[ "$state" != missing && -z "${MOCK_FAIL_ENABLE:-}" ]] || refused
+    echo enabled >"$MOCK_STATE/unit"
+    signal_caller
+    ;;
+  disable)
+    [[ "$state" != missing && -z "${MOCK_FAIL_DISABLE:-}" ]] || refused
+    echo disabled >"$MOCK_STATE/unit"
+    ;;
+  stop)
+    [[ "$state" != missing && -z "${MOCK_FAIL_STOP:-}" ]] || refused
+    ;;
+  *)
+    echo "mock systemctl: unexpected args: $*" >&2
+    exit 2
+    ;;
+esac

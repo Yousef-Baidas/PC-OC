@@ -14,7 +14,6 @@ setup() {
 }
 
 @test "nvml: the unittest contract passes under python3 -I -B" {
-  skip "contract #123 pending"
   run /usr/bin/python3 -I -B tests/gpu/nvml_test.py
   [ "$status" -eq 0 ] || {
     printf '%s\n' "$output"
@@ -24,7 +23,6 @@ setup() {
 }
 
 @test "nvml: no argument exits 2 with a pc-oc: gpu: nvml: message" {
-  skip "contract #123 pending"
   [ -f "$HELPER" ]
   run --separate-stderr /usr/bin/python3 -I -B "$HELPER"
   [ "$status" -eq 2 ]
@@ -33,7 +31,6 @@ setup() {
 }
 
 @test "nvml: an unknown command exits 2 with a pc-oc: gpu: nvml: message" {
-  skip "contract #123 pending"
   [ -f "$HELPER" ]
   run --separate-stderr /usr/bin/python3 -I -B "$HELPER" bogus
   [ "$status" -eq 2 ]
@@ -42,7 +39,6 @@ setup() {
 }
 
 @test "nvml: no command and an unknown command do not import pynvml" {
-  skip "contract #123 pending"
   [ -f "$HELPER" ]
   run --separate-stderr /usr/bin/python3 -I -B -X importtime "$HELPER"
   [ "$status" -eq 2 ]
@@ -56,7 +52,6 @@ setup() {
 }
 
 @test "nvml: the contract and the helper leave no __pycache__ under gpu/ or tests/gpu/" {
-  skip "contract #123 pending"
   [ -f "$HELPER" ]
   run /usr/bin/python3 -I -B tests/gpu/nvml_test.py
   run /usr/bin/python3 -I -B "$HELPER"

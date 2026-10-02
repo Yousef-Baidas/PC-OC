@@ -1,8 +1,12 @@
 #!/usr/bin/bash
 set -euo pipefail
 # pc-oc apply|revert|probe <component>|all
+# pc-oc search gpu
 # Runs <component>/<verb>.sh next to this file. Only names in the list below run,
 # so an argument can never point sudo at a path outside the install.
+# toolchain scripts never run as root: without root they run directly, as root pc-oc
+# drops to the calling user first (SUDO_UID, SUDO_GID).
+# search is the one verb with a single target: gpu/search.sh, as root; all never reaches it (#126).
 
 # As root, the test seams must not redirect writes: real /sys and /var/lib/pc-oc only
 uid="$(/usr/bin/id -u)"
@@ -21,7 +25,7 @@ source "$here/lib/common.sh"
 components=(cpu ram gpu os toolchain)
 
 usage() {
-  echo "usage: pc-oc apply|revert|probe <component>|all (components: ${components[*]})" >&2
+  echo "usage: pc-oc apply|revert|probe <component>|all, or pc-oc search gpu (components: ${components[*]})" >&2
   exit 2
 }
 
@@ -30,22 +34,56 @@ verb="$1"
 target="$2"
 case "$verb" in
   apply | revert | probe) ;;
+  # before the root check below: its toolchain exception must never let a search through
+  search) [[ "$target" == gpu ]] || usage ;;
   *) usage ;;
 esac
 
-# the incident on run log #1: a non-root apply/revert reached the real systemctl; refuse before any component runs
-if [[ "$verb" != probe && "$uid" != 0 ]]; then
+# the incident on run log #1: a non-root apply/revert reached the real systemctl; refuse before any component runs.
+# toolchain alone is let through: its scripts write in the caller's home and run as the caller (#117)
+if [[ "$verb" != probe && "$uid" != 0 && "$target" != toolchain ]]; then
   echo "pc-oc: $verb needs root: sudo $here/pc-oc $verb $target" >&2
   exit 1
 fi
 
+# calling_user: 0 when SUDO_UID and SUDO_GID name a caller other than root with an absolute home, which
+# it leaves in caller_home; 1 otherwise (#117)
+calling_user() {
+  local id entry
+  # ASCII digits, written out: a [0-9] range also matches other digits in a UTF-8 locale. At most ten and
+  # below 2^32-1: setpriv and getent wrap a larger number (4294967296 is uid 0), and 2^32-1 means "keep"
+  for id in "${SUDO_UID-}" "${SUDO_GID-}"; do
+    [[ -n "$id" && ${#id} -le 10 && "$id" != *[!0123456789]* ]] || return 1
+    ((10#$id < 4294967295)) || return 1
+  done
+  ((10#$SUDO_UID != 0)) || return 1
+  entry="$(/usr/bin/getent passwd "$SUDO_UID")" || return 1
+  IFS=: read -r _ _ _ _ _ caller_home _ <<<"$entry"
+  [[ "$caller_home" == /* ]]
+}
+
+# run_component <component>: run its <verb>.sh. toolchain writes files in the human's home, so as
+# root its script runs as the calling user and sees nothing of the caller's environment (#117)
+run_component() {
+  local c="$1" caller_home
+  if [[ "$c" != toolchain || "$uid" != 0 ]]; then
+    bash "$here/$c/$verb.sh"
+    return
+  fi
+  calling_user ||
+    die toolchain "needs the calling user: run it without sudo, or through sudo from your own account"
+  /usr/bin/setpriv --reuid="$SUDO_UID" --regid="$SUDO_GID" --clear-groups \
+    /usr/bin/env -i HOME="$caller_home" PATH=/usr/bin /usr/bin/bash "$here/toolchain/$verb.sh"
+}
+
 if [[ "$target" == all && "$verb" == revert ]]; then
-  # keep going: stopping at a failure would leave the later components tuned
+  # keep going: stopping at a failure would leave the later components tuned.
+  # The subshell turns run_component's die into a collected failure
   failed=()
   for ((i = ${#components[@]} - 1; i >= 0; i--)); do
     c="${components[i]}"
     if [[ -f "$here/$c/revert.sh" ]]; then
-      bash "$here/$c/revert.sh" || failed+=("$c")
+      (run_component "$c") || failed+=("$c")
     fi
   done
   [[ ${#failed[@]} -eq 0 ]] || die all "revert.sh failed: ${failed[*]}"
@@ -53,9 +91,15 @@ if [[ "$target" == all && "$verb" == revert ]]; then
 fi
 
 if [[ "$target" == all ]]; then
+  # apply all reaches toolchain last: without a calling user it would die there with cpu, ram, gpu and os
+  # already applied, so check before the first component. A tree without toolchain/apply.sh needs none (#126)
+  if [[ "$verb" == apply && -f "$here/toolchain/apply.sh" ]]; then
+    calling_user || die all \
+      "apply all needs the calling user: run it through sudo from your own account, or apply the components one by one"
+  fi
   for c in "${components[@]}"; do
     if [[ -f "$here/$c/$verb.sh" ]]; then
-      bash "$here/$c/$verb.sh" || die "$c" "$verb.sh failed"
+      run_component "$c" || die "$c" "$verb.sh failed"
     fi
   done
   exit 0
@@ -63,7 +107,7 @@ fi
 
 for c in "${components[@]}"; do
   if [[ "$c" == "$target" && -f "$here/$c/$verb.sh" ]]; then
-    bash "$here/$c/$verb.sh" || die "$c" "$verb.sh failed"
+    run_component "$c" || die "$c" "$verb.sh failed"
     exit 0
   fi
 done

@@ -1,0 +1,4 @@
+# nvidia-smi scenario for mocks/nvidia-smi: <warm|post> <pstate> <core MHz> <mem MHz> <W> <C> <reasons>
+# sw_power_cap (0x4) is active in a sample after the warm-up.
+warm P0 2520 8001 131.40 52 0x0
+post P0 2400 8001 160.02 71 0x4

@@ -1,0 +1,10 @@
+source=/usr/bin/nvidia-smi bytes=98 items=9
+gpu.name=NVIDIA GeForce RTX 4060 Ti
+gpu.driver=615.71.09
+gpu.vbios=95.06.1A.00.01
+gpu.pl_w=150.00
+gpu.pl_default_w=160.00
+gpu.pl_min_w=100.00
+gpu.pl_max_w=216.00
+gpu.clock_max_mhz=3105
+gpu.mem_clock_max_mhz=9001

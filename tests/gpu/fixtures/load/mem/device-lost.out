@@ -1,0 +1,16 @@
+# memtest_vulkan output, timed: <ms since start>|<printf %b text>.
+# The formats are the writeln! strings of src/main.rs at v0.5.0 (lines 1021-1035, 1059,
+# 1085, 1709); the device label and the DEVICE_LOST line follow Readme.md. Numbers and
+# the timing are reconstruction (the real tool reports at 0 s, 1 s, 6 s, then every
+# 30 s), unverified against the real tool.
+# The driver drops the device after the warm-up; the tool exits on its own with
+# 0x45 = 69 (signature | RUNTIME_ABORT | INITED_OK), which has bit 1 clear.
+0|\n1: Bus=0x01:00 DevId=0x2803   8GB NVIDIA GeForce RTX 4060 Ti\n
+50|Testing 1: Bus=0x01:00 DevId=0x2803   8GB NVIDIA GeForce RTX 4060 Ti\n
+100|Standard 5-minute test of 1: Bus=0x01:00 DevId=0x2803   8GB NVIDIA GeForce RTX 4060 Ti\n
+100|      1 iteration. Passed  0.0561 seconds  written:    1.8GB  30.1GB/sec        checked:    3.5GB  10.0GB/sec\n
+300|      4 iteration. Passed  0.2004 seconds  written:    6.0GB  30.3GB/sec        checked:    2.0GB  10.0GB/sec\n
+600|      9 iteration. Passed  0.3002 seconds  written:    9.1GB  30.2GB/sec        checked:    3.0GB  10.0GB/sec\n
+1500|     22 iteration. Passed  0.9003 seconds  written:   27.2GB  30.4GB/sec        checked:   45.0GB  50.0GB/sec\n
+1900|Runtime error: ERROR_DEVICE_LOST while getting () in context wait_for_fences\n
+2000|@exit 69

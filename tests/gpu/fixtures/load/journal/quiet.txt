@@ -1,0 +1,2 @@
+Oct 02 03:14:16 cachyos kernel: usb 1-4: reset high-speed USB device number 3 using xhci_hcd
+Oct 02 03:14:17 cachyos kernel: NVRM: GPU at PCI:0000:01:00: GPU-00000000-0000-0000-0000-000000000000

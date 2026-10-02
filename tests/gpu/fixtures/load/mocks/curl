@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# pc-oc-test-mock
+# Mock curl for tests/gpu/burn-build.bats (contract #134); never opens a socket.
+# Env: MOCK_STATE (dir: curl.calls one line per call, curl.args argv of the last call one
+# per line, curl.out absolute path it wrote), MOCK_CURL_BODY (file served as the download),
+# MOCK_CURL_RC=<n> to fail with that code and write nothing.
+set -u
+: "${MOCK_STATE:?}"
+printf '%s\n' "$*" >>"$MOCK_STATE/curl.calls"
+printf '%s\n' "$@" >"$MOCK_STATE/curl.args"
+out="" url="" remote_name=""
+while (($#)); do
+  case "$1" in
+    -o | -[!-]*o | --output)
+      out="${2:-}"
+      shift
+      ;;
+    --output=*) out="${1#--output=}" ;;
+    -O | --remote-name) remote_name=1 ;;
+    http://* | https://*) url="$1" ;;
+  esac
+  shift
+done
+[[ -z "$remote_name" ]] || out="${url##*/}"
+[[ -z "${MOCK_CURL_RC:-}" ]] || {
+  echo "curl: (22) The requested URL returned error: 404" >&2
+  exit "$MOCK_CURL_RC"
+}
+: "${MOCK_CURL_BODY:?}"
+if [[ -n "$out" && "$out" != - ]]; then
+  cat "$MOCK_CURL_BODY" >"$out" || exit 23
+  realpath "$out" >"$MOCK_STATE/curl.out"
+else
+  cat "$MOCK_CURL_BODY"
+fi

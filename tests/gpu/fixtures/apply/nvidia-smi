@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Mock nvidia-smi. Env: MOCK_DIR (fixture dir), MOCK_STATE (dir holding pl and calls), MOCK_IGNORE_PL=1 to drop -pl, MOCK_FAIL_PL=1 to make -pl exit 1, MOCK_PL_OFFSET=<W> to land the limit that many W off.
+# Mock nvidia-smi. Env: MOCK_DIR (fixture dir), MOCK_STATE (dir holding pl, calls and order), MOCK_IGNORE_PL=1 to drop -pl, MOCK_FAIL_PL=1 to make -pl exit 1, MOCK_PL_OFFSET=<W> to land the limit that many W off, MOCK_TERM_PL=1 to send TERM to the running gpu/apply.sh once the -pl took.
+# Every call is appended to $MOCK_STATE/order as "nvidia-smi <args>"; -pl calls also go to $MOCK_STATE/calls.
 set -euo pipefail
+printf 'nvidia-smi %s\n' "$*" >>"$MOCK_STATE/order"
 case "$*" in
   "-q -d POWER") cat "$MOCK_DIR/power.txt" ;;
   "--query-gpu=power.limit --format=csv,noheader,nounits") cat "$MOCK_STATE/pl" ;;
@@ -11,6 +13,11 @@ case "$*" in
     printf '%s\n' "$*" >>"$MOCK_STATE/calls"
     [[ -z "${MOCK_FAIL_PL:-}" ]] || exit 1
     [[ -n "${MOCK_IGNORE_PL:-}" ]] || awk -v w="$2" -v o="${MOCK_PL_OFFSET:-0}" 'BEGIN { printf "%.2f\n", w + o }' >"$MOCK_STATE/pl"
+    if [[ -n "${MOCK_TERM_PL:-}" ]]; then
+      # shellcheck source=signal.bash
+      source "$MOCK_DIR/signal.bash"
+      signal_apply TERM
+    fi
     ;;
   *)
     echo "mock nvidia-smi: unexpected args: $*" >&2

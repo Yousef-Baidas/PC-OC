@@ -12,7 +12,7 @@
 - Each tunable component has `apply.sh`, `revert.sh`, `probe.sh`
 - `bios/` holds runbooks only (markdown), applied by the human
 - Tests in `tests/<component>/*.bats`
-- One entry point `pc-oc` (`pc-oc apply|revert|probe <component>|all`)
+- One entry point `pc-oc` (`pc-oc apply|revert|probe <component>|all`, `pc-oc search gpu`)
 
 ## Style
 - Bash only; shebang `#!/usr/bin/env bash`; `set -euo pipefail` first line after it

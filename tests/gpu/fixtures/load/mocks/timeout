@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# pc-oc-test-mock
+# Mock timeout for the one case in tests/gpu/load.bats where the load outlives its timeout
+# (contract #134 case 7); every other case runs the real timeout.
+# It records argv, and when the command is gpu_burn it also records the duration it was
+# given and swaps it for $MOCK_TIMEOUT_SECONDS (default 2), so the case does not wait the
+# ticket's warm-up + load + 30 seconds. Then it execs the real timeout, of which the test
+# keeps a copy at $MOCK_REAL_TIMEOUT (inside the namespace /usr/bin/timeout is this file).
+# Env: MOCK_STATE (dir: timeout.calls one line per call, timeout.duration).
+set -u
+: "${MOCK_STATE:?}" "${MOCK_REAL_TIMEOUT:?}"
+printf '%s\n' "$*" >>"$MOCK_STATE/timeout.calls"
+options=()
+while (($#)); do
+  case "$1" in
+    -k | -s | --kill-after | --signal)
+      options+=("$1" "$2")
+      shift 2
+      ;;
+    -*)
+      options+=("$1")
+      shift
+      ;;
+    *) break ;;
+  esac
+done
+duration="$1"
+shift
+if [[ "${1##*/}" == gpu_burn ]]; then
+  printf '%s\n' "$duration" >"$MOCK_STATE/timeout.duration"
+  duration="${MOCK_TIMEOUT_SECONDS:-2}"
+fi
+exec "$MOCK_REAL_TIMEOUT" "${options[@]}" "$duration" "$@"
