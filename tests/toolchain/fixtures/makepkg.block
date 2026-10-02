@@ -1,0 +1,6 @@
+# src: makepkg-conf-5, mold, sccache
+# one build without this block: PC_OC_NO_WIRING=1 yay -S <pkg>
+if [[ -z ${PC_OC_NO_WIRING:-} ]]; then
+  LDFLAGS+=" -fuse-ld=mold"
+  PATH="/usr/lib/sccache/bin:$PATH"
+fi
