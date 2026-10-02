@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# pc-oc-test-mock
+# Mock systemctl for the #127 contract: knows pc-oc-gpu.service and nothing else.
+# Every call is appended to $MOCK_STATE/order as "systemctl <args>". The unit's state is
+# the one word in $MOCK_STATE/unit: enabled | disabled | missing (not installed).
+# Verbs: cat, is-enabled (exit codes as systemctl(1) gives them: 0 enabled, 1 disabled,
+# 4 not-found), enable, disable. Anything else exits 2.
+# The real enable and disable print a "Created symlink" / "Removed" line on stderr; this
+# mock prints nothing on success, so the contract does not decide whether apply and revert
+# let that line through.
+# MOCK_FAIL_ENABLE=1 / MOCK_FAIL_DISABLE=1: that verb exits 1 and changes nothing.
+set -euo pipefail
+
+printf 'systemctl %s\n' "$*" >>"$MOCK_STATE/order"
+
+verb="" unit="" quiet=""
+for arg in "$@"; do
+  case "$arg" in
+    -q | --quiet) quiet=1 ;;
+    -*) ;;
+    *)
+      if [[ -z "$verb" ]]; then verb="$arg"; else unit="$arg"; fi
+      ;;
+  esac
+done
+if [[ "$unit" != pc-oc-gpu.service ]]; then
+  echo "mock systemctl: unexpected args: $*" >&2
+  exit 2
+fi
+state="$(cat "$MOCK_STATE/unit")"
+
+# refused: the line a failing verb prints; it names neither the unit nor the verb, so a
+# case that wants the caller to name the failed part cannot pass on this line
+refused() {
+  echo "mock systemctl: refused" >&2
+  exit 1
+}
+
+case "$verb" in
+  cat)
+    if [[ "$state" == missing ]]; then
+      echo "No files found for pc-oc-gpu.service." >&2
+      exit 1
+    fi
+    printf '# /etc/systemd/system/pc-oc-gpu.service\n[Service]\nType=oneshot\n'
+    ;;
+  is-enabled)
+    case "$state" in
+      enabled) code=0 ;;
+      disabled) code=1 ;;
+      *) state=not-found code=4 ;;
+    esac
+    [[ -n "$quiet" ]] || printf '%s\n' "$state"
+    exit "$code"
+    ;;
+  enable)
+    [[ "$state" != missing && -z "${MOCK_FAIL_ENABLE:-}" ]] || refused
+    echo enabled >"$MOCK_STATE/unit"
+    ;;
+  disable)
+    [[ "$state" != missing && -z "${MOCK_FAIL_DISABLE:-}" ]] || refused
+    echo disabled >"$MOCK_STATE/unit"
+    ;;
+  *)
+    echo "mock systemctl: unexpected args: $*" >&2
+    exit 2
+    ;;
+esac
