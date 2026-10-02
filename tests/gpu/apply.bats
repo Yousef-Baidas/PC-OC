@@ -18,6 +18,7 @@ setup() {
 
 # #127 case 15, for every case of this file: no apply may start the unit
 teardown() {
+  subid_restore
   no_start "$MOCK_STATE/order"
 }
 
@@ -835,4 +836,353 @@ MOCK
   [ "$(logged '^nvml zero$')" -eq 0 ]
   [ "$(cat "$MOCK_STATE/offsets")" = "120 500" ]
   [[ "$(own_messages)" == *"cannot enable pc-oc-gpu.service"*"boot"* ]]
+}
+
+# Contract #142: gpu/apply.sh takes the two offsets from the search result of #135 when a
+# result path exists, and from gpu/values only when none does. The result is root's file
+# ($(pc_oc_state)/gpu/search/result with uid 0), so the cases that use one run pc-oc apply
+# gpu as uid 0 in the guard (root_apply), with the result under the scratch /var/lib.
+# The #127 cases above that pin `systemctl cat` for apply stand as they are: the ticket
+# changes revert and probe there, not apply.
+
+# want_calls <core> <mem>: every call from the power-limit write on, for pl_w 216
+want_calls() {
+  printf '%s\n' 'nvidia-smi -pl 216' \
+    'nvidia-smi --query-gpu=power.limit --format=csv,noheader,nounits' \
+    "nvml set core $1" "nvml set mem $2" \
+    'systemctl is-enabled --quiet pc-oc-gpu.service' 'systemctl enable pc-oc-gpu.service'
+}
+
+# root_apply: pc-oc apply gpu as uid 0 in the guard
+root_apply() {
+  run --separate-stderr in_ns_root /usr/bin/bash "$REPO/pc-oc" apply gpu
+}
+
+# refused <what>: the last run was an apply that refused the result path: exit 1 with a
+# line of its own and nothing written, which is no -pl, no set, no zero, no enable and no
+# snapshot. gpu/values holds 120 and 500 in these cases, so a fall-back to it would show
+# as a set call.
+refused() {
+  if [[ "$status" -eq 1 && -n "$(own_messages)" && ! -s "$MOCK_STATE/calls" ]] &&
+    [[ "$(logged '^nvml (set|zero)')" -eq 0 && "$(logged "$SWITCH")" -eq 0 ]] &&
+    [[ "$(<"$MOCK_STATE/unit")" == disabled && "$(<"$MOCK_STATE/offsets")" == "0 0" ]] &&
+    [[ ! -e "$BATS_TEST_TMPDIR/varlib/pc-oc/gpu/stock" && ! -e "$PC_OC_STATE/gpu/stock" ]]; then
+    return 0
+  fi
+  printf 'not refused: %s\nstatus %s\nstdout: %s\nstderr: %s\ncalls:\n%s\n' \
+    "$1" "$status" "$output" "$stderr" "$(<"$MOCK_STATE/order")" >&2
+  return 1
+}
+
+@test "#142 harness: in the guard /etc/systemd/system is the test's unit directory, as the user and as root, and the host's is not touched" {
+  skip "contract #142 pending"
+  # shellcheck disable=SC2016 # $1 is for the inner shell
+  for ns in in_ns in_ns_root; do
+    unit_file present
+    run --separate-stderr "$ns" /usr/bin/bash -c \
+      '[[ -e /etc/systemd/system/.pc-oc-test-mock && -f "$1" && ! -L "$1" ]]' _ \
+      /etc/systemd/system/pc-oc-gpu.service
+    [ "$status" -eq 0 ]
+    unit_file absent
+    run --separate-stderr "$ns" /usr/bin/bash -c '[[ ! -e "$1" && ! -L "$1" ]]' _ \
+      /etc/systemd/system/pc-oc-gpu.service
+    [ "$status" -eq 0 ]
+    unit_file dangling
+    run --separate-stderr "$ns" /usr/bin/bash -c '[[ ! -e "$1" && -L "$1" ]]' _ \
+      /etc/systemd/system/pc-oc-gpu.service
+    [ "$status" -eq 0 ]
+  done
+  [ ! -e /etc/systemd/system/.pc-oc-test-mock ]
+}
+
+@test "#142 harness: the guard runs nothing when the unit directory is not a test's, as the user and as root" {
+  skip "contract #142 pending"
+  rm "$BATS_TEST_TMPDIR/units/.pc-oc-test-mock"
+  run --separate-stderr in_ns /usr/bin/touch "$BATS_TEST_TMPDIR/ran"
+  [ "$status" -eq 97 ]
+  run --separate-stderr in_ns_root /usr/bin/touch "$BATS_TEST_TMPDIR/ran"
+  [ "$status" -eq 97 ]
+  [ ! -e "$BATS_TEST_TMPDIR/ran" ]
+}
+
+@test "#142 harness: to uid 0 in the guard a result of set_result is uid 0's file, mode 644 in a 755 directory of uid 0; after subid_chown its owner is another uid, and subid_restore gives it back" {
+  skip "contract #142 pending"
+  set_result 210 1300
+  run --separate-stderr in_ns_root /usr/bin/stat -c '%F %u %a' "$RESULT" "${RESULT%/*}"
+  [ "$status" -eq 0 ]
+  [ "$output" = $'regular file 0 644\ndirectory 0 755' ]
+  subid_chown "$RESULT"
+  subid_chown "${RESULT%/*}"
+  run --separate-stderr in_ns_root /usr/bin/stat -c '%u' "$RESULT" "${RESULT%/*}"
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" != 0 ]
+  [ "${lines[1]}" != 0 ]
+  [ "$(stat -c '%u' "$RESULT")" != "$(id -u)" ]
+  # root of the guard can still read it, so a refusal is the owner check and not a failed read
+  run --separate-stderr in_ns_root /usr/bin/cat "$RESULT"
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "core_offset_mhz=210" ]
+  subid_restore
+  [ "$(stat -c '%u' "$RESULT" "${RESULT%/*}" | sort -u)" = "$(id -u)" ]
+}
+
+@test "#142 case 1: as root apply gpu with a search result of 210 and 1300 writes the limit of gpu/values, sets core 210 then mem 1300, never the 120 and 500 of gpu/values, enables the unit and prints the source line" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  set_result 210 1300
+  root_apply
+  [ "$status" -eq 0 ]
+  [ "$(sed -n '/^nvidia-smi -pl /,$p' "$MOCK_STATE/order")" = "$(want_calls 210 1300)" ]
+  [ "$(logged '^nvml set ')" -eq 2 ]
+  [ "$(cat "$MOCK_STATE/pl")" = "216.00" ]
+  [ "$(cat "$MOCK_STATE/offsets")" = "210 1300" ]
+  [ "$(cat "$MOCK_STATE/unit")" = "enabled" ]
+  [ "$output" = "gpu: offsets core=210 mem=1300 from search result" ]
+}
+
+@test "#142 case 1: gpu/apply.sh started as uid 0 without pc-oc adopts the result the same way" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  set_result 210 1300
+  run --separate-stderr in_ns_root /usr/bin/bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 0 ]
+  [ "$(sed -n '/^nvidia-smi -pl /,$p' "$MOCK_STATE/order")" = "$(want_calls 210 1300)" ]
+  [ "$output" = "gpu: offsets core=210 mem=1300 from search result" ]
+}
+
+@test "#142 case 1: a second apply with the result still there sets 210 and 1300 again, prints the same line and does not call enable" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  set_result 210 1300
+  root_apply
+  [ "$status" -eq 0 ]
+  reset_logs
+  root_apply
+  [ "$status" -eq 0 ]
+  [ "$(logged '^nvml set core 210$')" -eq 1 ]
+  [ "$(logged '^nvml set mem 1300$')" -eq 1 ]
+  [ "$(logged '^nvml set ')" -eq 2 ]
+  [ "$(logged "$ENABLE")" -eq 0 ]
+  [ "$(cat "$MOCK_STATE/unit")" = "enabled" ]
+  [ "$output" = "gpu: offsets core=210 mem=1300 from search result" ]
+}
+
+@test "#142 case 1: apply gpu leaves the result it adopted byte for byte as it was" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  set_result 210 1300
+  cp "$RESULT" "$BATS_TEST_TMPDIR/before"
+  root_apply
+  [ "$status" -eq 0 ]
+  [ "$(cat "$MOCK_STATE/offsets")" = "210 1300" ]
+  cmp "$RESULT" "$BATS_TEST_TMPDIR/before"
+  [ "$(stat -c '%F %a' "$RESULT")" = "regular file 644" ]
+}
+
+@test "#142 case 2: apply gpu with no search result makes the calls of #127 for the 0 and 0 of gpu/values and names gpu/values as the source" {
+  skip "contract #142 pending"
+  set_values 216 0 0
+  run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 0 ]
+  [ "$(sed -n '/^nvidia-smi -pl /,$p' "$MOCK_STATE/order")" = "$(want_calls 0 0)" ]
+  [ "$(cat "$MOCK_STATE/offsets")" = "0 0" ]
+  [ "$(cat "$MOCK_STATE/unit")" = "enabled" ]
+  [ "$output" = "gpu: offsets core=0 mem=0 from gpu/values" ]
+}
+
+@test "#142 case 2: as root apply gpu with no search result does the same" {
+  skip "contract #142 pending"
+  set_values 216 0 0
+  root_apply
+  [ "$status" -eq 0 ]
+  [ "$(sed -n '/^nvidia-smi -pl /,$p' "$MOCK_STATE/order")" = "$(want_calls 0 0)" ]
+  [ "$(cat "$MOCK_STATE/unit")" = "enabled" ]
+  [ "$output" = "gpu: offsets core=0 mem=0 from gpu/values" ]
+}
+
+@test "#142 case 2: the source line carries the numbers gpu/values gave: core=120 mem=500 from gpu/values" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$MOCK_STATE/offsets")" = "120 500" ]
+  [ "$output" = "gpu: offsets core=120 mem=500 from gpu/values" ]
+}
+
+@test "#142 case 2: as root a search directory that holds a log and no result is no result path: gpu/values is used" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  mkdir -p "${RESULT%/*}"
+  printf '2026-10-02T09:00:00Z phase=core core=30 mem=0 result=pass reason=ok\n' >"${RESULT%/*}/log"
+  root_apply
+  [ "$status" -eq 0 ]
+  [ "$(sed -n '/^nvidia-smi -pl /,$p' "$MOCK_STATE/order")" = "$(want_calls 120 500)" ]
+  [ "$output" = "gpu: offsets core=120 mem=500 from gpu/values" ]
+}
+
+@test "#142 case 3: as root apply gpu refuses a result path that is a symlink, to a result root owns or to nothing" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  set_result 210 1300
+  mv "$RESULT" "${RESULT%/*}/real"
+  ln -s "${RESULT%/*}/real" "$RESULT"
+  root_apply
+  refused "symlink to a good result"
+  ln -sfn "${RESULT%/*}/gone" "$RESULT"
+  root_apply
+  refused "dangling symlink"
+}
+
+@test "#142 case 3: as root apply gpu refuses a result whose owner is not uid 0" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  set_result 210 1300
+  subid_chown "$RESULT"
+  root_apply
+  refused "result of another uid"
+}
+
+@test "#142 case 3: apply gpu as the calling user refuses the result in its own state dir, which that user owns" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  RESULT="$USER_RESULT"
+  set_result 210 1300
+  [ "$(stat -c '%u' "$RESULT")" = "$(id -u)" ]
+  run --separate-stderr in_ns bash "$REPO/gpu/apply.sh"
+  refused "result of the calling user"
+}
+
+@test "#142 case 3: as root apply gpu refuses a result of mode 0666, 0664 or 0646" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  for mode in 0666 0664 0646; do
+    set_result 210 1300
+    chmod "$mode" "$RESULT"
+    root_apply
+    refused "result of mode $mode"
+  done
+}
+
+@test "#142 case 3: as root apply gpu refuses a result whose directory is writable by others or by the group: 0777, 1777, 0775, 0757" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  for mode in 0777 1777 0775 0757; do
+    set_result 210 1300
+    chmod "$mode" "${RESULT%/*}"
+    root_apply
+    refused "directory of mode $mode"
+  done
+}
+
+@test "#142 case 3: as root apply gpu refuses a result whose directory is not uid 0's" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  set_result 210 1300
+  subid_chown "${RESULT%/*}"
+  root_apply
+  refused "directory of another uid"
+}
+
+@test "#142 case 3: as root apply gpu refuses a result without core_offset_mhz, and one without mem_offset_mhz" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  result_lines 'mem_offset_mhz=1300' 'finished=2026-10-02T09:14:07Z'
+  root_apply
+  refused "no core_offset_mhz"
+  result_lines 'core_offset_mhz=210' 'finished=2026-10-02T09:14:07Z'
+  root_apply
+  refused "no mem_offset_mhz"
+}
+
+@test "#142 case 3: as root apply gpu refuses a result that has a key twice, with the same number or another" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  result_lines 'core_offset_mhz=210' 'core_offset_mhz=210' 'mem_offset_mhz=1300' 'finished=2026-10-02T09:14:07Z'
+  root_apply
+  refused "core_offset_mhz=210 twice"
+  result_lines 'core_offset_mhz=210' 'mem_offset_mhz=1300' 'core_offset_mhz=30' 'finished=2026-10-02T09:14:07Z'
+  root_apply
+  refused "core_offset_mhz twice, 210 and 30"
+  result_lines 'core_offset_mhz=210' 'mem_offset_mhz=1300' 'mem_offset_mhz=1300' 'finished=2026-10-02T09:14:07Z'
+  root_apply
+  refused "mem_offset_mhz twice"
+}
+
+@test "#142 case 3: as root apply gpu refuses a result whose core or mem number is -30, 030, 12345 or anything else that is not 0|[1-9][0-9]{0,3}" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  for bad in -30 030 12345 +30 12a 1.5 ''; do
+    result_lines "core_offset_mhz=$bad" 'mem_offset_mhz=1300' 'finished=2026-10-02T09:14:07Z'
+    root_apply
+    refused "core_offset_mhz=$bad"
+    result_lines 'core_offset_mhz=210' "mem_offset_mhz=$bad" 'finished=2026-10-02T09:14:07Z'
+    root_apply
+    refused "mem_offset_mhz=$bad"
+  done
+}
+
+@test "#142 case 3: as root apply gpu refuses a result without a finished= line" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  result_lines 'core_offset_mhz=210' 'mem_offset_mhz=1300'
+  root_apply
+  refused "no finished="
+}
+
+@test "#142 case 3: as root apply gpu refuses an empty result" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  set_result 210 1300
+  : >"$RESULT"
+  root_apply
+  refused "empty file"
+}
+
+@test "#142 case 3: as root apply gpu refuses a directory at the result path" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  mkdir -p "$RESULT"
+  root_apply
+  refused "directory at the path"
+}
+
+@test "#142 case 3: a refused result does not turn an enabled unit off or zero offsets that are set" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  tuned 216.00 210 1300 enabled
+  result_lines 'core_offset_mhz=-30' 'mem_offset_mhz=1300' 'finished=2026-10-02T09:14:07Z'
+  root_apply
+  [ "$status" -eq 1 ]
+  [ -n "$(own_messages)" ]
+  [ ! -s "$MOCK_STATE/calls" ]
+  [ "$(logged '^nvml (set|zero)')" -eq 0 ]
+  [ "$(logged "$SWITCH")" -eq 0 ]
+  [ "$(cat "$MOCK_STATE/offsets")" = "210 1300" ]
+  [ "$(cat "$MOCK_STATE/unit")" = "enabled" ]
+}
+
+@test "#142 case 4: as root apply gpu with a search result of 0 and 0 sets both to 0, enables the unit and names the search result, with 120 and 500 in gpu/values" {
+  skip "contract #142 pending"
+  set_values 216 120 500
+  tuned 150.00 120 500 disabled
+  set_result 0 0
+  root_apply
+  [ "$status" -eq 0 ]
+  [ "$(sed -n '/^nvidia-smi -pl /,$p' "$MOCK_STATE/order")" = "$(want_calls 0 0)" ]
+  [ "$(cat "$MOCK_STATE/offsets")" = "0 0" ]
+  [ "$(cat "$MOCK_STATE/unit")" = "enabled" ]
+  [ "$output" = "gpu: offsets core=0 mem=0 from search result" ]
+}
+
+@test "#142 case 10: gpu/offsets.md puts pc-oc apply gpu after pc-oc search gpu, names offsets_source=search and has no follow-up ticket left in it" {
+  skip "contract #142 pending"
+  doc="$BATS_TEST_DIRNAME/../../gpu/offsets.md"
+  [ -e "$doc" ] || skip "gpu/offsets.md is not on this branch: #135 writes it"
+  search_at="$(grep -n -F 'pc-oc search gpu' "$doc" | tail -n 1 | cut -d: -f1)"
+  apply_at="$(grep -n -F 'pc-oc apply gpu' "$doc" | tail -n 1 | cut -d: -f1)"
+  [ -n "$search_at" ]
+  [ -n "$apply_at" ]
+  [ "$search_at" -lt "$apply_at" ]
+  grep -qF 'offsets_source=search' "$doc"
+  [ "$(grep -c -i -F 'follow-up ticket' "$doc" || :)" -eq 0 ]
 }
