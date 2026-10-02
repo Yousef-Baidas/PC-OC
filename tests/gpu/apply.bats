@@ -1151,7 +1151,6 @@ refused() {
 
 @test "#142 case 10: gpu/offsets.md puts pc-oc apply gpu after pc-oc search gpu, names offsets_source=search and has no follow-up ticket left in it" {
   doc="$BATS_TEST_DIRNAME/../../gpu/offsets.md"
-  [ -e "$doc" ] || skip "gpu/offsets.md is not on this branch: #135 writes it"
   search_at="$(grep -n -F 'pc-oc search gpu' "$doc" | tail -n 1 | cut -d: -f1)"
   apply_at="$(grep -n -F 'pc-oc apply gpu' "$doc" | tail -n 1 | cut -d: -f1)"
   [ -n "$search_at" ]
@@ -1388,7 +1387,6 @@ EOF
 
 @test "#142 own: a finished= stamp in the format gpu/search.sh hands to date is one apply gpu accepts" {
   sh="$BATS_TEST_DIRNAME/../../gpu/search.sh"
-  [ -e "$sh" ] || skip "gpu/search.sh is not on this branch: #135 writes it"
   fmt="$(grep -o -E 'finished=\$\(date -u \+[^)]+\)' "$sh" | sed -e 's/.*date -u //' -e 's/)$//')"
   [[ "$fmt" == +%* && "$fmt" != *$'\n'* ]]
   set_values 216 120 500
@@ -1496,4 +1494,31 @@ pl_failed() {
     [ "$(cat "$MOCK_STATE/unit")" = "enabled" ]
     [ -s "$BATS_TEST_TMPDIR/varlib/pc-oc/gpu/stock" ]
   done
+}
+
+@test "#142 own: what gpu/offsets.md quotes after the search is what the scripts and the unit say: the refusal of a closed stdout, the search's refusal while offsets are set, the unit's ExecStart, the umask of the search, the two probe keys" {
+  root="$BATS_TEST_DIRNAME/../.."
+  doc="$root/gpu/offsets.md"
+  while IFS='|' read -r said from; do
+    grep -qF -- "$said" "$doc" || {
+      echo "gpu/offsets.md does not say: $said" >&2
+      return 1
+    }
+    grep -qF -- "$said" "$root/$from" || {
+      echo "$from no longer says: $said" >&2
+      return 1
+    }
+  done <<'QUOTED'
+cannot write to stdout, nothing was written|gpu/apply.sh
+offsets are set by something else|gpu/search.sh
+ExecStart=/usr/local/lib/pc-oc/pc-oc apply gpu|systemd/pc-oc-gpu.service
+umask 022|gpu/search.sh
+offsets_source=search|gpu/probe.sh
+boot_unit=enabled|gpu/probe.sh
+QUOTED
+  grep -qF 'gpu: offsets core=<n> mem=<m> from search result' "$doc"
+  grep -qF "printf 'gpu: offsets core=%s mem=%s from %s\n'" "$root/gpu/apply.sh"
+  grep -qF 'from="search result"' "$root/gpu/apply.sh"
+  grep -qF 'from gpu/values' "$doc"
+  grep -qF 'from="gpu/values"' "$root/gpu/apply.sh"
 }
