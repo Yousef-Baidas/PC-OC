@@ -17,6 +17,19 @@ source "$here/pl.sh"
 # root runs with a fixed PATH, like pc_oc_state ignores PC_OC_STATE as root
 ! is_root || export PATH=/usr/bin
 
+# A reader that has left must not end this script between a step and its undo. With PIPE at
+# its default the first print into a closed pipe, stdout or stderr (2>&1 | head -n 1), kills
+# the shell where it stands: a first apply whose -pl fails then keeps its snapshot. Ignored,
+# such a print fails with EPIPE instead. What that does under set -e: in die and in back_out
+# the print is the last step before exit 1 and every undo is done by then, so the script
+# ends at the same place with the same status; in pl_write, called on the left of ||, set -e
+# is off, the failed print is passed over, and its return 1 and the undo follow. The one
+# print to stdout comes before the first write and its failure is fatal there. No print
+# stands between two steps of a complete apply, so none can make it a half one. The tools
+# this script starts inherit the ignore: one that reports to a closed stderr gets an error
+# from its write and is not killed in the middle of its work.
+trap '' PIPE
+
 unit=pc-oc-gpu.service
 
 # nvml <args>: run the helper the one way it may be run: isolated mode, absolute interpreter

@@ -1397,3 +1397,103 @@ EOF
   [ "$status" -eq 0 ]
   [ "$output" = "gpu: offsets core=210 mem=1300 from search result" ]
 }
+
+# A reader that takes the source line and leaves (2>&1 | head -n 1) closes the pipe apply
+# still reports to. The cases below hold that no report into such a pipe ends apply between
+# a step and its undo.
+
+# gone <shape> <command…>: run the command as root in the guard with <shape>, shell text
+# that says where its output goes. fd 4 is a pipe nobody reads, so a write to it fails at
+# once and no case depends on how fast a reader leaves. PIPE is at its default action when
+# the command starts, however bats was started; pipefail makes $status the command's.
+gone() {
+  local shape="$1" fifo="$BATS_TEST_TMPDIR/nobody-reads"
+  shift
+  [[ -p "$fifo" ]] || mkfifo "$fifo"
+  # shellcheck disable=SC2016 # $1 and $@ are for the inner shell
+  run --separate-stderr in_ns_root /usr/bin/bash -o pipefail -c \
+    'exec 3<>"$1" 4>"$1" 3<&-; shift; /usr/bin/env --default-signal=PIPE "$@" '"$shape" _ "$fifo" "$@"
+}
+
+# left_files: every file under root's state dir but the search result
+left_files() {
+  find "$BATS_TEST_TMPDIR/varlib/pc-oc" -type f ! -path '*/gpu/search/result'
+}
+
+# pl_failed <what>: the last run was a first apply that got as far as -pl and no further:
+# non-zero, the one -pl call, no set, no zero, no enable, the card and the unit as they were,
+# and no snapshot left in the state dir
+pl_failed() {
+  if [[ "$status" -ne 0 && "$(logged '^nvidia-smi -pl 216$')" -eq 1 ]] &&
+    [[ "$(logged '^nvml (set|zero)')" -eq 0 && "$(logged "$SWITCH")" -eq 0 ]] &&
+    [[ "$(<"$MOCK_STATE/pl")" == 150.00 && "$(<"$MOCK_STATE/offsets")" == "0 0" ]] &&
+    [[ "$(<"$MOCK_STATE/unit")" == disabled && -z "$(left_files)" ]]; then
+    return 0
+  fi
+  printf 'not the end state of a failed -pl: %s\nstatus %s\nleft: %s\ncalls:\n%s\n' \
+    "$1" "$status" "$(left_files)" "$(<"$MOCK_STATE/order")" >&2
+  return 1
+}
+
+@test "#142 own: as root a first apply gpu whose -pl fails leaves no snapshot when the reader of its output has left: 2>&1 | sed q, 2>&1 | head -n 1, stderr into a closed pipe, as gpu/apply.sh and as pc-oc apply gpu" {
+  set_values 216 120 500
+  set_result 210 1300
+  ln -sf "$MOCK_DIR/nvidia-smi-fail-pl" "$BATS_TEST_TMPDIR/bin/nvidia-smi"
+  for shape in '2>&1 | /usr/bin/cat' '2>&1 | /usr/bin/sed q' '2>&1 | /usr/bin/head -n 1' \
+    '2>&1 >/dev/null | /usr/bin/true' '2>&4'; do
+    fresh
+    gone "$shape" /usr/bin/bash "$REPO/gpu/apply.sh"
+    pl_failed "gpu/apply.sh $shape"
+    fresh
+    gone "$shape" /usr/bin/bash "$REPO/pc-oc" apply gpu
+    pl_failed "pc-oc apply gpu $shape"
+  done
+}
+
+@test "#142 own: as root apply gpu whose stdout is a pipe nobody reads says so and writes nothing; with stderr in that pipe as well it still writes nothing" {
+  set_values 216 120 500
+  set_result 210 1300
+  gone '>&4' /usr/bin/bash "$REPO/gpu/apply.sh"
+  refused "stdout closed pipe"
+  why "cannot write to stdout, nothing was written"
+  gone '>&4' /usr/bin/bash "$REPO/pc-oc" apply gpu
+  refused "stdout closed pipe, pc-oc"
+  why "cannot write to stdout, nothing was written"
+  for cmd in "$REPO/gpu/apply.sh" "$REPO/pc-oc apply gpu"; do
+    # shellcheck disable=SC2086 # pc-oc takes its verb and its component as two words
+    gone '>&4 2>&4' /usr/bin/bash $cmd
+    [ "$status" -ne 0 ]
+    [ ! -s "$MOCK_STATE/calls" ]
+    [ "$(logged '^nvml (set|zero)')" -eq 0 ]
+    [ "$(logged "$SWITCH")" -eq 0 ]
+    [ -z "$(left_files)" ]
+  done
+}
+
+@test "#142 own: as root with stderr in a closed pipe a set that fails is still backed out before apply gpu speaks, core and mem, and a complete apply stays complete" {
+  set_values 216 120 500
+  set_result 210 1300
+  for clock in core mem; do
+    for shape in '2>&4' '2>&1 | /usr/bin/sed q'; do
+      fresh
+      MOCK_NVML="set $clock=fail" gone "$shape" /usr/bin/bash "$REPO/pc-oc" apply gpu
+      [ "$status" -ne 0 ] || printf 'set %s=fail %s: status 0\n' "$clock" "$shape" >&2
+      [ "$status" -ne 0 ]
+      [ "$(logged '^nvml zero$')" -eq 1 ]
+      [ "$(cat "$MOCK_STATE/offsets")" = "0 0" ]
+      [ "$(logged "$SWITCH")" -eq 0 ]
+      [ "$(cat "$MOCK_STATE/unit")" = "disabled" ]
+    done
+  done
+  for shape in '2>&4' '2>&1 | /usr/bin/sed q'; do
+    fresh
+    gone "$shape" /usr/bin/bash "$REPO/pc-oc" apply gpu
+    [ "$status" -eq 0 ] || printf 'complete apply %s: status %s\n' "$shape" "$status" >&2
+    [ "$status" -eq 0 ]
+    [ "$(sed -n '/^nvidia-smi -pl /,$p' "$MOCK_STATE/order")" = "$(want_calls 210 1300)" ]
+    [ "$(cat "$MOCK_STATE/pl")" = "216.00" ]
+    [ "$(cat "$MOCK_STATE/offsets")" = "210 1300" ]
+    [ "$(cat "$MOCK_STATE/unit")" = "enabled" ]
+    [ -s "$BATS_TEST_TMPDIR/varlib/pc-oc/gpu/stock" ]
+  done
+}
