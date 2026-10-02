@@ -2,13 +2,17 @@
 
 Run as: /usr/bin/python3 -I gpu/nvml.py get | set core|mem <mhz> | zero
 
-The one non-Bash file in the repo. It fails closed: once it has written, an
-NVML error or a read-back that differs puts every offset back to 0, and the
-exit code is not 0.
+The one non-Bash file in the repo. It fails closed: once it has written, it
+exits 0 only when every write read back, stdout took every line and
+nvmlShutdown returned. On any other path (an NVML error, a read-back that
+differs, a stream that cannot be written, Ctrl-C, SIGTERM, SIGHUP) it first
+writes 0 to every offset, then says why, and exits 1 (#123 Amendment 2).
 """
 
 import ctypes
+import os
 import re
+import signal
 import sys
 
 PREFIX = "pc-oc: gpu: nvml: "
@@ -48,12 +52,35 @@ class Usage(Fail):
     status = 2
 
 
-def say(message):
-    print(PREFIX + " ".join(str(message).split()), file=sys.stderr)
+def emit(stream, lines):
+    """Write the lines and flush. False when the stream did not take them; nothing is
+    raised, whatever the stream does: a closed pipe raises BrokenPipeError and a closed
+    stream ValueError, from write or from flush."""
+    try:
+        for text in lines:
+            stream.write(text + "\n")
+        stream.flush()
+    except BaseException:
+        return False
+    return True
 
 
-def why(err):
-    return str(err) if isinstance(err, Fail) else "%s: %s" % (type(err).__name__, err)
+def say(messages):
+    """One prefixed line on stderr per message. A stderr that cannot be written changes
+    nothing: the exit code is already decided when this is called."""
+    emit(sys.stderr, [PREFIX + " ".join(str(message).split()) for message in messages])
+
+
+def why(err, doing=""):
+    """One line about an exception. A Fail says what it was doing itself. Never raises:
+    it is called between two writes of 0."""
+    try:
+        if isinstance(err, Fail):
+            return str(err)
+        text = ("%s: %s" % (type(err).__name__, err)).rstrip(": ")
+    except Exception:
+        text = type(err).__name__
+    return "%s: %s" % (doing, text) if doing else text
 
 
 def label(pstate, clock):
@@ -75,12 +102,49 @@ def parse(argv):
     return "set", clock, int(text)
 
 
+class Watch:
+    """SIGINT, SIGTERM and SIGHUP while the helper runs. The handler only notes the
+    signal, so nothing is raised in the middle of a call and no write of 0 is skipped;
+    check() turns a noted signal into a Fail between two calls. A signal that was
+    ignored when the helper started (nohup) stays ignored."""
+
+    SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+
+    def __init__(self):
+        self.seen = []
+        self.told = 0
+        self.previous = {}
+
+    def note(self, signum, frame):
+        self.seen.append(signum)
+
+    def start(self):
+        for signum in self.SIGNALS:
+            if signal.getsignal(signum) is not signal.SIG_IGN:
+                self.previous[signum] = signal.signal(signum, self.note)
+
+    def stop(self):
+        """Put back the handlers start() replaced."""
+        while self.previous:
+            signum, handler = self.previous.popitem()
+            if handler is not None:  # None: not set from Python, and nothing can restore it
+                signal.signal(signum, handler)
+
+    def check(self):
+        """Raise Fail for the signals noted since the last check."""
+        new = self.seen[self.told:]
+        self.told += len(new)
+        if new:
+            raise Fail("stopped by %s" % ", ".join(signal.Signals(signum).name for signum in new))
+
+
 class Card:
     """GPU 0 and the two library calls, each return code checked."""
 
     def __init__(self, nvml):
         self.nvml = nvml
         self.written = set()
+        self.zeroed = False  # zero() has attempted every write of 0
 
     def open(self):
         nvml = self.nvml
@@ -129,7 +193,7 @@ def line(pstate, clock, reading):
     return "%s offset=%d min=%d max=%d" % (label(pstate, clock), *reading)
 
 
-def set_offset(card, clock, mhz):
+def set_offset(card, clock, mhz, watch):
     readings = {pstate: card.read(pstate, clock) for pstate in PSTATES}
     supported = [pstate for pstate in PSTATES if readings[pstate] is not None]
     if not supported:
@@ -140,6 +204,7 @@ def set_offset(card, clock, mhz):
             raise Fail("%s offset %d is outside the card's range %d..%d on %s"
                        % (clock, mhz, low, high, label(pstate, clock)))
     for pstate in supported:
+        watch.check()  # a signal stops the run between two writes, not inside one
         card.write(pstate, clock, mhz)
     for pstate in supported:
         readings[pstate] = card.read(pstate, clock)
@@ -150,28 +215,30 @@ def set_offset(card, clock, mhz):
 
 def zero(card):
     """Write 0 on every pstate and clock, then read each back. One that NVML calls
-    unsupported is skipped, unless this run wrote to it. Never stops early. Returns
-    what went wrong; [] means every read was 0."""
+    unsupported is skipped, unless this run wrote to it. Nothing stops it early: a call
+    that raises, Ctrl-C included, is noted and the next call is made. Returns what went
+    wrong; [] means every write returned and every read was 0."""
     problems, targets = [], []
     for pstate in PSTATES:
         for clock in CLOCKS:
             try:
                 if card.read(pstate, clock) is None and (pstate, clock) not in card.written:
                     continue
-            except Exception as err:
-                problems.append(why(err))  # state unknown: write 0 all the same
+            except BaseException as err:  # state unknown: write 0 all the same
+                problems.append(why(err, "read %s" % label(pstate, clock)))
             targets.append((pstate, clock))
             try:
                 card.write(pstate, clock, 0)
-            except Exception as err:
-                problems.append(why(err))
+            except BaseException as err:  # it may have landed; the read below tells
+                problems.append(why(err, "write 0 to %s" % label(pstate, clock)))
+    card.zeroed = True
     if not targets:
         problems.append("no pstate of P0, P1, P2 takes an offset")
     for pstate, clock in targets:
         try:
             reading = card.read(pstate, clock)
-        except Exception as err:
-            problems.append(why(err))
+        except BaseException as err:
+            problems.append(why(err, "read %s" % label(pstate, clock)))
             continue
         if reading is None or reading[0] != 0:
             problems.append("%s after writing 0" % line(pstate, clock, reading))
@@ -179,73 +246,117 @@ def zero(card):
 
 
 def roll_back(card):
+    """Write 0 everywhere if this run wrote and zero() has not run yet. Returns the
+    lines for stderr and writes none of them."""
+    if not card.written or card.zeroed:
+        return []
     problems = zero(card)
-    for problem in problems:
-        say("roll back: %s" % problem)
-    say("roll back: offsets are NOT confirmed 0" if problems else "roll back: every offset reads 0")
+    return ["roll back: %s" % problem for problem in problems] + [
+        "roll back: offsets are NOT confirmed 0" if problems else "roll back: every offset reads 0"]
 
 
-def run(card, command, clock, mhz):
+def run(card, command, clock, mhz, watch):
     card.open()
     if command == "get":
         lines = [line(pstate, clock, card.read(pstate, clock))
                  for pstate in PSTATES for clock in CLOCKS]
     elif command == "set":
-        lines = set_offset(card, clock, mhz)
+        lines = set_offset(card, clock, mhz, watch)
     else:
         lines = []
         problems = zero(card)
         if problems:
             raise Fail("zero: " + "; ".join(problems))
-    # printed in here so that a failing stdout is rolled back like any other failure
-    for text in lines:
-        print(text)
-    sys.stdout.flush()
+    watch.check()
+    # written in here so that a stdout that fails is rolled back like any other failure
+    if lines and not emit(sys.stdout, lines):
+        raise Fail("cannot write to stdout")
 
 
-def main(argv, nvml):
-    """Run one command against the pynvml module `nvml`; returns the exit code."""
+def serve(argv, nvml, watch, notes):
+    """Run the command and return the exit code; the lines for stderr go to `notes`."""
     try:
-        command, clock, mhz = parse(list(argv))
+        command, clock, mhz = parse(argv)
         missing = [name for name in NAMES if not hasattr(nvml, name)]
         if missing:
             raise Fail("pynvml has no %s" % ", ".join(missing))
-        try:
-            nvml.nvmlInit()
-        except nvml.NVMLError as err:
-            raise Fail("nvmlInit failed: %s" % err) from None
     except Fail as err:
-        say(err)
+        notes.append(str(err))
         return err.status
-    card = Card(nvml)
-    status = 1
+    watch.start()  # before nvmlInit, so before any write
     try:
-        run(card, command, clock, mhz)
-        status = 0
-    except (Exception, KeyboardInterrupt) as err:  # Ctrl-C too: no half-applied offset is left
-        say(why(err))
-        if card.written and command != "zero":
-            roll_back(card)
+        nvml.nvmlInit()
+    except nvml.NVMLError as err:
+        notes.append("nvmlInit failed: %s" % err)
+        return 1
+    card = Card(nvml)
+    status = 0
+
+    def failed(err, doing=""):
+        undone = roll_back(card)  # first: no message is put together or written before it
+        notes.append(why(err, doing))
+        notes.extend(undone)
+        return 1
+
+    try:
+        run(card, command, clock, mhz, watch)
+        watch.check()
+    except BaseException as err:  # Ctrl-C and SystemExit too: no offset is left half applied
+        status = failed(err)
     try:
         nvml.nvmlShutdown()
-    except nvml.NVMLError as err:
-        say("nvmlShutdown failed: %s" % err)
-        if status == 0 and card.written and command != "zero":
-            roll_back(card)
-        status = 1
+        watch.check()
+    except BaseException as err:  # the roll-back is tried even though NVML may be shut down
+        status = failed(err, "nvmlShutdown")
     return status
+
+
+def main(argv, nvml):
+    """Run one command against the pynvml module `nvml`. Returns the exit code and never
+    raises. stderr is written after any roll-back and after nvmlShutdown; the signal
+    handlers found on entry are back when it returns."""
+    notes = []
+    watch = Watch()
+    try:
+        status = serve(list(argv), nvml, watch, notes)
+    except BaseException as err:  # what serve() did not foresee; it catches around every write
+        status = 1
+        notes.append(why(err))
+    if notes:
+        say(notes)
+    try:
+        watch.stop()
+    except BaseException as err:
+        say([why(err, "restore the signal handlers")])
+        status = status or 1
+    return status
+
+
+def leave(status):
+    """sys.exit(status) with the code kept. Python's own flush on the way out turns the
+    code into 120 over a stdout or stderr that is gone, so such a stream is pointed at
+    /dev/null first; emit() has already tried to write all there is."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except Exception:
+            try:
+                os.dup2(os.open(os.devnull, os.O_WRONLY), stream.fileno())
+            except Exception:
+                pass  # no stream, or no file descriptor behind it: nothing is left to flush
+    sys.exit(status)
 
 
 if __name__ == "__main__":
     try:
         parse(sys.argv[1:])
     except Fail as err:
-        say(err)
-        sys.exit(err.status)
+        say([err])
+        leave(err.status)
     sys.dont_write_bytecode = True  # the helper writes no file, bytecode included
     try:
         import pynvml
     except ImportError as err:
-        say("cannot import pynvml: %s" % err)
-        sys.exit(1)
-    sys.exit(main(sys.argv[1:], pynvml))
+        say(["cannot import pynvml: %s" % err])
+        leave(1)
+    leave(main(sys.argv[1:], pynvml))
