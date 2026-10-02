@@ -11,6 +11,8 @@
 # /var/lib/pc-oc-test-mock
 #   events        "nvml <command>" per call, shared with the other mocks, in call order
 #   nvml.calls    "<command> rc=<exit code> | <content of pending, or ABSENT>" per call
+#   nvml.loads    "<command> alive=<pids>" per call: the processes of load.pids (the mock
+#                 load's hang= calls) that were still there, zombies included
 #   nvml.core, nvml.mem   the offsets now (absent = 0)
 #   nvml.get      if present, get prints this file instead of the six lines
 #   nvml.fail     lines "<nth|all> <exit code> <command prefix>": the nth call (or every
@@ -37,6 +39,14 @@ if [[ "${1-}" != -I || "${2-}" != */gpu/nvml.py ]]; then
 fi
 shift 2
 printf 'nvml %s\n' "$*" >>"$s/events"
+
+alive=""
+if [[ -e "$s/load.pids" ]]; then
+  for pid in $(<"$s/load.pids"); do
+    ! kill -0 "$pid" 2>/dev/null || alive+=" $pid"
+  done
+fi
+printf '%s alive=%s\n' "$*" "${alive# }" >>"$s/nvml.loads"
 
 pending=ABSENT
 [[ ! -e /var/lib/pc-oc/gpu/search/pending ]] ||
@@ -123,7 +133,7 @@ case "${1-}" in
   zero)
     [[ $# -eq 1 ]] || finish 2
     if [[ -n "$code" ]]; then
-      echo "pc-oc: gpu: nvml: zero: mock: fails as planned, the offsets stay" >&2
+      echo "pc-oc: gpu: nvml: zero: mock: fails as planned" >&2
       finish "$code"
     fi
     echo 0 >"$s/nvml.core"

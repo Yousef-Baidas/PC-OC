@@ -22,6 +22,15 @@ setup() {
   common_setup
 }
 
+teardown() {
+  # a mock load that a failing case 17 left running must not outlive the test
+  local pid
+  [[ -e "$MOCK/load.pids" ]] || return 0
+  for pid in $(<"$MOCK/load.pids"); do
+    kill -TERM "$pid" 2>/dev/null || true
+  done
+}
+
 # crashed_at <kind@core/mem>: leave the state directory the way a search that died in
 # that step left it. The mock load copies the directory while the step runs, pending
 # included; the run then ends well and the copy is put in its place.
@@ -100,6 +109,44 @@ signalled() {
   ends_at_zero
   grep -Eq '(^|[[:space:]])core=120([[:space:]]|$)' "$STATE/pending"
   grep -Eq '(^|[[:space:]])mem=0([[:space:]]|$)' "$STATE/pending"
+  no_result
+}
+
+# load_gone: no process of the mock load's hang= calls is alive
+load_gone() {
+  local pid
+  for pid in $(<"$MOCK/load.pids"); do
+    if kill -0 "$pid" 2>/dev/null; then
+      printf 'a process of the load is still alive: %s\n' "$(ps -o pid=,stat=,args= -p "$pid")" >&2
+      return 1
+    fi
+  done
+}
+
+# stopped <TERM|INT|HUP>: the signal reaches the search while the load of the core step
+# at 120 runs, a load that goes on for 30 s unless it is told to stop. The search ends it,
+# waits for it, runs zero and exits, all within 10 s (Amendment 3, ruling 1).
+stopped() {
+  local start=$SECONDS last
+  plan "core@120/0 signal=$1 hang=30"
+  search
+  if ((SECONDS - start >= 10)); then
+    printf 'the search took %s s after the signal\n' "$((SECONDS - start))" >&2
+    return 1
+  fi
+  [ "$(<"$MOCK/signal.sent")" = "$1" ]
+  [ "$(wc -w <"$MOCK/load.pids")" -eq 2 ]
+  [ "$status" -ne 0 ]
+  last_load "core 2 3 @120/0 pass"
+  ends_at_zero
+  # the load and its child were gone, reaped too, when the last zero ran
+  last="$(grep '^zero ' "$MOCK/nvml.loads" | tail -n 1)"
+  if [[ "$last" != "zero alive=" ]]; then
+    printf 'processes of the load still there at the last zero: %s\n' "${last#zero alive=}" >&2
+    return 1
+  fi
+  load_gone
+  grep -Eq '(^|[[:space:]])core=120([[:space:]]|$)' "$STATE/pending"
   no_result
 }
 
@@ -457,6 +504,23 @@ shouted() {
   shouted
 }
 
+@test "search: the final zero exiting 1 or 137 after an otherwise clean run: exit 1, a line says the offsets may still be set, and the result is written (#135 case 18)" {
+  skip "contract #135 pending"
+  for code in 1 137; do
+    fresh
+    helper_fails all "$code" zero
+    search
+    status_is 1
+    [ "$(phases)" = "baseline core mem soak-core soak-mem" ]
+    [ "$(calls nvml | tail -n 1)" = zero ]
+    # the fake helper's own line does not name the offsets; the script's must
+    said 'offsets'
+    shouted
+    result_is 210 1300
+    result_soaked
+  done
+}
+
 @test "search: not root is refused: exit 1, no helper call, no load (#135 case 9)" {
   skip "contract #135 pending"
   start_as user "SUDO_UID=$CALLER_UID" "SUDO_GID=$CALLER_GID"
@@ -740,6 +804,21 @@ mem 3600 3600 1 @285/1985 pass" ]
 @test "search: SIGHUP during a step ends the same way (#135 case 11)" {
   skip "contract #135 pending"
   signalled HUP
+}
+
+@test "search: SIGTERM during a load that would go on for 30 s: the search ends the load, waits for it, then zero, and exits within 10 s; no process of the load is left (#135 case 17)" {
+  skip "contract #135 pending"
+  stopped TERM
+}
+
+@test "search: SIGINT during a load that would go on for 30 s ends the same way (#135 case 17)" {
+  skip "contract #135 pending"
+  stopped INT
+}
+
+@test "search: SIGHUP during a load that would go on for 30 s ends the same way (#135 case 17)" {
+  skip "contract #135 pending"
+  stopped HUP
 }
 
 @test "search: every load, the check included, went through setpriv with the calling uid and gid and env -i, and none was started by uid 0 directly (#135 case 12)" {

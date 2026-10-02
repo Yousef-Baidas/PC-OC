@@ -70,7 +70,7 @@ next_start() {
 
 # lock_free: wait, 3 s at most, until nothing holds the lock on the state directory. A
 # load that outlives a signalled search keeps the descriptor it inherited until it ends;
-# whether it may outlive it is not this contract's business.
+# that none may outlive it is case 17's business, not that of the case that waits here.
 lock_free() {
   local n
   for n in {1..30}; do
