@@ -201,7 +201,6 @@ shouted() {
 }
 
 @test "search: every load passing, one baseline, then core steps 90 to 240, then memory steps 200 to 1500, then one soak, and nothing else (#135 case 1)" {
-  skip "contract #135 pending"
   search
   all_passed
   [ "$(baseline_loads)" = "core 2 3 mem 4 6 1" ]
@@ -211,7 +210,6 @@ shouted() {
 }
 
 @test "search: every load passing, result holds core 210 and memory 1300, both soaked, and stdout gives both and says they are not applied (#135 case 1)" {
-  skip "contract #135 pending"
   search
   status_is 0
   result_is 210 1300
@@ -229,7 +227,6 @@ shouted() {
 }
 
 @test "search: every load passing, the last helper call is zero, no pending is left, and every set found the pending file of its step (#135 case 1)" {
-  skip "contract #135 pending"
   search
   status_is 0
   ends_at_zero
@@ -245,7 +242,6 @@ shouted() {
 }
 
 @test "search: start-up runs in the ticket's order: calling user, offsets read, power limit read back, load check, and only then a load and a set (#135 start-up)" {
-  skip "contract #135 pending"
   search
   status_is 0
   [ "$(first 'getent passwd 4242$')" -lt "$(first 'nvml get$')" ]
@@ -257,7 +253,6 @@ shouted() {
 }
 
 @test "search: the state directory is locked from the load check to the last load (#135 start-up 2)" {
-  skip "contract #135 pending"
   search
   status_is 0
   [ "$(wc -l <"$MOCK/load.detail")" -eq 25 ]
@@ -269,7 +264,6 @@ shouted() {
 }
 
 @test "search: a run touches no sudo, no systemctl and no other python3, asks nvidia-smi only for power.limit, and those mocks do stand where a call would land (#135 Check)" {
-  skip "contract #135 pending"
   search
   status_is 0
   [ -z "$(calls sudo)$(calls systemctl)$(calls python3)" ]
@@ -296,7 +290,6 @@ shouted() {
 }
 
 @test "search: the core step at 180 failing stores core 120, and the memory phase still runs (#135 case 2)" {
-  skip "contract #135 pending"
   plan 'core@180/0 fail'
   search
   status_is 0
@@ -309,7 +302,6 @@ shouted() {
 }
 
 @test "search: the first core step failing stores core 0 (#135 case 3)" {
-  skip "contract #135 pending"
   plan 'core@90/0 fail'
   search
   status_is 0
@@ -321,7 +313,6 @@ shouted() {
 }
 
 @test "search: a core phase whose last passing step is below the margin stores 0, never less (#135 phases)" {
-  skip "contract #135 pending"
   values_with 's/^core_margin_mhz=30/core_margin_mhz=200/'
   plan 'core@150/0 fail'
   search
@@ -330,7 +321,6 @@ shouted() {
 }
 
 @test "search: memory read_gbs 4 percent under the baseline at 600 is reason=throughput and stores memory 300 (#135 case 4)" {
-  skip "contract #135 pending"
   plan 'mem@0/600 read_gbs=384.0'
   search
   status_is 0
@@ -341,7 +331,6 @@ shouted() {
 }
 
 @test "search: memory read_gbs 2.9 percent under the baseline, and exactly mem_drop_pct under it, still pass (#135 case 4)" {
-  skip "contract #135 pending"
   plan 'mem@0/600 read_gbs=388.4' 'mem@0/700 read_gbs=388.0'
   search
   all_passed
@@ -350,7 +339,6 @@ shouted() {
 }
 
 @test "search: the load saying invalid at a step ends the search: zero, exit 1, the step logged as failed, no result, and the message says to run it again (#135 case 5)" {
-  skip "contract #135 pending"
   plan 'mem@0/600 invalid'
   search
   search_ended "mem 4 6 1 @0/600 invalid" 0 600
@@ -359,7 +347,6 @@ shouted() {
 }
 
 @test "search: the start after an invalid step repeats neither that step nor the baseline nor the core phase, and ends with core 210 and memory 300 (#135 case 5)" {
-  skip "contract #135 pending"
   plan 'mem@0/600 invalid'
   search
   status_is 1
@@ -378,7 +365,6 @@ shouted() {
 }
 
 @test "search: reason=xid at a core step ends the search the same way, and the next start goes on with core 90 (#135 case 5)" {
-  skip "contract #135 pending"
   plan 'core@150/0 xid'
   search
   search_ended "core 2 3 @150/0 fail" 150 0
@@ -393,7 +379,6 @@ shouted() {
 }
 
 @test "search: a pending file at start is logged as reason=crash, zero is the first helper call after get, and the step counts as failed (#135 case 6)" {
-  skip "contract #135 pending"
   crashed_at core@150/0
   # the search was killed in the step: same boot, the offset is still set
   echo 150 >"$MOCK/nvml.core"
@@ -410,7 +395,6 @@ shouted() {
 }
 
 @test "search: a pending file from another boot with every offset at 0 is the same crash: logged, zero, the search goes on (#135 case 6)" {
-  skip "contract #135 pending"
   crashed_at mem@0/700
   printf '%s\n' "$BOOT_B" >"$GUARD_BOOT_ID"
   search
@@ -423,7 +407,6 @@ shouted() {
 }
 
 @test "search: a pending file from another boot and a non-zero offset from get: exit 1 with the reboot message, offsets zeroed, no set and no load (#135 case 6)" {
-  skip "contract #135 pending"
   crashed_at core@150/0
   printf '%s\n' "$BOOT_B" >"$GUARD_BOOT_ID"
   echo 150 >"$MOCK/nvml.core"
@@ -435,7 +418,6 @@ shouted() {
 }
 
 @test "search: a core baseline load in pstate 5 stops the search: exit 1, the message names the pstate, no set call (#135 case 7)" {
-  skip "contract #135 pending"
   plan 'core@0/0 pstate_min=5'
   search
   status_is 1
@@ -447,7 +429,6 @@ shouted() {
 }
 
 @test "search: a memory baseline load in pstate 3, a baseline that fails and one that is invalid each stop the search before any set (#135 case 7)" {
-  skip "contract #135 pending"
   for line in 'mem@0/0 pstate_min=3' 'core@0/0 fail' 'mem@0/0 fail' 'mem@0/0 invalid'; do
     fresh
     plan "$line"
@@ -462,7 +443,6 @@ shouted() {
 }
 
 @test "search: a memory clock that moved by 100 at the +200 step stops the search: exit 1, the message gives both numbers, zero ran (#135 case 7)" {
-  skip "contract #135 pending"
   plan 'mem@0/200 mem_mhz_max=9100'
   search
   status_is 1
@@ -477,7 +457,6 @@ shouted() {
 }
 
 @test "search: at the first memory step a clock 5 MHz off the requested one passes and one 6 MHz off stops the search (#135 case 7)" {
-  skip "contract #135 pending"
   plan 'mem@0/200 mem_mhz_max=9205'
   search
   all_passed
@@ -491,7 +470,6 @@ shouted() {
 }
 
 @test "search: nvml.py set exiting 1 is followed by zero before anything else, exit 1 (#135 case 8)" {
-  skip "contract #135 pending"
   helper_fails 1 1 set
   search
   status_is 1
@@ -503,7 +481,6 @@ shouted() {
 }
 
 @test "search: nvml.py set exiting 137 is followed by zero before anything else, exit 1 (#135 case 8)" {
-  skip "contract #135 pending"
   helper_fails 1 137 set
   search
   status_is 1
@@ -515,7 +492,6 @@ shouted() {
 }
 
 @test "search: the memory set of the first memory step failing is followed by zero, no load of that step runs, exit 1 (#135 case 8)" {
-  skip "contract #135 pending"
   helper_fails 1 1 set mem 200
   search
   status_is 1
@@ -528,7 +504,6 @@ shouted() {
 }
 
 @test "search: zero failing after a failed set is said in capitals, with sudo reboot as the way to clear the offsets (#135 case 8)" {
-  skip "contract #135 pending"
   helper_fails 1 1 set
   helper_fails all 1 zero
   search
@@ -539,7 +514,6 @@ shouted() {
 }
 
 @test "search: zero failing at the end of a search whose loads all passed is said in capitals too (#135 case 8)" {
-  skip "contract #135 pending"
   helper_fails all 1 zero
   search
   [ "$(calls nvml | tail -n 1)" = zero ]
@@ -547,7 +521,6 @@ shouted() {
 }
 
 @test "search: the final zero exiting 1 or 137 after an otherwise clean run: exit 1, a line says the offsets may still be set, and the result is written (#135 case 18)" {
-  skip "contract #135 pending"
   for code in 1 137; do
     fresh
     helper_fails all "$code" zero
@@ -564,7 +537,6 @@ shouted() {
 }
 
 @test "search: not root is refused: exit 1, no helper call, no load (#135 case 9)" {
-  skip "contract #135 pending"
   start_as user "SUDO_UID=$CALLER_UID" "SUDO_GID=$CALLER_GID"
   refused
   said '^pc-oc: gpu: '
@@ -577,7 +549,6 @@ shouted() {
 }
 
 @test "search: SUDO_UID unset, 0 or not digits is refused: exit 1, no set call (#135 case 9)" {
-  skip "contract #135 pending"
   start_as root "SUDO_GID=$CALLER_GID"
   refused
   for uid in 0 12x; do
@@ -587,7 +558,6 @@ shouted() {
 }
 
 @test "search: a power limit that does not read back as pl_w is refused with the apply message (#135 case 9)" {
-  skip "contract #135 pending"
   echo 150.00 >"$MOCK/smi.limit"
   search
   refused
@@ -596,7 +566,6 @@ shouted() {
 }
 
 @test "search: a non-zero offset without a pending file is refused with the revert message, on any pstate and clock (#135 case 9)" {
-  skip "contract #135 pending"
   echo 120 >"$MOCK/nvml.core"
   search
   refused
@@ -617,7 +586,6 @@ shouted() {
 }
 
 @test "search: nvml.py get failing at start is refused: exit 1, no set call (#135 case 9)" {
-  skip "contract #135 pending"
   helper_fails 1 1 get
   search
   refused
@@ -625,7 +593,6 @@ shouted() {
 }
 
 @test "search: load.sh check exiting 3 is refused and its line is shown, whichever stream it came on (#135 case 9)" {
-  skip "contract #135 pending"
   for stream in stdout stderr; do
     fresh
     echo "3 $stream" >"$MOCK/load.check"
@@ -638,7 +605,6 @@ shouted() {
 }
 
 @test "search: a second start while the state directory is locked is refused with already running (#135 case 9)" {
-  skip "contract #135 pending"
   mkdir -p "$STATE"
   exec 8<"$STATE"
   flock -n 8
@@ -654,7 +620,6 @@ shouted() {
 }
 
 @test "search: search.values that is absent, or has a missing, repeated or unknown key, is refused (#135 case 9)" {
-  skip "contract #135 pending"
   rm "$REPO/gpu/search.values"
   search
   refused
@@ -670,7 +635,6 @@ shouted() {
 }
 
 @test "search: a search.values value outside the ticket's pattern is refused (#135 case 9)" {
-  skip "contract #135 pending"
   for value in "" 090 00 -90 +90 90x x90 9.5 10000 '"90"' " 90" 0x5a; do
     values_refused "core_start_mhz=$value" "s/^core_start_mhz=90/core_start_mhz=$value/"
   done
@@ -683,7 +647,6 @@ shouted() {
 }
 
 @test "search: a search.values value outside the ticket's bounds is refused (#135 case 9)" {
-  skip "contract #135 pending"
   values_refused "core_max_mhz=301" 's/^core_max_mhz=240/core_max_mhz=301/'
   values_refused "mem_max_mhz=2001" 's/^mem_max_mhz=1500/mem_max_mhz=2001/'
   values_refused "core_start_mhz above core_max_mhz" 's/^core_start_mhz=90/core_start_mhz=241/'
@@ -699,7 +662,6 @@ shouted() {
 }
 
 @test "search: search.values without load_grace_s, with it twice, or with a value outside 1 to 3600 or the ticket's pattern is refused (#135 case 21)" {
-  skip "contract #135 pending"
   # a key the file lacks is not taken from the environment either
   values_refused "load_grace_s missing" '/^load_grace_s=/d' load_grace_s=120
   values_refused "load_grace_s twice" '/^load_grace_s=/p'
@@ -710,7 +672,6 @@ shouted() {
 }
 
 @test "search: search.values with every bound reached is accepted: one core step at 300 and one memory step at 2000, margins of 15 (#135 case 9)" {
-  skip "contract #135 pending"
   values_with 's/^core_(start|max)_mhz=[0-9]+/core_\1_mhz=300/
     s/^mem_(start|max)_mhz=[0-9]+/mem_\1_mhz=2000/
     s/^(core|mem)_(step|margin)_mhz=[0-9]+/\1_\2_mhz=15/
@@ -727,7 +688,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: gpu/values that does not parse is refused: exit 1, no set call (#135 case 9)" {
-  skip "contract #135 pending"
   for content in "" "pl_w=abc  # src: smi" "pl_w=0216  # src: smi"; do
     printf '%s\n' "$content" >"$REPO/gpu/values"
     search
@@ -736,7 +696,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a core soak that fails once and then passes stores core one step lower (#135 case 10)" {
-  skip "contract #135 pending"
   plan 'core@210/1300 fail'
   search
   status_is 0
@@ -748,7 +707,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a core soak that fails soak_backoffs times and then passes stores what passed (#135 case 10)" {
-  skip "contract #135 pending"
   plan 'core@210/1300 fail' 'core@180/1300 fail' 'core@150/1300 fail'
   search
   status_is 0
@@ -758,7 +716,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a core soak that fails soak_backoffs + 1 times stores core 0 (#135 case 10)" {
-  skip "contract #135 pending"
   plan 'core@210/1300 fail' 'core@180/1300 fail' 'core@150/1300 fail' 'core@120/1300 fail'
   search
   status_is 0
@@ -771,7 +728,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a memory soak that fails once and then passes stores memory one step lower (#135 case 10)" {
-  skip "contract #135 pending"
   plan 'mem@210/1300 fail'
   search
   status_is 0
@@ -782,7 +738,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a memory soak that fails soak_backoffs + 1 times stores memory 0 (#135 case 10)" {
-  skip "contract #135 pending"
   plan 'mem@210/1300 fail' 'mem@210/1200 fail' 'mem@210/1100 fail' 'mem@210/1000 fail'
   search
   status_is 0
@@ -794,7 +749,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a core soak load saying invalid ends the search with no result; the next start writes one only for values a soak load passed with (#135 case 10)" {
-  skip "contract #135 pending"
   plan 'core@210/1300 invalid times=1'
   search
   status_is 1
@@ -813,7 +767,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: SIGTERM during the memory soak leaves no result, though both phases and the core soak had passed; the next start soaks before it writes one (#135 case 11)" {
-  skip "contract #135 pending"
   plan 'mem@210/1300 signal=TERM times=1'
   search
   [ "$(<"$MOCK/signal.sent")" = TERM ]
@@ -833,7 +786,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: the soak loads last core_soak_s and mem_soak_s, on the device index of search.values (#135 phases)" {
-  skip "contract #135 pending"
   values_with 's/^core_soak_s=5/core_soak_s=11/; s/^mem_soak_s=7/mem_soak_s=13/
     s/^mem_device_index=1/mem_device_index=2/'
   search
@@ -845,37 +797,30 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: SIGTERM during a step: zero runs, pending stays, the exit code is not 0, nothing is loaded after it (#135 case 11)" {
-  skip "contract #135 pending"
   signalled TERM
 }
 
 @test "search: SIGINT during a step ends the same way (#135 case 11)" {
-  skip "contract #135 pending"
   signalled INT
 }
 
 @test "search: SIGHUP during a step ends the same way (#135 case 11)" {
-  skip "contract #135 pending"
   signalled HUP
 }
 
 @test "search: SIGTERM during a load that would go on for 30 s: the search ends the load, waits for it, then zero, and exits within 10 s; no process of the load is left (#135 case 17)" {
-  skip "contract #135 pending"
   stopped TERM
 }
 
 @test "search: SIGINT during a load that would go on for 30 s ends the same way (#135 case 17)" {
-  skip "contract #135 pending"
   stopped INT
 }
 
 @test "search: SIGHUP during a load that would go on for 30 s ends the same way (#135 case 17)" {
-  skip "contract #135 pending"
   stopped HUP
 }
 
 @test "search: a load that ignores TERM, as its child does, and is not back warm-up + load + load_grace_s after its start: TERM, 5 s, KILL to all it started, zero, exit 1 and the word timeout, within 15 s; the next start does not repeat the step and ends a memory load by the same cap (#135 case 19)" {
-  skip "contract #135 pending"
   start=$SECONDS
   values_with 's/^(core|mem)_(warmup|load)_s=[0-9]+/\1_\2_s=1/; s/^load_grace_s=3600/load_grace_s=1/'
   plan 'core@120/0 hang=30 deaf'
@@ -923,7 +868,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a soak load that takes 6 s, where warm-up + soak seconds + load_grace_s is 8, is left to end and its pass counts (#135 case 19)" {
-  skip "contract #135 pending"
   # 6 s is more than warm-up + core_soak_s (5), than warm-up + core_load_s + load_grace_s
   # (5) and than load_grace_s alone: a cap made of any of these ends this load
   values_with 's/^core_(warmup|load)_s=[0-9]+/core_\1_s=1/; s/^core_soak_s=5/core_soak_s=4/
@@ -940,13 +884,11 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: SIGTERM during a load that ignores TERM, as its child does: KILL 5 s later to all the load started, then zero; back within 10 s, nothing of the load is left (#135 case 20)" {
-  skip "contract #135 pending"
   stopped TERM deaf
   term_then_kill
 }
 
 @test "search: every load, the check included, went through setpriv with the calling uid and gid and env -i, and none was started by uid 0 directly (#135 case 12)" {
-  skip "contract #135 pending"
   search
   status_is 0
   prefix="--reuid=$CALLER_UID --regid=$CALLER_GID --init-groups /usr/bin/env -i"
@@ -960,7 +902,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a load stdout with a line outside the grammar makes the step invalid (#135 case 13)" {
-  skip "contract #135 pending"
   for action in junk 'log=/home/pc-oc-caller/a:b' 'dup=Xid=0' 'reason=ok!'; do
     fresh
     plan "core@120/0 $action"
@@ -970,7 +911,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a load stdout with a missing key makes the step invalid (#135 case 13)" {
-  skip "contract #135 pending"
   for key in result reason pstate_min core_mhz_max mem_mhz_max limited xid log; do
     fresh
     plan "core@120/0 drop=$key"
@@ -988,7 +928,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a load stdout with a repeated key makes the step invalid (#135 case 13)" {
-  skip "contract #135 pending"
   for line in result=pass result=fail xid=0 log=/home/pc-oc-caller/other; do
     fresh
     plan "core@120/0 dup=$line"
@@ -998,7 +937,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a load whose exit status and result key disagree makes the step invalid: pass with 1, 3 or 7, fail with 0 or 3 (#135 case 16)" {
-  skip "contract #135 pending"
   # the block is a statement by the calling user's account; only 0 with pass, 1 with fail
   # and 3 with invalid agree
   for status in 1 3 7; do
@@ -1020,7 +958,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a baseline load that says pass and exits 1 stops the search before any set (#135 case 16)" {
-  skip "contract #135 pending"
   plan 'core@0/0 rc=1'
   search
   status_is 1
@@ -1029,7 +966,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a core step whose core_mhz_max is 16 below baseline + offset is invalid; 15 below passes (#135 case 14)" {
-  skip "contract #135 pending"
   # baseline 2535, offset 120
   plan 'core@120/0 core_mhz_max=2639'
   search
@@ -1041,7 +977,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a step whose load passes in pstate 3 does not pass; pstate 2 does (#135 one step)" {
-  skip "contract #135 pending"
   plan 'core@150/0 pstate_min=3'
   search
   not_passed 150 0
@@ -1056,7 +991,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a later memory step whose clock is 6 MHz off does not pass (#135 one step)" {
-  skip "contract #135 pending"
   plan 'mem@0/700 mem_mhz_max=9706'
   search
   not_passed 0 700
@@ -1066,7 +1000,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: every SUDO_UID of the #117 list dies before the lock, the helper and any load, in LC_ALL=C (#135 amendment 1)" {
-  skip "contract #135 pending"
   bad_uids C
   # positive control: the fixture's caller is let through in this locale
   search LC_ALL=C
@@ -1074,7 +1007,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: every SUDO_UID of the #117 list dies the same way in en_US.UTF-8 (#135 amendment 1)" {
-  skip "contract #135 pending"
   locale -a | grep -qix 'en_US\.utf-\?8' || skip "no en_US.UTF-8 locale on this machine"
   bad_uids en_US.UTF-8
   search LC_ALL=en_US.UTF-8
@@ -1082,7 +1014,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: every such SUDO_GID dies before the lock, the helper and any load, in LC_ALL=C (#135 amendment 1)" {
-  skip "contract #135 pending"
   bad_gids C
   search LC_ALL=C
   status_is 0
@@ -1090,7 +1021,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: every such SUDO_GID dies the same way in en_US.UTF-8 (#135 amendment 1)" {
-  skip "contract #135 pending"
   locale -a | grep -qix 'en_US\.utf-\?8' || skip "no en_US.UTF-8 locale on this machine"
   bad_gids en_US.UTF-8
   search LC_ALL=en_US.UTF-8
@@ -1099,7 +1029,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: a bad calling user is reported before the lock is looked at (#135 amendment 1)" {
-  skip "contract #135 pending"
   mkdir -p "$STATE"
   exec 8<"$STATE"
   flock -n 8
@@ -1116,7 +1045,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search: nothing but SUDO_UID and SUDO_GID is taken from the environment: same steps, same result, state in /var/lib/pc-oc, loads see only HOME and PATH (#135 amendment 1)" {
-  skip "contract #135 pending"
   evil="$BATS_TEST_TMPDIR/evil"
   mkdir -p "$evil/state" "$evil/tmp"
   search "PC_OC_STATE=$evil/state" "SYSFS_ROOT=$evil" "HOME=$evil" "TMPDIR=$evil/tmp" \
@@ -1139,7 +1067,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search.values: every line is key=value with a # src: id that resolves in sources/manifest.tsv (#135 case 15)" {
-  skip "contract #135 pending"
   [ "$(wc -l <"$ROOT/gpu/search.values")" -eq 18 ]
   while IFS= read -r line; do
     [[ "$line" =~ ^[a-z_]+=(0|[1-9][0-9]{0,3})[[:space:]]+#\ src:\ ([a-z0-9-]+)$ ]] || {
@@ -1154,7 +1081,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "search.values: the shipped file holds the ticket's eighteen numbers, once each (#135 interface)" {
-  skip "contract #135 pending"
   for pair in core_start_mhz=90 core_step_mhz=30 core_max_mhz=240 core_margin_mhz=30 \
     core_warmup_s=30 core_load_s=120 core_soak_s=600 mem_start_mhz=200 mem_step_mhz=100 \
     mem_max_mhz=1500 mem_margin_mhz=200 mem_warmup_s=30 mem_load_s=90 mem_soak_s=360 \
@@ -1165,7 +1091,6 @@ mem 3600 3600 1 @285/1985 pass" ]
 }
 
 @test "offsets.md: names every command of the runbook, in the ticket's order, and the three of Amendment 1 (#135 case 15)" {
-  skip "contract #135 pending"
   doc="$ROOT/gpu/offsets.md"
   at=-1
   for text in 'sudo pacman -S memtest_vulkan' 'gpu/burn-build.sh' 'sudo os/install.sh' \
@@ -1185,4 +1110,492 @@ mem 3600 3600 1 @285/1985 pass" ]
   grep -qw 'result' "$doc"
   grep -qw 'log' "$doc"
   grep -Eq '70 ?min' "$doc"
+}
+
+# Own cases of the implementation (#135), after the contract's last one.
+
+@test "search: own: a memory device index above 9 and a drop of 100 percent are refused before anything runs" {
+  values_refused 'mem_device_index=12' 's/^mem_device_index=[0-9]+/mem_device_index=12/'
+  fresh
+  values_refused 'mem_drop_pct=100' 's/^mem_drop_pct=[0-9]+/mem_drop_pct=100/'
+}
+
+@test "search: own: a memory baseline that reads 0 GB/s is no verdict: exit 1 before any set" {
+  plan 'mem@0/0 read_gbs=0.00'
+  search
+  status_is 1
+  no_set
+  [ -z "$(core_steps)$(mem_steps)" ]
+  no_result
+  ends_at_zero
+}
+
+@test "search: own: only a step the search died in, found at 0 in another boot, is reported as the reboot fact" {
+  crashed_at mem@0/700
+  printf '%s\n' "$BOOT_B" >"$GUARD_BOOT_ID"
+  search
+  status_is 0
+  [[ "$output" == *"measured: the reboot cleared the offsets"* ]]
+  # a step the search ended itself was set to 0 by the search, not by the reboot
+  fresh
+  plan 'core@150/0 xid'
+  search
+  status_is 1
+  next_start
+  printf '%s\n' "$BOOT_B" >"$GUARD_BOOT_ID"
+  search
+  status_is 0
+  [[ "$output" != *"measured:"* ]]
+  # and in the same boot nothing was measured either
+  fresh
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  search
+  status_is 0
+  [[ "$output" != *"measured:"* ]]
+}
+
+# The three cases below: a start that holds the lock and finds a pending step whose
+# offset is still set (same boot) runs nvml.py zero on every way out.
+
+@test "search: own: a pending step and a progress file that does not parse: exit 1, and zero ran" {
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  echo 'core_last=12x' >"$STATE/progress"
+  search
+  status_is 1
+  said 'progress does not parse'
+  ends_at_zero
+}
+
+@test "search: own: a pending step and a log that cannot be written: exit 1, and zero ran" {
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  rm -f "$STATE/log"
+  mkdir "$STATE/log"
+  search
+  status_is 1
+  ends_at_zero
+}
+
+@test "search: own: a pending step and a signal while the first get runs: exit 1, and zero ran" {
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  # the fake helper's get reads this fifo, so it stays until the lines below are written;
+  # TERM reaches the search (the pid guard.sh wrote for this start) in between
+  rm -f "$MOCK/search.pid"
+  mkfifo "$MOCK/nvml.get"
+  (
+    for _ in {1..100}; do
+      ! grep -qx 'nvml get' "$MOCK/events" 2>/dev/null || break
+      sleep 0.05
+    done
+    [[ ! -s "$MOCK/search.pid" ]] || kill -TERM "$(<"$MOCK/search.pid")"
+    sleep 0.3
+    # shellcheck disable=SC2016 # the inner shell expands these
+    timeout 10 bash -c 'printf "%s\n" "$@" >"$0"' "$MOCK/nvml.get" \
+      'p0.core offset=150 min=-500 max=500' 'p0.mem offset=0 min=-2000 max=3000' \
+      'p1.core unsupported' 'p1.mem unsupported' \
+      'p2.core offset=150 min=-500 max=500' 'p2.mem offset=0 min=-2000 max=3000'
+  ) 3>&- &
+  search
+  wait
+  status_is 1
+  [ "$(calls nvml | paste -sd' ')" = "get zero" ]
+  ends_at_zero
+  no_load
+}
+
+@test "search: own: a tool the load started in a process group of its own is ended before zero as well" {
+  local pid left="" runner group session
+  # gpu/load.sh of the fake tree (guard.sh binds nothing there) is a runner of this case:
+  # its core load at offset 120 starts a tool under timeout(1), as the real gpu/load.sh
+  # does, tells the search to stop and obeys no TERM. Any other call is the contract's
+  # mock load. The tool notes its process group and session, then stays for 20 s.
+  cp "$FIX/load.sh" "$REPO/gpu/load.mock.sh"
+  cat >"$REPO/gpu/tool.sh" <<'EOF'
+#!/usr/bin/bash
+s=/var/lib/pc-oc-test-mock
+/usr/bin/mkfifo "$s/wait.$$"
+stat="$(<"/proc/$$/stat")"
+read -r _ _ group session _ <<<"${stat##*) }"
+echo "$group $session" >"$s/tool.ids"
+echo "$$" >"$s/tool.pid"
+read -rt 20 _ <>"$s/wait.$$"
+EOF
+  cat >"$REPO/gpu/load.sh" <<'EOF'
+#!/usr/bin/bash
+here="${BASH_SOURCE[0]%/*}"
+s=/var/lib/pc-oc-test-mock
+core=0
+[[ ! -e "$s/nvml.core" ]] || core="$(<"$s/nvml.core")"
+[[ "${1-}" == core && "$core" == 120 ]] || exec /usr/bin/bash "$here/load.mock.sh" "$@"
+printf 'load %s\n' "$*" >>"$s/events"
+/usr/bin/mkfifo "$s/wait.$$"
+/usr/bin/timeout -k 10 20 /usr/bin/bash "$here/tool.sh" &
+tool=$!
+for _ in {1..500}; do
+  [[ ! -s "$s/tool.pid" ]] || break
+  read -rt 0.01 _ <>"$s/wait.$$" || true
+done
+echo "$$ $tool $(<"$s/tool.pid")" >>"$s/load.pids"
+trap ':' TERM INT HUP
+kill -TERM "$(<"$s/search.pid")"
+end=$((SECONDS + 20))
+while ((SECONDS < end)); do
+  read -rt 1 _ <>"$s/wait.$$" || true
+done
+EOF
+  search
+  # first of all nothing this case started outlives it, whatever the search did; only a
+  # pid that still is a process of this test's tree gets the KILL
+  for pid in $(<"$MOCK/load.pids"); do
+    if { tr '\0' ' ' <"/proc/$pid/cmdline"; } 2>/dev/null | grep -qF " $REPO/gpu/"; then
+      left+=" $pid"
+      kill -KILL "$pid" 2>/dev/null || true
+    fi
+  done
+  status_is 1
+  # the case is the one its name says: the load's session, another process group
+  read -r runner _ <"$MOCK/load.pids"
+  read -r group session <"$MOCK/tool.ids"
+  [ "$session" = "$runner" ]
+  [ "$group" != "$runner" ]
+  gone_at_zero
+  [ -z "$left" ]
+  ends_at_zero
+  lock_free
+}
+
+@test "search: own: a start that finds a result runs nothing, leaves the file as it is and exits 0" {
+  local before
+  search
+  all_passed
+  before="$(stat -c '%i %y' "$STATE/result") $(<"$STATE/result")"
+  next_start
+  search
+  status_is 0
+  no_set
+  no_load
+  [[ "$output" == *"core_offset_mhz=210"* && "$output" == *"nothing was run"* ]]
+  [ "$(stat -c '%i %y' "$STATE/result") $(<"$STATE/result")" = "$before" ]
+}
+
+@test "search: own: the stop at a memory clock in another unit counts no step: the next start sets 200 again and stops the same way" {
+  plan 'mem@0/200 mem_mhz_max=9100'
+  search
+  status_is 1
+  [ ! -e "$STATE/pending" ]
+  next_start
+  search
+  status_is 1
+  said 'unit of the NVML memory offset'
+  [ "$(mem_steps)" = 200 ]
+  logged 0 200 invalid clock
+  ends_at_zero
+  no_result
+  [ ! -e "$STATE/pending" ]
+}
+
+@test "search: own: a gpu/load.sh check that is not back after load_grace_s is ended: exit 1, nothing set" {
+  local start=$SECONDS
+  # a runner of this case in the fake tree: its check stays for 20 s unless it is told to
+  # stop; any other call is the contract's mock load
+  cp "$FIX/load.sh" "$REPO/gpu/load.mock.sh"
+  cat >"$REPO/gpu/load.sh" <<'EOF'
+#!/usr/bin/bash
+s=/var/lib/pc-oc-test-mock
+[[ "$*" == check ]] || exec /usr/bin/bash "${BASH_SOURCE[0]%/*}/load.mock.sh" "$@"
+printf 'load %s\n' "$*" >>"$s/events"
+echo "$$" >>"$s/load.pids"
+/usr/bin/mkfifo "$s/wait.$$"
+read -rt 20 _ <>"$s/wait.$$"
+EOF
+  values_with 's/^load_grace_s=[0-9]+/load_grace_s=1/'
+  search
+  status_is 1
+  if ((SECONDS - start >= 10)); then
+    printf 'the search took %s s with a cap of 1 s on the check\n' "$((SECONDS - start))" >&2
+    return 1
+  fi
+  timeout_said 1
+  load_gone
+  [ "$(calls load)" = check ]
+  no_set
+  no_result
+  lock_free
+}
+
+@test "search: own: a clock that is stored as 0 is not soaked" {
+  plan 'core@90/0 fail'
+  search
+  status_is 0
+  [ -z "$(soaks core)" ]
+  [ "$(soaks mem)" = "0/1300:pass" ]
+  result_is 0 1300
+  # both stored as 0: no soak load at all
+  fresh
+  plan 'core@90/0 fail' 'mem@0/200 fail'
+  search
+  status_is 0
+  [ -z "$(soaks core)$(soaks mem)" ]
+  result_is 0 0
+}
+
+@test "search: own: a block with a key its kind does not have, or with a key twice, makes the step invalid" {
+  local action
+  for action in 'dup=extra=1' 'dup=read_gbs=400.0' 'dup=xid=0'; do
+    fresh
+    plan "core@120/0 $action"
+    search
+    search_ended "core 2 3 @120/0 pass" 120 0
+    logged 120 0 invalid block
+  done
+}
+
+@test "search: own: a block of 4097 bytes makes the step invalid, one of 4096 bytes does not" {
+  local value
+  # the block of the core step at 120 is 91 bytes and the log value
+  value="/$(printf 'a%.0s' {1..4005})"
+  plan "core@120/0 log=$value"
+  search
+  [ "$(stat -c %s "$STATE/block")" -eq 4097 ]
+  search_ended "core 2 3 @120/0 pass" 120 0
+  logged 120 0 invalid block
+  fresh
+  plan "core@120/0 log=${value%a}"
+  search
+  status_is 0
+  logged 120 0 pass
+}
+
+@test "search: own: a block of more than 16 lines makes the step invalid" {
+  # 8 lines of the kind and xid=0 nine more times
+  plan "core@120/0$(printf ' dup=xid=0%.0s' {1..9})"
+  search
+  [ "$(wc -l <"$STATE/block")" -eq 17 ]
+  search_ended "core 2 3 @120/0 pass" 120 0
+  logged 120 0 invalid block
+}
+
+@test "search: own: a reason that is empty or has more than lower-case letters, digits, _ and - makes the step invalid" {
+  local action
+  for action in 'reason=Ok' 'reason=a.b' 'reason='; do
+    fresh
+    plan "core@120/0 $action"
+    search
+    search_ended "core 2 3 @120/0 pass" 120 0
+    logged 120 0 invalid block
+  done
+}
+
+@test "search: own: a block that says pass and names an Xid is no pass: the step is invalid" {
+  plan 'core@120/0 xid=1'
+  search
+  search_ended "core 2 3 @120/0 pass" 120 0
+  logged 120 0 invalid block
+}
+
+@test "search: own: a block that says pass and limited=1 is no pass: the step is invalid" {
+  plan 'core@120/0 limited=1'
+  search
+  search_ended "core 2 3 @120/0 pass" 120 0
+  logged 120 0 invalid block
+}
+
+# The cases below: stdout, or stdout and stderr, of the search is a pipe whose reader
+# leaves (| head, a pager that was quit, tee after Ctrl+C). A print nobody takes ends
+# nothing above the zero, changes no verdict and keeps no line from the log; the search
+# then ends where no step is open, exit 1.
+
+# piped <reader...>: a start as search makes it, its stdout into the reader. SIGPIPE has
+# its default action when the search starts, whatever this test run was started with.
+# Under run, status is the exit status of the search and output what the reader printed.
+piped() {
+  in_ns root /usr/bin/env --default-signal=PIPE -i PATH=/usr/bin "SUDO_UID=$CALLER_UID" \
+    "SUDO_GID=$CALLER_GID" /usr/bin/bash "$REPO/gpu/search.sh" | "$@"
+  return "${PIPESTATUS[0]}"
+}
+
+# piped_both <reader...>: the same with stderr in that pipe as well, as 2>&1 | reader
+piped_both() {
+  in_ns root /usr/bin/env --default-signal=PIPE -i PATH=/usr/bin "SUDO_UID=$CALLER_UID" \
+    "SUDO_GID=$CALLER_GID" /usr/bin/bash "$REPO/gpu/search.sh" 2>&1 | "$@"
+  return "${PIPESTATUS[0]}"
+}
+
+# piped_err <reader...>: stderr alone in the pipe, stdout in the file stdout of the
+# test's temporary directory
+piped_err() {
+  in_ns root /usr/bin/env --default-signal=PIPE -i PATH=/usr/bin "SUDO_UID=$CALLER_UID" \
+    "SUDO_GID=$CALLER_GID" /usr/bin/bash "$REPO/gpu/search.sh" 2>&1 >"$BATS_TEST_TMPDIR/stdout" | "$@"
+  return "${PIPESTATUS[0]}"
+}
+
+@test "search: own: stdout into a reader that has left, TERM during a load: the step is logged, zero ran, exit 1" {
+  # head leaves after the lines of the two baseline loads and of the core step at 90
+  plan 'core@120/0 signal=TERM hang=30'
+  run --separate-stderr piped head -n 3
+  ends_at_zero
+  status_is 1
+  [ "$(<"$MOCK/signal.sent")" = TERM ]
+  logged 120 0 invalid signal
+  gone_at_zero
+  load_gone
+  [ -e "$STATE/pending" ]
+  no_result
+  lock_free
+  # with a reader that stays it ends the same way, and the reader gets the step's line
+  fresh
+  plan 'core@120/0 signal=TERM hang=30'
+  run --separate-stderr piped cat
+  ends_at_zero
+  status_is 1
+  logged 120 0 invalid signal
+  grep -Fxq 'phase=core core=120 mem=0 result=invalid reason=signal' <<<"$output"
+  said 'got a signal'
+}
+
+@test "search: own: stdout into a reader that has left, no signal: the step that ran for nobody keeps its verdict, then the search ends: zero ran, exit 1, and the next start goes on" {
+  run --separate-stderr piped head -n 3
+  ends_at_zero
+  status_is 1
+  [ "$(wc -l <<<"$output")" -eq 3 ]
+  # the step at 120 passed, its line could not be printed: in the log and counted, and
+  # no further step was started
+  [ "$(core_steps)" = "90 120" ]
+  logged 120 0 pass
+  [ ! -e "$STATE/pending" ]
+  said 'could not be printed'
+  no_result
+  next_start
+  search
+  status_is 0
+  [ "$(core_steps)" = "150 180 210 240" ]
+  result_is 210 1300
+}
+
+@test "search: own: a pending step with its offset still set, stdout into a reader that has left: the crash is logged, zero ran, exit 1" {
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  run --separate-stderr piped true
+  ends_at_zero
+  status_is 1
+  [ "$(calls nvml | paste -sd' ')" = "get zero" ]
+  logged 150 0 fail crash
+  [ -z "$(calls load)" ]
+  # the crash is counted once: the next start stores core 90 and goes on with memory
+  next_start
+  search
+  status_is 0
+  [ -z "$(core_steps)" ]
+  result_is 90 1300
+}
+
+@test "search: own: stdout and stderr into one reader that has left, TERM during a load: the step is logged, zero ran, exit 1" {
+  # sed leaves at the line of the core step at 90, so "got a signal" has no reader either
+  plan 'core@120/0 signal=TERM hang=30'
+  run --separate-stderr piped_both sed '/core=90 .*result=pass/q'
+  ends_at_zero
+  status_is 1
+  [ "$(<"$MOCK/signal.sent")" = TERM ]
+  logged 120 0 invalid signal
+  gone_at_zero
+  load_gone
+  [ -e "$STATE/pending" ]
+  lock_free
+}
+
+@test "search: own: the search ignores SIGPIPE and every load it starts has the default action back" {
+  local search load n=0
+  # gpu/load.sh of the fake tree is a stand-in of this case: it notes the signals the
+  # search and it itself ignore (SigIgn of /proc/<pid>/status, where SIGPIPE, signal 13,
+  # is the bit 0x1000), then it is the contract's mock load
+  cp "$FIX/load.sh" "$REPO/gpu/load.mock.sh"
+  cat >"$REPO/gpu/load.sh" <<'EOF'
+#!/usr/bin/bash
+# pc-oc-test-mock
+s=/var/lib/pc-oc-test-mock
+ign() { /usr/bin/sed -n 's/^SigIgn:[[:space:]]*//p' "/proc/$1/status"; }
+echo "$(ign "$(<"$s/search.pid")") $(ign "$$")" >>"$s/load.sigign"
+exec /usr/bin/bash "${BASH_SOURCE[0]%/*}/load.mock.sh" "$@"
+EOF
+  run --separate-stderr piped head -n 3
+  ends_at_zero
+  status_is 1
+  while read -r search load; do
+    n=$((n + 1))
+    if (((16#$search & 0x1000) == 0 || (16#$load & 0x1000) != 0)); then
+      printf 'load %s: SigIgn of the search %s, of the load %s\n' "$n" "$search" "$load" >&2
+      return 1
+    fi
+  done <"$MOCK/load.sigign"
+  # the check, the two baseline loads and the core steps at 90 and 120
+  [ "$n" -eq 5 ]
+}
+
+@test "search: own: a pending step, a zero that fails and nobody to read the capitals: one zero, exit 1" {
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  helper_fails all 1 zero
+  run --separate-stderr piped_both true
+  status_is 1
+  # the message that could not be printed did not end the start above its own exit: a
+  # start that left there would run zero once more on its way out
+  [ "$(calls nvml | paste -sd' ')" = "get zero" ]
+  logged 150 0 fail crash
+}
+
+@test "search: own: a start-up refusal nobody reads is exit 1 all the same and calls nothing" {
+  rm "$REPO/gpu/search.values"
+  run --separate-stderr piped_both true
+  status_is 1
+  [ -z "$(calls nvml)$(calls python3)$(calls setpriv)$(calls load)" ]
+  [ ! -e "$VARLIB/pc-oc" ]
+}
+
+@test "search: own: stdout into a reader that left before the first line: the load that ran is logged, no further one starts, nothing is set, exit 1" {
+  run --separate-stderr piped true
+  ends_at_zero
+  status_is 1
+  [ "$(baseline_loads)" = "core 2 3" ]
+  logged 0 0 pass
+  no_set
+  said 'could not be printed'
+  next_start
+  search
+  all_passed
+}
+
+@test "search: own: a finished search whose result nobody reads does not say 0: the result is written, zero ran, exit 1" {
+  # head leaves after the lines of all 24 steps, ahead of the lines of the result
+  run --separate-stderr piped head -n 24
+  ends_at_zero
+  status_is 1
+  [ "$(wc -l <"$STATE/log")" -eq 24 ]
+  result_is 210 1300
+  said 'could not be printed'
+  # the same for a start that finds that result and has nobody to show it to
+  next_start
+  run --separate-stderr piped true
+  ends_at_zero
+  status_is 1
+  no_set
+  no_load
+  said 'could not be printed'
+  result_is 210 1300
+}
+
+@test "search: own: stderr alone into a reader that has left: the load dies of its own SIGPIPE, an invalid step, zero ran, exit 1" {
+  # the mock load writes a line to stderr ahead of its block: with the default action
+  # that write ends it, and no block is no pass. What the search then says has no reader
+  run --separate-stderr piped_err true
+  ends_at_zero
+  status_is 1
+  [ "$(baseline_loads)" = "core 2 3" ]
+  logged 0 0 invalid block
+  grep -Fxq 'phase=baseline-core core=0 mem=0 result=invalid reason=block' "$BATS_TEST_TMPDIR/stdout"
+  no_set
+  no_result
+  lock_free
 }
