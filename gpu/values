@@ -1,1 +1,3 @@
 pl_w=216  # src: smi
+core_offset_mhz=0  # src: nvml-offset-t
+mem_offset_mhz=0  # src: nvml-offset-t
