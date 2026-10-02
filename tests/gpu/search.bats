@@ -794,6 +794,37 @@ mem 3600 3600 1 @285/1985 pass" ]
   done
 }
 
+@test "search: a load whose exit status and result key disagree makes the step invalid: pass with 1, 3 or 7, fail with 0 or 3 (#135 case 16)" {
+  skip "contract #135 pending"
+  # the block is a statement by the calling user's account; only 0 with pass, 1 with fail
+  # and 3 with invalid agree
+  for status in 1 3 7; do
+    fresh
+    plan "core@120/0 rc=$status"
+    search
+    search_ended "core 2 3 @120/0 pass" 120 0
+  done
+  for status in 0 3; do
+    fresh
+    plan "core@120/0 fail rc=$status"
+    search
+    search_ended "core 2 3 @120/0 fail" 120 0
+  done
+  fresh
+  plan 'mem@0/300 rc=1'
+  search
+  search_ended "mem 4 6 1 @0/300 pass" 0 300
+}
+
+@test "search: a baseline load that says pass and exits 1 stops the search before any set (#135 case 16)" {
+  skip "contract #135 pending"
+  plan 'core@0/0 rc=1'
+  search
+  status_is 1
+  no_set
+  no_result
+}
+
 @test "search: a core step whose core_mhz_max is 16 below baseline + offset is invalid; 15 below passes (#135 case 14)" {
   skip "contract #135 pending"
   # baseline 2535, offset 120
