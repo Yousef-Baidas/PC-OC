@@ -1,0 +1,5 @@
+# nvidia-smi scenario for mocks/nvidia-smi: <warm|post> <pstate> <core MHz> <mem MHz> <W> <C> <reasons>
+# The first sample after the warm-up has [Unknown Error] in every field; the next is fine.
+warm P0 2520 8001 131.40 52 0x0
+post unknown
+post P0 2520 8001 131.40 58 0x0

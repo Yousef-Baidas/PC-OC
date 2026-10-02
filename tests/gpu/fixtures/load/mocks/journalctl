@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# pc-oc-test-mock
+# Mock journalctl for tests/gpu/load.bats (contract #134); reads no journal. It answers
+# the two calls the ticket names the way journalctl 262 does on this PC:
+#   -k -n 0 --show-cursor           "-- No entries --" then "-- cursor: <cursor>", exit 0
+#   -k --after-cursor <c> -g <pat>  the matching lines, exit 0; with no match
+#                                   "-- No entries --" and exit 1 (yes, 1); a cursor it
+#                                   did not hand out: "Failed to seek to cursor" on
+#                                   stderr, nothing on stdout, exit 1
+# -q drops the "-- No entries --" line, as the real one does. Without -g every line after
+# the cursor is printed and the exit code is 0.
+# Env: MOCK_STATE (dir: journalctl.calls one line per call, journalctl.cursor the cursor
+# handed out, journalctl.after the cursor received), MOCK_JOURNAL_AFTER (kernel lines
+# after the cursor, default none), MOCK_JOURNAL_FAIL=cursor|after (that call fails).
+set -u
+: "${MOCK_STATE:?}"
+printf '%s\n' "$*" >>"$MOCK_STATE/journalctl.calls"
+all=("$@")
+show="" after="" pattern="" quiet="" kernel="" has_after="" has_pattern=""
+while (($#)); do
+  case "$1" in
+    -k | --dmesg) kernel=1 ;;
+    -q | --quiet) quiet=1 ;;
+    --show-cursor) show=1 ;;
+    --no-pager | --no-hostname | -n0 | --lines=* | -o?* | --output=*) ;;
+    -n | --lines | -o | --output) shift ;;
+    --after-cursor)
+      after="${2:-}" has_after=1
+      shift
+      ;;
+    --after-cursor=*) after="${1#--after-cursor=}" has_after=1 ;;
+    -g | --grep)
+      pattern="${2:-}" has_pattern=1
+      shift
+      ;;
+    --grep=*) pattern="${1#--grep=}" has_pattern=1 ;;
+    *)
+      echo "mock journalctl: unexpected args: ${all[*]}" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+[[ -n "$kernel" ]] || {
+  echo "mock journalctl: unexpected args (no -k): ${all[*]}" >&2
+  exit 2
+}
+if [[ -n "$has_after" ]]; then
+  printf '%s\n' "$after" >"$MOCK_STATE/journalctl.after"
+  if [[ "${MOCK_JOURNAL_FAIL:-}" == after || ! -r "$MOCK_STATE/journalctl.cursor" ||
+    "$after" != "$(<"$MOCK_STATE/journalctl.cursor")" ]]; then
+    echo "Failed to seek to cursor: Invalid argument" >&2
+    exit 1
+  fi
+  lines=""
+  if [[ -z "$has_pattern" ]]; then
+    lines="$(cat "${MOCK_JOURNAL_AFTER:-/dev/null}")"
+  else
+    # like journalctl: a pattern with an upper-case letter is matched case-sensitively
+    flag=-i
+    [[ "$pattern" == "${pattern,,}" ]] || flag=--no-ignore-case
+    lines="$(grep -E "$flag" -e "$pattern" "${MOCK_JOURNAL_AFTER:-/dev/null}")"
+  fi
+  if [[ -n "$lines" ]]; then
+    printf '%s\n' "$lines"
+    exit 0
+  fi
+  [[ -n "$quiet" ]] || echo "-- No entries --"
+  [[ -z "$has_pattern" ]] || exit 1
+  exit 0
+fi
+if [[ -n "$show" ]]; then
+  if [[ "${MOCK_JOURNAL_FAIL:-}" == cursor ]]; then
+    echo "No journal files were opened due to insufficient permissions." >&2
+    exit 1
+  fi
+  cursor="s=0123456789abcdef0123456789abcdef;i=$(printf '%x' "$RANDOM$RANDOM")"
+  cursor+=";b=fedcba9876543210fedcba9876543210;m=1b2c3d4e5;t=63f1a2b3c4d5e;x=9a8b7c6d5e4f3a2b"
+  printf '%s\n' "$cursor" >"$MOCK_STATE/journalctl.cursor"
+  [[ -n "$quiet" ]] || echo "-- No entries --"
+  echo "-- cursor: $cursor"
+  exit 0
+fi
+echo "mock journalctl: unexpected args: ${all[*]}" >&2
+exit 2
