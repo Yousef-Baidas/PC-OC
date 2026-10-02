@@ -447,21 +447,6 @@ needs_caller() {
   needs_caller SUDO_UID=4999
 }
 
-# replaced by contract #126: remove when the skip below is removed
-@test "as EUID 0 with SUDO_UID unset apply all runs the root components, then dies needing the calling user" {
-  local c
-  for c in cpu ram gpu os toolchain; do
-    fake_recorder "$c" apply
-  done
-  run --separate-stderr as_root env -u SUDO_UID "$root/pc-oc" apply all
-  [ "$status" -eq 1 ]
-  mapfile -t ran <"$calls"
-  [ "${#ran[@]}" -eq 4 ]
-  [[ "${ran[3]}" == "ran os apply uid=0 "* ]]
-  [ ! -e "$setpriv_log" ]
-  [ "$stderr" = "pc-oc: toolchain: needs the calling user: run it without sudo, or through sudo from your own account" ]
-}
-
 # Contract #126 Amendment 1: apply all checks the calling user before the first component, so a root
 # caller without one is told so with nothing applied, instead of after cpu, ram, gpu and os.
 # apply_all_needs_caller <env arguments...>: as uid 0 with that environment, apply all exits 1 with one
@@ -491,20 +476,17 @@ apply_all_needs_caller() {
 }
 
 @test "as EUID 0 with SUDO_UID unset apply all dies naming apply all before any component runs" {
-  skip "contract #126 pending"
   apply_all_needs_caller -u SUDO_UID
 }
 
 # the check is #117's whole check, not only "SUDO_UID is set"
 @test "as EUID 0 with SUDO_GID unset, SUDO_UID=0 or no passwd entry apply all dies before any component runs" {
-  skip "contract #126 pending"
   apply_all_needs_caller -u SUDO_GID
   apply_all_needs_caller SUDO_UID=0
   apply_all_needs_caller SUDO_UID=4999
 }
 
 @test "as EUID 0 with a calling user apply all runs all five in order, toolchain through the drop" {
-  skip "contract #126 pending"
   local c
   for c in cpu ram gpu os toolchain; do
     fake_recorder "$c" apply
@@ -611,7 +593,6 @@ search_usage() {
 }
 
 @test "as EUID 0 pc-oc search gpu runs gpu/search.sh once as root with PATH=/usr/bin and the test seams unset" {
-  skip "contract #126 pending"
   fake_search_tree
   mkdir -p "$BATS_TEST_TMPDIR/evil"
   run --separate-stderr as_root env PATH="$BATS_TEST_TMPDIR/evil:$PATH" "$root/pc-oc" search gpu
@@ -625,7 +606,6 @@ search_usage() {
 }
 
 @test "as EUID 0 pc-oc search with a target other than gpu, no target or an extra argument is a usage error and runs nothing" {
-  skip "contract #126 pending"
   fake_search_tree
   search_usage search all
   search_usage search cpu
@@ -635,14 +615,12 @@ search_usage() {
 }
 
 @test "as EUID 0 pc-oc search gpu without gpu/search.sh is a usage error and runs nothing" {
-  skip "contract #126 pending"
   fake_search_tree
   rm "$root/gpu/search.sh"
   search_usage search gpu
 }
 
 @test "as EUID 0 pc-oc search gpu exits 1 with the search.sh failed line when the script exits 3" {
-  skip "contract #126 pending"
   fake_search_tree
   fake_search gpu 3
   run --separate-stderr as_root "$root/pc-oc" search gpu
@@ -653,13 +631,11 @@ search_usage() {
 
 # every script in the scratch tree is a fake before pc-oc starts without root, as for the #56 cases
 @test "non-root pc-oc search gpu refuses with the sudo hint and runs no component" {
-  skip "contract #126 pending"
   fake_search_tree
   refused search gpu
 }
 
 @test "as EUID 0 revert all and apply all never run gpu/search.sh" {
-  skip "contract #126 pending"
   local v line
   fake_search_tree
   for v in revert apply; do
@@ -681,4 +657,81 @@ search_usage() {
       }
     done
   done
+}
+
+# Worker cases for #126: what the contract leaves open.
+# Order of refusals without root: a target other than gpu is the usage error before the root check (whose
+# toolchain exception would otherwise run toolchain/search.sh as the caller); a missing gpu/search.sh is
+# found only as root, as for apply. Every script in the scratch tree is a fake.
+@test "non-root pc-oc search with a target other than gpu is a usage error and runs nothing" {
+  local t
+  fake_search_tree
+  for t in toolchain all cpu; do
+    run --separate-stderr "$root/pc-oc" search "$t"
+    [ "$status" -eq 2 ] || {
+      echo "non-root search $t exited $status, want 2; stderr '$stderr'" >&3
+      return 1
+    }
+    [[ "$stderr" == usage:* ]]
+    [ -z "$output" ]
+    [ ! -e "$calls" ] || {
+      echo "non-root search $t ran: $(tr '\n' ';' <"$calls")" >&3
+      return 1
+    }
+  done
+}
+
+@test "non-root pc-oc search gpu without gpu/search.sh still refuses with the sudo hint" {
+  fake_search_tree
+  rm "$root/gpu/search.sh"
+  refused search gpu
+}
+
+# Amendment 2: the check is for toolchain/apply.sh only; a tree without it needs no calling user
+@test "as EUID 0 with SUDO_UID unset apply all in a tree without toolchain/apply.sh runs the four root components" {
+  local c
+  for c in cpu ram gpu os; do
+    fake_recorder "$c" apply
+  done
+  fake_recorder toolchain revert
+  fake_recorder toolchain probe
+  run --separate-stderr as_root env -u SUDO_UID "$root/pc-oc" apply all
+  [ "$status" -eq 0 ] || {
+    echo "root env -u SUDO_UID apply all exited $status; stderr '$stderr'" >&3
+    return 1
+  }
+  [ -z "$stderr" ]
+  mapfile -t ran <"$calls"
+  [ "${#ran[@]}" -eq 4 ]
+  [[ "${ran[0]}" == "ran cpu apply uid=0 "* ]]
+  [[ "${ran[3]}" == "ran os apply uid=0 "* ]]
+  [ ! -e "$setpriv_log" ]
+}
+
+@test "as EUID 0 with no absolute home or SUDO_UID=12x apply all dies before any component runs" {
+  printf '%s\n' 'pc-oc-relhome:x:4245:4343::home/pc-oc-relhome:/usr/bin/bash' \
+    'pc-oc-nohome:x:4246:4343:::/usr/bin/bash' >>"$BATS_TEST_TMPDIR/passwd"
+  apply_all_needs_caller SUDO_UID=4245
+  apply_all_needs_caller SUDO_UID=4246
+  apply_all_needs_caller SUDO_UID=12x
+}
+
+@test "as EUID 0 with SUDO_UID unset apply all says to go through sudo or apply the components one by one" {
+  apply_all_needs_caller -u SUDO_UID
+  [ "$stderr" = "pc-oc: all: apply all needs the calling user: run it through sudo from your own account, or apply the components one by one" ]
+}
+
+# Amendment 1: probe all is unchanged, the check is apply all's alone
+@test "as EUID 0 with SUDO_UID unset probe all still runs the four root probes, then dies at toolchain" {
+  local c
+  for c in cpu ram gpu os toolchain; do
+    fake_recorder "$c" probe
+  done
+  run --separate-stderr as_root env -u SUDO_UID "$root/pc-oc" probe all
+  [ "$status" -eq 1 ]
+  mapfile -t ran <"$calls"
+  [ "${#ran[@]}" -eq 4 ]
+  [[ "${ran[3]}" == "ran os probe uid=0 "* ]]
+  [ ! -e "$setpriv_log" ]
+  [ "$stderr" = "pc-oc: toolchain: needs the calling user: run it without sudo, or through sudo from your own account" ]
 }
