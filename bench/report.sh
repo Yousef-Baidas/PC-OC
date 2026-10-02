@@ -3,12 +3,17 @@ set -euo pipefail
 # report.sh <results dir> [<compare dir>]: write reports/<label>.md from a results dir.
 # A value is the text after the first "=". source= and input.* lines are headers: they
 # go in the inputs block, never in a table. With a compare dir, results gain a delta
-# column (absolute and %), new minus compare.
+# column (absolute and %), new minus compare, plus a "Settings changed" table (keys whose
+# value differs, "n/a" on the side that lacks the key) and a "Comparability" section over
+# the fixed axes. A differing fixed axis is named on stderr and the report is still
+# written, then the exit status is 3. A "|" in a value is escaped as "\|" in those tables.
 # shellcheck source=../lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || die bench "cannot resolve repo root"
 FILES=(settings.txt compile.txt stability.txt game.txt)
+AXES=(cpu.model cpu.microcode gpu.name gpu.driver gpu.vbios os.kernel)
+SETKEY='^[a-z0-9_]+\.[a-z0-9_.]+$'
 
 usage() {
   echo "pc-oc: bench: usage: report.sh <results dir> [<compare dir>]" >&2
@@ -49,7 +54,8 @@ if [[ "$name" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2})-(.+)$ ]]; then
   label="${BASH_REMATCH[2]}"
 fi
 
-declare -A base=()
+declare -A base=() bset=() nset=()
+bkeys=() nkeys=()
 base_name=""
 if [ "$#" -eq 2 ]; then
   check_dir "$2"
@@ -59,6 +65,9 @@ if [ "$#" -eq 2 ]; then
     while IFS= read -r line || [ -n "$line" ]; do
       if [[ "$line" == result.* ]]; then
         base["${line%%=*}"]="${line#*=}"
+      elif [[ "$line" != source=* && "$line" != input.* && "${line%%=*}" =~ $SETKEY ]]; then
+        [ -n "${bset[${line%%=*}]+x}" ] || bkeys+=("${line%%=*}")
+        bset["${line%%=*}"]="${line#*=}"
       fi
     done <"$2/$f"
   done
@@ -82,12 +91,42 @@ for f in "${FILES[@]}"; do
       else
         results+="| $key | $val | n/a | - | - |"$'\n'
       fi
-    elif [[ "$key" =~ ^[a-z0-9_]+\.[a-z0-9_.]+$ ]]; then
+    elif [[ "$key" =~ $SETKEY ]]; then
       settings+="| $key | $val |"$'\n'
+      [ -n "${nset[$key]+x}" ] || nkeys+=("$key")
+      nset["$key"]="$val"
     fi
   done <"$dir/$f"
 done
 [ "$nres" -ge 1 ] || die bench "$dir: no result.* lines"
+
+changed="" differ=() same=() notcomp=""
+if [ -n "$base_name" ]; then
+  for key in "${nkeys[@]}"; do
+    if [ -z "${bset[$key]+x}" ]; then
+      nv="${nset[$key]//|/\\|}"
+      changed+="| $key | $nv | n/a |"$'\n'
+    elif [ "${nset[$key]}" != "${bset[$key]}" ]; then
+      nv="${nset[$key]//|/\\|}" bv="${bset[$key]//|/\\|}"
+      changed+="| $key | $nv | $bv |"$'\n'
+    fi
+  done
+  for key in "${bkeys[@]}"; do
+    if [ -z "${nset[$key]+x}" ]; then
+      bv="${bset[$key]//|/\\|}"
+      changed+="| $key | n/a | $bv |"$'\n'
+    fi
+  done
+  for key in "${AXES[@]}"; do
+    nv="${nset[$key]-n/a}" bv="${bset[$key]-n/a}"
+    if [ "$nv" = "$bv" ]; then
+      same+=("$key")
+    else
+      differ+=("$key")
+      notcomp+="NOT COMPARABLE on $key: $bv -> $nv"$'\n'
+    fi
+  done
+fi
 
 mkdir -p "$ROOT/reports" || die bench "cannot create $ROOT/reports"
 out="$ROOT/reports/$label.md"
@@ -103,9 +142,27 @@ trap 'rm -f "$tmp"' EXIT
     printf '| key | value |\n|---|---|\n'
   fi
   printf '%s' "$results"
+  if [ -n "$base_name" ]; then
+    printf '\n## Settings changed\n\n'
+    if [ -n "$changed" ]; then
+      printf '| key | value | compare |\n|---|---|---|\n%s' "$changed"
+    else
+      printf 'none\n'
+    fi
+    printf '\n## Comparability\n\n%s' "$notcomp"
+    if [ "${#same[@]}" -gt 0 ]; then
+      printf 'Same on: %s' "${same[0]}"
+      printf ', %s' "${same[@]:1}"
+      printf '\n'
+    fi
+  fi
   printf '\n## Settings snapshot\n\n| key | value |\n|---|---|\n%s' "$settings"
   fence='```'
   printf '\n## Inputs\n\n%s\n%s%s\n' "$fence" "$headers" "$fence"
 } >"$tmp" || die bench "cannot write $tmp"
 mv "$tmp" "$out" || die bench "cannot write $out"
 echo "pc-oc: bench: wrote $out"
+for key in "${differ[@]}"; do
+  echo "pc-oc: bench: fixed axis differs: $key" >&2
+done
+[ "${#differ[@]}" -eq 0 ] || exit 3
