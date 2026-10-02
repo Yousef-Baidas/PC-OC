@@ -1,0 +1,2 @@
+input.minutes=10
+result.stability=PASS
