@@ -67,43 +67,35 @@ verify_in_fake_root() {
 }
 
 @test "the unit has exactly one ExecStart line: /usr/local/lib/pc-oc/pc-oc apply gpu" {
-  skip "contract #124 pending"
   only ExecStart 'ExecStart=/usr/local/lib/pc-oc/pc-oc apply gpu'
 }
 
 @test "the unit is Type=oneshot" {
-  skip "contract #124 pending"
   only Type 'Type=oneshot'
 }
 
 @test "the unit is WantedBy=multi-user.target and nothing else" {
-  skip "contract #124 pending"
   only WantedBy 'WantedBy=multi-user.target'
 }
 
 @test "the unit has no User line" {
-  skip "contract #124 pending"
   none User
 }
 
 @test "the unit has no ExecStartPre line" {
-  skip "contract #124 pending"
   none ExecStartPre
 }
 
 @test "the unit has no ExecStartPost line" {
-  skip "contract #124 pending"
   none ExecStartPost
 }
 
 @test "the unit has no Environment line of any kind" {
-  skip "contract #124 pending"
   none '[A-Za-z]*Environment[A-Za-z]*'
 }
 
 # a warning leaves the exit status 0, so the output must be empty as well
 @test "systemd-analyze verify accepts the unit with no warning, from a fake root and no running systemd" {
-  skip "contract #124 pending"
   verify_in_fake_root 755
   [ "$status" -eq 0 ] || {
     echo "verify exited $status: $output" >&3
@@ -117,7 +109,6 @@ verify_in_fake_root() {
 
 # the proof that the case above reads the fake root and not /usr/local/lib/pc-oc on this PC
 @test "systemd-analyze verify rejects the unit when the fake root's ExecStart file is not executable" {
-  skip "contract #124 pending"
   verify_in_fake_root 644
   [ "$status" -ne 0 ]
   [[ "$output" == *"/usr/local/lib/pc-oc/pc-oc"* ]]
@@ -125,26 +116,22 @@ verify_in_fake_root() {
 
 # Amendment 2: the retry and timeout lines that make a failed boot visible
 @test "the unit is byte-identical to the fixture" {
-  skip "contract #124 pending"
   [ -r "$unit" ]
   cmp "$unit" "$BATS_TEST_DIRNAME/fixtures/systemd/pc-oc-gpu.service"
 }
 
 @test "the unit has TimeoutStartSec=60, StartLimitIntervalSec=infinity and StartLimitBurst=6" {
-  skip "contract #124 pending"
   only TimeoutStartSec 'TimeoutStartSec=60'
   only StartLimitIntervalSec 'StartLimitIntervalSec=infinity'
   only StartLimitBurst 'StartLimitBurst=6'
 }
 
 @test "the unit has Restart=on-failure and RestartSec=10" {
-  skip "contract #124 pending"
   only Restart 'Restart=on-failure'
   only RestartSec 'RestartSec=10'
 }
 
 @test "the unit has no TimeoutStopSec, ExecStop or KillMode line" {
-  skip "contract #124 pending"
   none TimeoutStopSec
   none ExecStop
   none KillMode
