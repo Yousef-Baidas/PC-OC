@@ -1,0 +1,14 @@
+# memtest_vulkan output, timed: <ms since start>|<printf %b text>.
+# The formats are the writeln! strings of src/main.rs at v0.5.0 (lines 1021-1035, 1059,
+# 1085, 1709); the device label follows Readme.md. Numbers and the timing are
+# reconstruction, unverified against the real tool.
+# An error report after the warm-up. The case that uses this leaves the status byte at 65
+# (bit 1 clear), so the text alone has to give the verdict.
+0|\n1: Bus=0x01:00 DevId=0x2803   8GB NVIDIA GeForce RTX 4060 Ti\n
+50|Testing 1: Bus=0x01:00 DevId=0x2803   8GB NVIDIA GeForce RTX 4060 Ti\n
+100|Standard 5-minute test of 1: Bus=0x01:00 DevId=0x2803   8GB NVIDIA GeForce RTX 4060 Ti\n
+100|      1 iteration. Passed  0.0561 seconds  written:    1.8GB  30.1GB/sec        checked:    3.5GB  10.0GB/sec\n
+600|      9 iteration. Passed  0.3002 seconds  written:    9.1GB  30.2GB/sec        checked:    3.0GB  10.0GB/sec\n
+1200|     18 iteration. Passed  0.6003 seconds  written:   18.2GB  30.4GB/sec        checked:   30.0GB  50.0GB/sec\n
+1500|Error found. Mode NEXT_RE_READ, total errors 0x1 out of 0x2C000000 (0.00000014%)\nErrors address range: 0x30D7F7E0..=0x30D7F7E3\n
+1700|     24 iteration. Passed  0.4001 seconds  written:   12.1GB  30.2GB/sec        checked:   16.8GB  42.0GB/sec\n
