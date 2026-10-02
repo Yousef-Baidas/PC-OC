@@ -26,7 +26,6 @@ only_state() {
 }
 
 @test "probe on an empty home: the header, then the seven keys, absent three times" {
-  skip "contract #119 pending"
   probe
   status_is 0
   [[ "${lines[0]}" =~ ^source=[^\ ]*\ bytes=[0-9]+\ items=7$ ]]
@@ -42,7 +41,6 @@ only_state() {
 }
 
 @test "probe says absent for files that hold no block" {
-  skip "contract #119 pending"
   stock "${NAMES[@]}"
   probe
   status_is 0
@@ -53,7 +51,6 @@ only_state() {
 }
 
 @test "probe says wired for blocks equal to the data files, with other content around them" {
-  skip "contract #119 pending"
   stock "${NAMES[@]}"
   wire "${NAMES[@]}"
   printf '%s\n' '' '[http]' 'timeout = 30' >>"$CARGO"
@@ -67,49 +64,42 @@ only_state() {
 }
 
 @test "case 10: probe says differs after one byte of the Cargo block is edited" {
-  skip "contract #119 pending"
   wire "${NAMES[@]}"
   sed -i 's|/usr/bin/sccache|/usr/bin/sccachE|' "$CARGO"
   only_state cargo differs
 }
 
 @test "case 10: probe says differs after one byte of the fish block is edited" {
-  skip "contract #119 pending"
   wire "${NAMES[@]}"
   sed -i 's|-fuse-ld=mold|-fuse-ld=mole|' "$FISH"
   only_state fish differs
 }
 
 @test "case 10: probe says differs after one byte of the makepkg block is edited" {
-  skip "contract #119 pending"
   wire "${NAMES[@]}"
   sed -i 's|-fuse-ld=mold|-fuse-ld=mole|' "$MAKEPKG"
   only_state makepkg differs
 }
 
 @test "case 10: probe says malformed with the END line of the Cargo block deleted" {
-  skip "contract #119 pending"
   wire "${NAMES[@]}"
   sed -i "/^$END\$/d" "$CARGO"
   only_state cargo malformed
 }
 
 @test "case 10: probe says malformed with the END line of the fish block deleted" {
-  skip "contract #119 pending"
   wire "${NAMES[@]}"
   sed -i "/^$END\$/d" "$FISH"
   only_state fish malformed
 }
 
 @test "case 10: probe says malformed with the END line of the makepkg block deleted" {
-  skip "contract #119 pending"
   wire "${NAMES[@]}"
   sed -i "/^$END\$/d" "$MAKEPKG"
   only_state makepkg malformed
 }
 
 @test "probe says missing for a tool that is not there and the path for one that is" {
-  skip "contract #119 pending"
   tool_absent sccache
   tool_present cmake
   probe
@@ -127,7 +117,6 @@ only_state() {
 }
 
 @test "case 10: probe says env=wired:RUSTC_WRAPPER when that variable is set" {
-  skip "contract #119 pending"
   probe RUSTC_WRAPPER=/usr/bin/sccache
   status_is 0
   probe_says env wired:RUSTC_WRAPPER
@@ -137,7 +126,6 @@ only_state() {
 }
 
 @test "probe names in env each variable of the list of bench/compile.sh" {
-  skip "contract #119 pending"
   local name
   for name in CC CXX LDFLAGS RUSTC_WRAPPER CMAKE_C_COMPILER_LAUNCHER \
     CMAKE_CXX_COMPILER_LAUNCHER; do
@@ -151,7 +139,6 @@ only_state() {
 }
 
 @test "probe names in env a wrapper directory on PATH" {
-  skip "contract #119 pending"
   probe PATH=/usr/lib/sccache/bin:/usr/bin
   status_is 0
   probe_says env wired:/usr/lib/sccache/bin
@@ -161,7 +148,6 @@ only_state() {
 }
 
 @test "probe names in env every name that is set" {
-  skip "contract #119 pending"
   probe CC=gcc RUSTC_WRAPPER=sccache
   status_is 0
   [[ "$(grep -c '^toolchain\.env=' <<<"$output")" -eq 1 ]]

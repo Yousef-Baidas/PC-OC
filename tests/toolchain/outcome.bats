@@ -38,7 +38,6 @@ makepkg_reads() {
 }
 
 @test "the three block data files hold the bytes of the ticket" {
-  skip "contract #119 pending"
   local name
   for name in "${NAMES[@]}"; do
     cmp "$ROOT/toolchain/$name.block" "$FIX/$name.block"
@@ -46,7 +45,6 @@ makepkg_reads() {
 }
 
 @test "case 7: after apply Cargo's TOML has build.rustc-wrapper = /usr/bin/sccache" {
-  skip "contract #119 pending"
   apply
   status_is 0
   rustc_wrapper
@@ -55,7 +53,6 @@ makepkg_reads() {
 }
 
 @test "case 7: the same when the Cargo file had a [net] table before" {
-  skip "contract #119 pending"
   stock cargo
   apply
   status_is 0
@@ -72,7 +69,6 @@ makepkg_reads() {
 
 # shellcheck disable=SC2016 # fish expands $status in the two scripts, this shell must not
 @test "case 8: fish runs cmake with both launchers and LDFLAGS=-fuse-ld=mold, and nothing leaks into the shell" {
-  skip "contract #119 pending"
   local script='cmake -B "build dir" x; set -q LDFLAGS; echo $status'
   local leak='cmake x >/dev/null
     set -q CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER LDFLAGS; echo $status'
@@ -96,7 +92,6 @@ makepkg_reads() {
 }
 
 @test "case 8: fish --no-execute accepts toolchain/fish.block" {
-  skip "contract #119 pending"
   mkdir "$BATS_TEST_TMPDIR/run"
   run --separate-stderr timeout -k 5 30 /usr/bin/env -i "HOME=$H" \
     "XDG_RUNTIME_DIR=$BATS_TEST_TMPDIR/run" PATH=/usr/bin \
@@ -106,7 +101,6 @@ makepkg_reads() {
 }
 
 @test "case 9: makepkg's configuration ends LDFLAGS in -fuse-ld=mold and starts PATH with /usr/lib/sccache/bin, and PC_OC_NO_WIRING=1 takes both out" {
-  skip "contract #119 pending"
   local stock_out
   makepkg_reads
   status_is 0
@@ -124,7 +118,6 @@ makepkg_reads() {
 }
 
 @test "case 9: the same below other lines of a makepkg file" {
-  skip "contract #119 pending"
   stock makepkg
   apply
   status_is 0
@@ -137,7 +130,6 @@ makepkg_reads() {
 }
 
 @test "case 11: every # src: id of the three data files is one row of sources/manifest.tsv" {
-  skip "contract #119 pending"
   local name id n
   for name in "${NAMES[@]}"; do
     n=0
