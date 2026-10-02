@@ -33,7 +33,6 @@ malformed_after_apply() {
 }
 
 @test "case 4: revert after apply removes the three files and leaves their directories" {
-  skip "contract #119 pending"
   apply
   status_is 0
   revert
@@ -43,7 +42,6 @@ malformed_after_apply() {
 }
 
 @test "case 4: revert on an empty home exits 0 and creates nothing" {
-  skip "contract #119 pending"
   revert
   status_is 0
   stdout_is "toolchain: nothing to remove $CARGO" "toolchain: nothing to remove $FISH" \
@@ -52,7 +50,6 @@ malformed_after_apply() {
 }
 
 @test "revert leaves a file without a block alone and says nothing to remove" {
-  skip "contract #119 pending"
   stock cargo makepkg
   cp "$CARGO" "$BATS_TEST_TMPDIR/cargo.before"
   cp "$MAKEPKG" "$BATS_TEST_TMPDIR/makepkg.before"
@@ -67,25 +64,21 @@ malformed_after_apply() {
 }
 
 @test "revert goes on after the Cargo file fails, exits 1 and names it" {
-  skip "contract #119 pending"
   malformed_after_apply cargo
   goes_on_past cargo
 }
 
 @test "revert goes on after the fish file fails, exits 1 and names it" {
-  skip "contract #119 pending"
   malformed_after_apply fish
   goes_on_past fish
 }
 
 @test "revert goes on after the makepkg file fails, exits 1 and names it" {
-  skip "contract #119 pending"
   malformed_after_apply makepkg
   goes_on_past makepkg
 }
 
 @test "revert goes on after a target that is a symlink, exits 1 and names it" {
-  skip "contract #119 pending"
   wire cargo makepkg
   as_symlink fish
   revert
@@ -96,21 +89,18 @@ malformed_after_apply() {
 }
 
 @test "revert refuses when HOME is not in the environment" {
-  skip "contract #119 pending"
   wire "${NAMES[@]}"
   NO_HOME=1 revert
   refused HOME
 }
 
 @test "revert refuses a HOME that is not absolute" {
-  skip "contract #119 pending"
   wire "${NAMES[@]}"
   revert HOME=home
   refused HOME
 }
 
 @test "revert refuses a HOME that is not a directory" {
-  skip "contract #119 pending"
   wire "${NAMES[@]}"
   revert "HOME=$BOX/nowhere"
   refused HOME
@@ -120,7 +110,6 @@ malformed_after_apply() {
 }
 
 @test "case 6: as uid 0 revert exits 1 and removes nothing" {
-  skip "contract #119 pending"
   toolchain root revert
   refused
   wire "${NAMES[@]}"
