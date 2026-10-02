@@ -1154,3 +1154,251 @@ mem 3600 3600 1 @285/1985 pass" ]
   status_is 0
   [[ "$output" != *"measured:"* ]]
 }
+
+# The three cases below: a start that holds the lock and finds a pending step whose
+# offset is still set (same boot) runs nvml.py zero on every way out.
+
+@test "search: own: a pending step and a progress file that does not parse: exit 1, and zero ran" {
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  echo 'core_last=12x' >"$STATE/progress"
+  search
+  status_is 1
+  said 'progress does not parse'
+  ends_at_zero
+}
+
+@test "search: own: a pending step and a log that cannot be written: exit 1, and zero ran" {
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  rm -f "$STATE/log"
+  mkdir "$STATE/log"
+  search
+  status_is 1
+  ends_at_zero
+}
+
+@test "search: own: a pending step and a signal while the first get runs: exit 1, and zero ran" {
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  # the fake helper's get reads this fifo, so it stays until the lines below are written;
+  # TERM reaches the search (the pid guard.sh wrote for this start) in between
+  rm -f "$MOCK/search.pid"
+  mkfifo "$MOCK/nvml.get"
+  (
+    for _ in {1..100}; do
+      ! grep -qx 'nvml get' "$MOCK/events" 2>/dev/null || break
+      sleep 0.05
+    done
+    [[ ! -s "$MOCK/search.pid" ]] || kill -TERM "$(<"$MOCK/search.pid")"
+    sleep 0.3
+    # shellcheck disable=SC2016 # the inner shell expands these
+    timeout 10 bash -c 'printf "%s\n" "$@" >"$0"' "$MOCK/nvml.get" \
+      'p0.core offset=150 min=-500 max=500' 'p0.mem offset=0 min=-2000 max=3000' \
+      'p1.core unsupported' 'p1.mem unsupported' \
+      'p2.core offset=150 min=-500 max=500' 'p2.mem offset=0 min=-2000 max=3000'
+  ) 3>&- &
+  search
+  wait
+  status_is 1
+  [ "$(calls nvml | paste -sd' ')" = "get zero" ]
+  ends_at_zero
+  no_load
+}
+
+@test "search: own: a tool the load started in a process group of its own is ended before zero as well" {
+  local pid left="" runner group session
+  # gpu/load.sh of the fake tree (guard.sh binds nothing there) is a runner of this case:
+  # its core load at offset 120 starts a tool under timeout(1), as the real gpu/load.sh
+  # does, tells the search to stop and obeys no TERM. Any other call is the contract's
+  # mock load. The tool notes its process group and session, then stays for 20 s.
+  cp "$FIX/load.sh" "$REPO/gpu/load.mock.sh"
+  cat >"$REPO/gpu/tool.sh" <<'EOF'
+#!/usr/bin/bash
+s=/var/lib/pc-oc-test-mock
+/usr/bin/mkfifo "$s/wait.$$"
+stat="$(<"/proc/$$/stat")"
+read -r _ _ group session _ <<<"${stat##*) }"
+echo "$group $session" >"$s/tool.ids"
+echo "$$" >"$s/tool.pid"
+read -rt 20 _ <>"$s/wait.$$"
+EOF
+  cat >"$REPO/gpu/load.sh" <<'EOF'
+#!/usr/bin/bash
+here="${BASH_SOURCE[0]%/*}"
+s=/var/lib/pc-oc-test-mock
+core=0
+[[ ! -e "$s/nvml.core" ]] || core="$(<"$s/nvml.core")"
+[[ "${1-}" == core && "$core" == 120 ]] || exec /usr/bin/bash "$here/load.mock.sh" "$@"
+printf 'load %s\n' "$*" >>"$s/events"
+/usr/bin/mkfifo "$s/wait.$$"
+/usr/bin/timeout -k 10 20 /usr/bin/bash "$here/tool.sh" &
+tool=$!
+for _ in {1..500}; do
+  [[ ! -s "$s/tool.pid" ]] || break
+  read -rt 0.01 _ <>"$s/wait.$$" || true
+done
+echo "$$ $tool $(<"$s/tool.pid")" >>"$s/load.pids"
+trap ':' TERM INT HUP
+kill -TERM "$(<"$s/search.pid")"
+end=$((SECONDS + 20))
+while ((SECONDS < end)); do
+  read -rt 1 _ <>"$s/wait.$$" || true
+done
+EOF
+  search
+  # first of all nothing this case started outlives it, whatever the search did; only a
+  # pid that still is a process of this test's tree gets the KILL
+  for pid in $(<"$MOCK/load.pids"); do
+    if { tr '\0' ' ' <"/proc/$pid/cmdline"; } 2>/dev/null | grep -qF " $REPO/gpu/"; then
+      left+=" $pid"
+      kill -KILL "$pid" 2>/dev/null || true
+    fi
+  done
+  status_is 1
+  # the case is the one its name says: the load's session, another process group
+  read -r runner _ <"$MOCK/load.pids"
+  read -r group session <"$MOCK/tool.ids"
+  [ "$session" = "$runner" ]
+  [ "$group" != "$runner" ]
+  gone_at_zero
+  [ -z "$left" ]
+  ends_at_zero
+  lock_free
+}
+
+@test "search: own: a start that finds a result runs nothing, leaves the file as it is and exits 0" {
+  local before
+  search
+  all_passed
+  before="$(stat -c '%i %y' "$STATE/result") $(<"$STATE/result")"
+  next_start
+  search
+  status_is 0
+  no_set
+  no_load
+  [[ "$output" == *"core_offset_mhz=210"* && "$output" == *"nothing was run"* ]]
+  [ "$(stat -c '%i %y' "$STATE/result") $(<"$STATE/result")" = "$before" ]
+}
+
+@test "search: own: the stop at a memory clock in another unit counts no step: the next start sets 200 again and stops the same way" {
+  plan 'mem@0/200 mem_mhz_max=9100'
+  search
+  status_is 1
+  [ ! -e "$STATE/pending" ]
+  next_start
+  search
+  status_is 1
+  said 'unit of the NVML memory offset'
+  [ "$(mem_steps)" = 200 ]
+  logged 0 200 invalid clock
+  ends_at_zero
+  no_result
+  [ ! -e "$STATE/pending" ]
+}
+
+@test "search: own: a gpu/load.sh check that is not back after load_grace_s is ended: exit 1, nothing set" {
+  local start=$SECONDS
+  # a runner of this case in the fake tree: its check stays for 20 s unless it is told to
+  # stop; any other call is the contract's mock load
+  cp "$FIX/load.sh" "$REPO/gpu/load.mock.sh"
+  cat >"$REPO/gpu/load.sh" <<'EOF'
+#!/usr/bin/bash
+s=/var/lib/pc-oc-test-mock
+[[ "$*" == check ]] || exec /usr/bin/bash "${BASH_SOURCE[0]%/*}/load.mock.sh" "$@"
+printf 'load %s\n' "$*" >>"$s/events"
+echo "$$" >>"$s/load.pids"
+/usr/bin/mkfifo "$s/wait.$$"
+read -rt 20 _ <>"$s/wait.$$"
+EOF
+  values_with 's/^load_grace_s=[0-9]+/load_grace_s=1/'
+  search
+  status_is 1
+  if ((SECONDS - start >= 10)); then
+    printf 'the search took %s s with a cap of 1 s on the check\n' "$((SECONDS - start))" >&2
+    return 1
+  fi
+  timeout_said 1
+  load_gone
+  [ "$(calls load)" = check ]
+  no_set
+  no_result
+  lock_free
+}
+
+@test "search: own: a clock that is stored as 0 is not soaked" {
+  plan 'core@90/0 fail'
+  search
+  status_is 0
+  [ -z "$(soaks core)" ]
+  [ "$(soaks mem)" = "0/1300:pass" ]
+  result_is 0 1300
+  # both stored as 0: no soak load at all
+  fresh
+  plan 'core@90/0 fail' 'mem@0/200 fail'
+  search
+  status_is 0
+  [ -z "$(soaks core)$(soaks mem)" ]
+  result_is 0 0
+}
+
+@test "search: own: a block with a key its kind does not have, or with a key twice, makes the step invalid" {
+  local action
+  for action in 'dup=extra=1' 'dup=read_gbs=400.0' 'dup=xid=0'; do
+    fresh
+    plan "core@120/0 $action"
+    search
+    search_ended "core 2 3 @120/0 pass" 120 0
+    logged 120 0 invalid block
+  done
+}
+
+@test "search: own: a block of 4097 bytes makes the step invalid, one of 4096 bytes does not" {
+  local value
+  # the block of the core step at 120 is 91 bytes and the log value
+  value="/$(printf 'a%.0s' {1..4005})"
+  plan "core@120/0 log=$value"
+  search
+  [ "$(stat -c %s "$STATE/block")" -eq 4097 ]
+  search_ended "core 2 3 @120/0 pass" 120 0
+  logged 120 0 invalid block
+  fresh
+  plan "core@120/0 log=${value%a}"
+  search
+  status_is 0
+  logged 120 0 pass
+}
+
+@test "search: own: a block of more than 16 lines makes the step invalid" {
+  # 8 lines of the kind and xid=0 nine more times
+  plan "core@120/0$(printf ' dup=xid=0%.0s' {1..9})"
+  search
+  [ "$(wc -l <"$STATE/block")" -eq 17 ]
+  search_ended "core 2 3 @120/0 pass" 120 0
+  logged 120 0 invalid block
+}
+
+@test "search: own: a reason that is empty or has more than lower-case letters, digits, _ and - makes the step invalid" {
+  local action
+  for action in 'reason=Ok' 'reason=a.b' 'reason='; do
+    fresh
+    plan "core@120/0 $action"
+    search
+    search_ended "core 2 3 @120/0 pass" 120 0
+    logged 120 0 invalid block
+  done
+}
+
+@test "search: own: a block that says pass and names an Xid is no pass: the step is invalid" {
+  plan 'core@120/0 xid=1'
+  search
+  search_ended "core 2 3 @120/0 pass" 120 0
+  logged 120 0 invalid block
+}
+
+@test "search: own: a block that says pass and limited=1 is no pass: the step is invalid" {
+  plan 'core@120/0 limited=1'
+  search
+  search_ended "core 2 3 @120/0 pass" 120 0
+  logged 120 0 invalid block
+}

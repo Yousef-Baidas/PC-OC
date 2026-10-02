@@ -100,9 +100,6 @@ caller=(/usr/bin/setpriv --reuid="$SUDO_UID" --regid="$SUDO_GID" --init-groups
   /usr/bin/env -i HOME="$home" PATH=/usr/bin /usr/bin/bash "$here/load.sh")
 
 state="$(pc_oc_state)/gpu/search"
-mkdir -p "$state" || die gpu "search: cannot create $state"
-exec 9<"$state"
-flock -n 9 || die gpu "search: already running"
 
 armed="" hold="" signalled="" load_pid="" timer_pid="" load_rc=0
 step="" step_logged="" verdict="" reason=""
@@ -149,10 +146,33 @@ load_ended() {
   [[ "${stat##*) }" == Z* ]]
 }
 
+# session_left [KILL]: is a process of the load's session left. setsid made the load the
+# leader of its own session, so the session id is the load's pid, and a tool that
+# gpu/load.sh starts under timeout(1) is in that session though in a process group of its
+# own. The members are found in /proc by that id alone: no name, no pattern. Without an
+# argument a zombie counts; with KILL every member gets KILL and those not yet dead count.
+session_left() {
+  local f stat state sid left=1
+  for f in /proc/[0-9]*/stat; do
+    { stat="$(<"$f")"; } 2>/dev/null || continue
+    read -r state _ _ sid _ <<<"${stat##*) }"
+    [[ "$sid" == "$load_pid" ]] || continue
+    if [[ -z "${1-}" ]]; then
+      left=0
+      continue
+    fi
+    f="${f#/proc/}"
+    kill -KILL "${f%/stat}" 2>/dev/null || true
+    [[ "$state" == Z ]] || left=0
+  done
+  return "$left"
+}
+
 # stop_load: end the load that is running: TERM, up to 5 s for it to leave, then KILL for
-# all it started (setsid made it the leader of its own process group), and wait until
-# nothing of that group is left, zombies included. The KILL goes out while the load is
-# not yet waited for, so its pid cannot have gone to another process.
+# every process of its session until none of them runs, and wait until nothing of that
+# session is left, zombies included. The KILLs go out while the load is not yet waited
+# for, so its pid, the session id, cannot have gone to another process; after the wait
+# the session is only looked at.
 stop_load() {
   local end
   kill -TERM "$load_pid" 2>/dev/null || true
@@ -160,10 +180,13 @@ stop_load() {
   until load_ended || ((${EPOCHREALTIME/./} >= end)); do
     read -rt 0.1 _ <>"$state/timer" || true
   done
-  kill -KILL -- "-$load_pid" 2>/dev/null || true
+  end=$((${EPOCHREALTIME/./} + 5000000))
+  while session_left KILL && ((${EPOCHREALTIME/./} < end)); do
+    read -rt 0.05 _ <>"$state/timer" || true
+  done
   wait "$load_pid" 2>/dev/null || true
   end=$((${EPOCHREALTIME/./} + 5000000))
-  while kill -0 -- "-$load_pid" 2>/dev/null && ((${EPOCHREALTIME/./} < end)); do
+  while session_left && ((${EPOCHREALTIME/./} < end)); do
     read -rt 0.05 _ <>"$state/timer" || true
   done
   load_pid=""
@@ -198,6 +221,17 @@ on_signal() {
 }
 trap on_exit EXIT
 trap on_signal INT TERM HUP
+
+# The lock is taken with the traps in place and a signal only noted, so no way out lies
+# between holding the lock and knowing whether a step is pending. A pending file is a
+# step whose offsets may still be set: with it, every way out from here runs nvml.py zero.
+hold=1
+mkdir -p "$state" || die gpu "search: cannot create $state"
+exec 9<"$state"
+flock -n 9 || die gpu "search: already running"
+[[ ! -e "$state/pending" ]] || armed=1
+hold=""
+[[ -z "$signalled" ]] || stop "got a signal: the search ends here. $again"
 
 # save_progress: write p to the progress file
 save_progress() {
@@ -314,8 +348,13 @@ judge() {
   if [[ "$phase" != baseline ]]; then
     reason=clock
     if [[ "$kind" == core ]]; then
+      # src: research-111 (15 MHz is one core clock bin of this card); the pre-flight on
+      # the card saw the clock move in 15 MHz units (#121 comment 5953276937)
       ((got >= base_core + mhz - 15)) || return 0
     else
+      # 5 MHz either way is our own choice, no source gives it: room for a reading that is
+      # rounded, and far under the 100 MHz or more that an offset in another unit is off
+      # by at the first memory step (mem_start_mhz=200)
       ((got - base_mem - mhz <= 5 && base_mem + mhz - got <= 5)) || return 0
       if ((gbs * 100 < base_gbs * (100 - v[mem_drop_pct]))); then
         verdict=fail reason=throughput
@@ -337,7 +376,7 @@ run_load() {
 # run_capped <cap seconds> <what it is, for the message> <gpu/load.sh arguments>...: one
 # gpu/load.sh as the calling user; its stdout goes to $state/block, its exit status to
 # load_rc. It is a job of this shell itself, in its own session, so the pid waited for is
-# the load and its process group is all it started. One that is not back after the cap
+# the load and its session is all it started. One that is not back after the cap
 # ends the search: on_exit ends it.
 run_capped() {
   local cap="$1" what="$2" who=""
@@ -490,8 +529,11 @@ if [[ -e "$state/pending" ]]; then
   fi
   nvml zero >/dev/null || {
     shout
+    armed=""
     exit 1
   }
+  # this was the zero of the pending step: until the first set no way out has one to add
+  armed=""
   [[ "$any_offset" != unknown ]] || stop "nvml.py get failed, or printed something else than its lines"
   [[ -n "${crashed_phase-}" ]] || stop "$state/pending does not parse: remove $state to start the search over"
   case "$crashed_phase" in
