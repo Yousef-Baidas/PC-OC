@@ -364,7 +364,6 @@ STUB
 }
 
 @test "compile refuses each wired variable, naming it, before any download or build" {
-  skip "contract #118 pending"
   local v
   for v in CC CXX LDFLAGS RUSTC_WRAPPER CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER; do
     rm -f "$BATS_TEST_TMPDIR/calls-curl" "$BATS_TEST_TMPDIR/calls-make"
@@ -381,7 +380,6 @@ STUB
 }
 
 @test "compile refuses a compiler-wrapper dir on PATH, first or mid-PATH, trailing slash or not" {
-  skip "contract #118 pending"
   run --separate-stderr env "PATH=/usr/lib/sccache/bin:$BASE_PATH" bash "$SCRIPT" 1
   wired_refused
   [[ "$stderr" == *"/usr/lib/sccache/bin"* ]]
@@ -392,7 +390,6 @@ STUB
 }
 
 @test "compile lists every offender on the one line" {
-  skip "contract #118 pending"
   run --separate-stderr env RUSTC_WRAPPER=sccache LDFLAGS=-fuse-ld=mold \
     "PATH=/usr/lib/ccache/bin:$BASE_PATH" bash "$SCRIPT" 1
   wired_refused
@@ -402,7 +399,6 @@ STUB
 }
 
 @test "compile ignores empty wired variables and a clean PATH" {
-  skip "contract #118 pending"
   clean="$(printf '%s' "$BASE_PATH" | tr ':' '\n' | grep -vxE '/usr/lib/(sccache|ccache)/bin/?' | paste -sd:)"
   run --separate-stderr env -u CC -u CXX -u LDFLAGS -u RUSTC_WRAPPER \
     -u CMAKE_C_COMPILER_LAUNCHER -u CMAKE_CXX_COMPILER_LAUNCHER \
