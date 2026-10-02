@@ -314,14 +314,15 @@ rule_order() {
 }
 
 # no digit followed, after optional spaces or tabs, by a tuning unit. The line is lowercased and loses
-# its `*`, `~` and backticks first. Units: %, and as a whole word mv, mohm, mhz, mt/s, w, v, watt(s),
-# volt(s), millivolt(s), megahertz, milliohm(s), percent
+# its `*`, `~` and backticks first. Units, each as a whole word: mv, mohm, mhz, mt/s, w, v, watt(s),
+# volt(s), millivolt(s), megahertz, milliohm(s). Not a unit here: `%` and percent, no tuning value of the
+# pass is one and the game metric is named `1% low`
 rule_units() {
   awk '
     {
       text = tolower($0)
       gsub(/[*~`]/, "", text)
-      if (text ~ /[0-9][ \t]*(%|(mv|mohm|mhz|mt\/s|w|v|watts?|volts?|millivolts?|megahertz|milliohms?|percent)([^a-z0-9_]|$))/)
+      if (text ~ /[0-9][ \t]*(mv|mohm|mhz|mt\/s|w|v|watts?|volts?|millivolts?|megahertz|milliohms?)([^a-z0-9_]|$)/)
         print FILENAME ":" FNR ": a number with a tuning unit: " $0
     }
   ' "$README_FILE"

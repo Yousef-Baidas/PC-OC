@@ -68,7 +68,7 @@ Have ready: the baseline directory `results/2026-10-01-baseline`, Cyberpunk 2077
 - Do: `bench/game.sh setup`, then record the game runs the way it says, with the label `applied`
 - Do: `pc-oc apply toolchain` as your user, never with sudo
 - Do: `bench/run.sh applied`
-- See: a new directory `results/<date>-applied`
+- See: a new directory `results/<date>-applied`, and for the game runs an avg and a 1% low FPS
 - If it fails: [Undo everything](#11-undo-everything)
 
 The toolchain wiring of section 9 must not be in place yet: `bench/compile.sh` refuses a wired environment.
