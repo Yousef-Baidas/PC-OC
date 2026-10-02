@@ -1,0 +1,4 @@
+# src: cmake-launcher-env, cmake-ldflags-env, mold, sccache
+function cmake --wraps cmake --description 'cmake through sccache and mold (pc-oc)'
+    CMAKE_C_COMPILER_LAUNCHER=sccache CMAKE_CXX_COMPILER_LAUNCHER=sccache LDFLAGS=-fuse-ld=mold command cmake $argv
+end
