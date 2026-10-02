@@ -18,7 +18,7 @@ MSG_POWER="pc-oc: gpu: search: apply the power limit first: sudo pc-oc apply gpu
 # gpu/search.sh reads until #150 is built; the cases of #150 turn it on for themselves
 # (power_cap_blocks). The worker of #150 sets this default to 1 and changes nothing else
 # in these fixtures.
-BLOCK_POWER_CAP=0
+BLOCK_POWER_CAP=1
 
 # The line of #150 that a search ending with a result prints when a core step or core soak
 # of it was not checked against its clock. The ticket gives it from "gpu:" on; the other

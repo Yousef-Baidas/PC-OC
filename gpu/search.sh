@@ -2,7 +2,7 @@
 set -euo pipefail
 # sudo pc-oc search gpu (#135): find the highest core and memory clock offsets this card
 # holds under load, unattended, and write them to $(pc_oc_state)/gpu/search/result. Nothing
-# is applied: the two numbers go into gpu/values by hand (gpu/offsets.md).
+# is applied: gpu/apply.sh sets the two numbers from that file (gpu/offsets.md, step 12).
 # A step is: write pending, set both offsets through nvml.py (ADR 0003), run one
 # gpu/load.sh as the calling user, judge its result block, append a line to log, remove
 # pending. Baseline at offsets 0, then the core phase, the memory phase and one soak of
@@ -12,9 +12,13 @@ set -euo pipefail
 # next start counts that step as failed and goes on from there.
 # State directory, root-owned and locked for the whole run:
 #   pending   "phase=<p> core=<mhz> mem=<mhz> boot_id=<id>" while a step runs
-#   log       "<utc> phase=<p> core=<mhz> mem=<mhz> result=<r> reason=<word>" per step
+#   log       "<utc> phase=<p> core=<mhz> mem=<mhz> result=<r> reason=<word>" per step, and
+#             behind it " clock=unchecked" (a core load that passed without the core clock
+#             check) or " core_clock_delta=<mhz>" (a memory load at a core offset); the two
+#             lines the search ends with ahead of its result are read from these (#150)
 #   result    core_offset_mhz=, mem_offset_mhz=, finished=<utc>
-#   baseline  core_mhz_max=, mem_mhz_max=, read_gbs= of the two loads at offsets 0
+#   baseline  core_mhz_max=, mem_mhz_max=, read_gbs=, core_power_cap=, mem_core_mhz_max= of
+#             the two loads at offsets 0
 #   progress  how far the phases and the soak are
 #   block     stdout of the last load; timer: a fifo nobody writes to, read -t on it waits
 export PATH=/usr/bin LC_ALL=C
@@ -111,8 +115,8 @@ caller=(/usr/bin/setpriv --reuid="$SUDO_UID" --regid="$SUDO_GID" --init-groups
 state="$(pc_oc_state)/gpu/search"
 
 armed="" hold="" signalled="" unheard="" load_pid="" timer_pid="" load_rc=0
-step="" step_logged="" verdict="" reason=""
-base_core="" base_mem="" base_gbs=""
+step="" step_logged="" verdict="" reason="" field=""
+base_core="" base_mem="" base_gbs="" base_cap="" base_mem_core=""
 declare -A p=() b=()
 progress_keys=(core_last core_stored mem_last mem_stored soak_core soak_mem core_backoffs
   mem_backoffs core_soaked mem_soaked)
@@ -148,10 +152,14 @@ put() {
   fi
 }
 
-# log_step <result> <reason>: one line of the log for the step at hand, and the same on stdout
+# log_step <result> <reason> [field]: one line of the log for the step at hand, and the same
+# on stdout; the field of #150, with its leading space, ends both. The line goes onto the
+# disk as far as that can be had: report reads its two lines from the log, and the start
+# after a freeze must find them (a sync that fails here is caught by the one before report).
 log_step() {
-  printf '%s result=%s reason=%s\n' "$step" "$1" "$2" || unheard=1
-  printf '%s %s result=%s reason=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$step" "$1" "$2" >>"$state/log"
+  printf '%s result=%s reason=%s%s\n' "$step" "$1" "$2" "${3-}" || unheard=1
+  printf '%s %s result=%s reason=%s%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$step" "$1" "$2" "${3-}" >>"$state/log"
+  sync -- "$state/log" 2>/dev/null || true
   step_logged=1
 }
 
@@ -282,7 +290,7 @@ back_off() {
 # end_search <result> <reason> <what happened>: the step ends the whole search. It is
 # logged and pending stays, so the next start counts it as failed.
 end_search() {
-  log_step "$1" "$2"
+  log_step "$1" "$2" "$field"
   stop "$3: the search ends here. $again"
 }
 
@@ -310,7 +318,7 @@ read_offsets() {
 # log= directory is never opened.
 read_block() {
   local kind="$1" line key n=0
-  local -a want=(result reason pstate_min core_mhz_max mem_mhz_max limited xid log)
+  local -a want=(result reason pstate_min core_mhz_max mem_mhz_max limited power_cap xid log)
   [[ "$kind" != mem ]] || want+=(read_gbs)
   b=()
   reason=block
@@ -334,14 +342,22 @@ read_block() {
   esac
 }
 
-# judge <phase> <kind> <offset of that kind's clock>: set verdict and reason for the load
-# that just ended. pass: the load says so, in pstate 0 to 2, at the clock the offset asks
-# for, and for memory at a read speed no more than mem_drop_pct under the baseline.
-# fail: the load says so, or the read speed dropped. invalid: no verdict.
+# judge <phase> <kind> <core mhz> <mem mhz>: set verdict, reason and field for the load
+# that just ended at these offsets. pass: the load says so, in pstate 0 to 2, at the clock
+# the offset of its kind asks for, and for memory at a read speed no more than mem_drop_pct
+# under the baseline. fail: the load says so, or the read speed dropped. invalid: no
+# verdict. field is what the step's line ends with (log_step), empty for most.
 judge() {
   local phase="$1" kind="$2" mhz="$3" got frac gbs=""
-  verdict=invalid
+  [[ "$kind" == core ]] || mhz="$4"
+  verdict=invalid field=""
   read_block "$kind" || return 0
+  # A memory load at a core offset says how far the core clock is from the one under the
+  # memory baseline. It is a measurement and no check: whatever the load's result, and no
+  # verdict depends on it (#150).
+  if [[ "$kind" == mem && "$3" != 0 && "${b[core_mhz_max]}" =~ ^[1-9][0-9]{0,4}$ ]]; then
+    field=" core_clock_delta=$((b[core_mhz_max] - base_mem_core))"
+  fi
   reason="${b[reason]}"
   [[ "${b[result]}" != invalid ]] || return 0
   if [[ "${b[result]}" == fail ]]; then
@@ -349,10 +365,12 @@ judge() {
     return 0
   fi
   reason=block
-  [[ "${b[xid]}" == 0 && "${b[limited]}" == 0 ]] || return 0
+  [[ "${b[xid]}" == 0 && "${b[limited]}" == 0 && "${b[power_cap]}" =~ ^[01]$ ]] || return 0
   got="${b[${kind}_mhz_max]}"
   [[ "$got" =~ ^[1-9][0-9]{0,4}$ ]] || return 0
   if [[ "$kind" == mem ]]; then
+    # its core clock goes into the baseline file and into core_clock_delta
+    [[ "${b[core_mhz_max]}" =~ ^[1-9][0-9]{0,4}$ ]] || return 0
     # GB/s in thousandths, so the comparison is in whole numbers
     [[ "${b[read_gbs]}" =~ ^([0-9]{1,5})(\.([0-9]{1,3}))?$ ]] || return 0
     frac="${BASH_REMATCH[3]}000"
@@ -363,11 +381,7 @@ judge() {
   [[ "${b[pstate_min]}" =~ ^[012]$ ]] || return 0
   if [[ "$phase" != baseline ]]; then
     reason=clock
-    if [[ "$kind" == core ]]; then
-      # src: research-111 (15 MHz is one core clock bin of this card); the pre-flight on
-      # the card saw the clock move in 15 MHz units (#121 comment 5953276937)
-      ((got >= base_core + mhz - 15)) || return 0
-    else
+    if [[ "$kind" == mem ]]; then
       # 5 MHz either way is our own choice, no source gives it: room for a reading that is
       # rounded, and far under the 100 MHz or more that an offset in another unit is off
       # by at the first memory step (mem_start_mhz=200)
@@ -376,6 +390,17 @@ judge() {
         verdict=fail reason=throughput
         return 0
       fi
+    elif [[ "$base_cap" == 0 && "${b[power_cap]}" == 0 ]]; then
+      # src: research-111 (15 MHz is one core clock bin of this card); the pre-flight on
+      # the card saw the clock move in 15 MHz units (#121 comment 5953276937)
+      ((got >= base_core + mhz - 15)) || return 0
+    else
+      # At the power limit the limit sets the core clock, not the offset: two gpu_burn runs
+      # at stock, sw_power_cap Active in every sample, read 2460 and 2475 MHz as their
+      # maximum, with the clock between 2130 and 2475 (#121 comments 5953205480 and
+      # 5953276937). Against baseline + offset that is noise, so a core load that was
+      # capped, or whose baseline was, is not checked, and its line says so.
+      field=" clock=unchecked"
     fi
   fi
   verdict=pass reason="${b[reason]}"
@@ -424,16 +449,15 @@ run_capped() {
 # run_step <phase> <kind> <core mhz> <mem mhz> <load seconds>: one step. Returns with
 # verdict pass or fail and the step logged; anything else ends the search here.
 run_step() {
-  local phase="$1" kind="$2" core="$3" mem="$4" seconds="$5" mhz="$3"
-  [[ "$kind" == core ]] || mhz="$mem"
+  local phase="$1" kind="$2" core="$3" mem="$4" seconds="$5"
   stop_unheard
-  step="phase=$phase core=$core mem=$mem" step_logged=""
+  step="phase=$phase core=$core mem=$mem" step_logged="" field=""
   put pending "$step boot_id=$boot_id"
   # a set that fails or is killed may have written some performance states: zero follows
   nvml set core "$core" >/dev/null || end_search invalid set "nvml.py set core $core failed"
   nvml set mem "$mem" >/dev/null || end_search invalid set "nvml.py set mem $mem failed"
   run_load "$kind" "$seconds"
-  judge "$phase" "$kind" "$mhz"
+  judge "$phase" "$kind" "$core" "$mem"
   case "$verdict $reason" in
     "fail xid") end_search fail xid "an Xid was logged during the step $step" ;;
     "invalid clock")
@@ -448,7 +472,7 @@ run_step() {
       ;;
     invalid*) end_search invalid "$reason" "the load of the step $step gave no verdict (reason=$reason)" ;;
   esac
-  log_step "$verdict" "$reason"
+  log_step "$verdict" "$reason" "$field"
 }
 
 # close_step: the step is judged, logged and counted
@@ -464,7 +488,7 @@ baseline_load() {
   stop_unheard
   step="phase=baseline-$kind core=0 mem=0" step_logged=""
   run_load "$kind" "${v[${kind}_load_s]}"
-  judge baseline "$kind" 0
+  judge baseline "$kind" 0 0
   log_step "$verdict" "$reason"
   step=""
   [[ "$kind" != mem ]] ||
@@ -516,8 +540,24 @@ soak() {
   done
 }
 
-# report: the result file on stdout, and what to do with it
+# report: the result file on stdout, and what to do with it. Ahead of it, what the log says
+# the result does not stand on (#150): a core load that passed without the core clock check,
+# in this start or an earlier one, and what the last memory soak at a core offset measured.
+# Nothing of the log is used as a number here: its lines are matched and printed.
 report() {
+  local line unchecked="" moved=""
+  if [[ -r "$state/log" ]]; then
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^[^\ ]+\ phase=(core|soak-core)\ .*\ clock=unchecked$ ]]; then
+        unchecked=1
+      elif [[ "$line" =~ ^[^\ ]+\ phase=soak-mem\ core=([1-9][0-9]{0,3})\ .*\ core_clock_delta=(-?[0-9]{1,5})$ ]]; then
+        moved="core offset ${BASH_REMATCH[1]} MHz moved the core clock by ${BASH_REMATCH[2]} MHz under the memory load"
+      fi
+    done <"$state/log"
+  fi
+  [[ -z "$unchecked" ]] ||
+    printf 'pc-oc: gpu: search: the core load ran at the power limit, so the core clock was not checked against the offset\n' || unheard=1
+  [[ -z "$moved" ]] || printf 'pc-oc: gpu: search: %s\n' "$moved" || unheard=1
   cat -- "$state/result" || unheard=1
   printf 'pc-oc: gpu: search: finished. These offsets are not applied yet: gpu/offsets.md says how. The log is %s\n' "$state/log" || unheard=1
 }
@@ -591,10 +631,12 @@ fi
 
 if [[ ! -e "$state/baseline" ]]; then
   baseline_load core
-  base_core="${b[core_mhz_max]}"
+  base_core="${b[core_mhz_max]}" base_cap="${b[power_cap]}"
   baseline_load mem
-  put baseline "core_mhz_max=$base_core" "mem_mhz_max=${b[mem_mhz_max]}" "read_gbs=${b[read_gbs]}"
+  put baseline "core_mhz_max=$base_core" "mem_mhz_max=${b[mem_mhz_max]}" "read_gbs=${b[read_gbs]}" \
+    "core_power_cap=$base_cap" "mem_core_mhz_max=${b[core_mhz_max]}"
 fi
+old_baseline=1
 while IFS= read -r line; do
   if [[ "$line" =~ ^core_mhz_max=([1-9][0-9]{0,4})$ ]]; then base_core="${BASH_REMATCH[1]}"; fi
   if [[ "$line" =~ ^mem_mhz_max=([1-9][0-9]{0,4})$ ]]; then base_mem="${BASH_REMATCH[1]}"; fi
@@ -602,8 +644,15 @@ while IFS= read -r line; do
     frac="${BASH_REMATCH[3]}000"
     base_gbs=$((10#${BASH_REMATCH[1]} * 1000 + 10#${frac:0:3}))
   fi
+  [[ "$line" != core_power_cap=* ]] || old_baseline=""
+  if [[ "$line" =~ ^core_power_cap=([01])$ ]]; then base_cap="${BASH_REMATCH[1]}"; fi
+  if [[ "$line" =~ ^mem_core_mhz_max=([1-9][0-9]{0,4})$ ]]; then base_mem_core="${BASH_REMATCH[1]}"; fi
 done <"$state/baseline"
-[[ -n "$base_core" && -n "$base_mem" && -n "$base_gbs" ]] ||
+# the search before #150 wrote three lines, and its core steps were all checked against a
+# baseline that may have been capped: nothing of it is taken over
+[[ -z "$old_baseline" ]] ||
+  stop "$state/baseline has no core_power_cap line, so a gpu/search.sh before #150 wrote it: nothing was set. Start the search over: sudo rm -r $state"
+[[ -n "$base_core" && -n "$base_mem" && -n "$base_gbs" && -n "$base_cap" && -n "$base_mem_core" ]] ||
   stop "$state/baseline does not parse: remove $state to start the search over"
 
 phase core
