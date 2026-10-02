@@ -50,7 +50,6 @@ order_ok() {
 }
 
 @test "report with a compare dir lists exactly the changed settings with both values" {
-  skip "contract #145 pending"
   run --separate-stderr bash "$R/bench/report.sh" "$FIX/2026-10-02-pl" "$FIX/2026-10-01-old"
   [ "$status" -eq 0 ]
   md="$R/reports/pl.md"
@@ -59,7 +58,6 @@ order_ok() {
 }
 
 @test "report with identical settings says none, names all six axes and exits 0" {
-  skip "contract #145 pending"
   run --separate-stderr bash "$R/bench/report.sh" "$FIX/2026-10-02-same" "$FIX/2026-10-01-old"
   [ "$status" -eq 0 ]
   md="$R/reports/same.md"
@@ -69,7 +67,6 @@ order_ok() {
 }
 
 @test "report on a differing kernel and driver names both axes, exits 3 and still writes the deltas" {
-  skip "contract #145 pending"
   run --separate-stderr bash "$R/bench/report.sh" "$FIX/2026-10-02-kern" "$FIX/2026-10-01-old"
   [ "$status" -eq 3 ]
   [ "${#lines[@]}" -le 1 ]
@@ -87,7 +84,6 @@ Same on: cpu.model, cpu.microcode, gpu.name, gpu.vbios"
 }
 
 @test "report puts a key found in one directory only in the table with n/a, new files first" {
-  skip "contract #145 pending"
   run --separate-stderr bash "$R/bench/report.sh" "$FIX/2026-10-02-onlynew" "$FIX/2026-10-01-onlyold"
   [ "$status" -eq 0 ]
   md="$R/reports/onlynew.md"
@@ -100,7 +96,6 @@ os.thp	n/a	madvise"
 }
 
 @test "report counts a fixed axis missing in the compare dir as differing and exits 3" {
-  skip "contract #145 pending"
   run --separate-stderr bash "$R/bench/report.sh" "$FIX/2026-10-02-same" "$FIX/2026-10-01-novbios"
   [ "$status" -eq 3 ]
   [ "$stderr" = "pc-oc: bench: fixed axis differs: gpu.vbios" ]
@@ -113,7 +108,6 @@ Same on: cpu.model, cpu.microcode, gpu.name, gpu.driver, os.kernel"
 }
 
 @test "report escapes a pipe in a value so the row keeps three cells" {
-  skip "contract #145 pending"
   run --separate-stderr bash "$R/bench/report.sh" "$FIX/2026-10-02-pipe" "$FIX/2026-10-01-old"
   [ "$status" -eq 0 ]
   md="$R/reports/pipe.md"
@@ -123,7 +117,6 @@ Same on: cpu.model, cpu.microcode, gpu.name, gpu.driver, os.kernel"
 }
 
 @test "report without a compare dir is byte-identical to the expected file and regenerates identically either way" {
-  skip "contract #145 pending"
   run --separate-stderr bash "$R/bench/report.sh" "$FIX/2026-10-02-pl"
   [ "$status" -eq 0 ]
   cmp "$FIX/expected-pl.md" "$R/reports/pl.md"
