@@ -8,7 +8,10 @@ bats_require_minimum_version 1.5.0
 # (fixtures/load/guard.sh), so a load.sh that pins PATH or calls a tool by absolute path
 # still cannot reach the real ones. The load mocks replay timed output, so a run takes its
 # warm-up + load seconds: 1 + 1, or 1 + 2 where two samples after the warm-up are needed.
-# The cases named "#140 case N", at the end, are the contract for #140.
+# The cases named "#140 case N" are the contract for #140, those named "#150 case N", at
+# the end, the contract for #150 (cases 1 to 7 of its Check list): of the seven limit
+# reasons only the four slowdowns void a load, and the block has the key power_cap on the
+# line after limited.
 
 load fixtures/load/helper
 
@@ -58,6 +61,30 @@ smi_rows() {
     >"$MOCK_SMI_ROWS"
 }
 
+# smi_scenario <row>...: an nvidia-smi scenario of these rows
+smi_scenario() {
+  export MOCK_SMI_ROWS="$BATS_TEST_TMPDIR/smi.rows"
+  printf '%s\n' "$@" >"$MOCK_SMI_ROWS"
+}
+
+# key_order: the keys of the stdout block in the order printed, on one line
+key_order() {
+  local l
+  for l in "${lines[@]}"; do printf '%s ' "${l%%=*}"; done
+}
+
+# after_limited: the stdout line that follows the limited= line
+after_limited() {
+  local i
+  for i in "${!lines[@]}"; do
+    [[ "${lines[i]}" != limited=* ]] || {
+      printf '%s\n' "${lines[i + 1]-}"
+      return 0
+    }
+  done
+  return 1
+}
+
 # keys: the keys of the stdout block, sorted, on one line
 keys() {
   local l
@@ -65,14 +92,17 @@ keys() {
 }
 
 @test "load core: the pass fixture gives result=pass, exit 0, every line in the grammar, all keys (#134 case 6)" {
+  skip "contract #150 pending"
   load_sh core 1 1
   verdict 0 pass
-  block_ok 8
+  # the eight keys of #134 and power_cap (#150)
+  block_ok 9
   [ "$(value reason)" = ok ]
   [ "$(value pstate_min)" = 0 ]
   [ "$(value core_mhz_max)" = 2520 ]
   [ "$(value mem_mhz_max)" = 8001 ]
   [ "$(value limited)" = 0 ]
+  [ "$(value power_cap)" = 0 ]
   [ "$(value xid)" = 0 ]
   log="$(value log)"
   [[ "$log" == "$HOME/.cache/pc-oc/gpu-load/"?* ]]
@@ -112,11 +142,14 @@ keys() {
 }
 
 @test "load mem: exit 65 with throughput lines gives pass and read_gbs is the median after the warm-up (#134 case 8)" {
+  skip "contract #150 pending"
   load_sh mem 1 2 1
   verdict 0 pass
-  block_ok 9
+  # the nine keys of #134 and power_cap (#150)
+  block_ok 10
   [ "$(value reason)" = ok ]
   [ "$(value limited)" = 0 ]
+  [ "$(value power_cap)" = 0 ]
   [ "$(value xid)" = 0 ]
   # 10.0 three times in the warm-up, then 50.0, 42.0, 40.0
   read_gbs="$(value read_gbs)"
@@ -168,14 +201,17 @@ keys() {
 }
 
 @test "load: a limit reason after the warm-up gives invalid, reason=limited (#134 case 11)" {
-  MOCK_SMI_ROWS="$FIX/smi/limit-post.rows" load_sh core 1 1
+  # hw_slowdown: since #150 the power cap of smi/limit-post.rows is no limit
+  smi_rows 0x0 0x8
+  load_sh core 1 1
   verdict 3 invalid
   [ "$(value reason)" = limited ]
   [ "$(value limited)" = 1 ]
 }
 
 @test "load: the same limit reason during the warm-up only still passes (#134 case 11)" {
-  MOCK_SMI_ROWS="$FIX/smi/limit-warm.rows" load_sh core 1 1
+  smi_rows 0x8 0x0
+  load_sh core 1 1
   verdict 0 pass
   [ "$(value limited)" = 0 ]
 }
@@ -393,18 +429,25 @@ keys() {
 }
 
 # Contract for #140 (N is the number in the ticket's Check list). A load that ended before
-# warm-up + load seconds is invalid, reason=short; all seven limit reasons count, in
+# warm-up + load seconds is invalid, reason=short; all seven limit reasons are read, in
 # whichever column the active one is. The load mocks end early through MOCK_BURN_RUN_MS and
 # MOCK_MEMTEST_RUN_MS. Cases 3, 5 and 7 and the Xid case of 1 pin what gpu/load.sh of #134
 # already does; the others need #140.
+# #150 changed two rules of it. The block has one key more, power_cap (cases 1, 2 and 3
+# count and name it). And case 4, "each of the seven limit reasons alone, Active in a
+# sample after the warm-up, gives invalid, reason=limited", is gone: three of the seven
+# (sw_power_cap, board_limit, reliability) are Active in every clean load on the real card
+# and void nothing any more. Which four still do, and what the other three do, is pinned
+# by #150 cases 1 to 4 and 6 at the end of this file.
 # Check 8 (existing cases stay green) holds one verdict that comes before reason=short: the
 # load of "ERROR_DEVICE_LOST in the output gives fail" ends by itself 2 s into mem 1 2, as a
 # tool that lost its device does, and that case stays fail.
 
 @test "#140 case 1: core: a complete OK output from a load that ended 1.5 s into core 1 3 gives invalid, reason=short, exit 3" {
+  skip "contract #150 pending"
   MOCK_BURN_RUN_MS=1500 load_sh core 1 3
   verdict 3 invalid
-  block_ok 8
+  block_ok 9
   [ "$(value reason)" = short ]
   # load.sh asked for the 4 s, and what the tool printed was complete and clean
   [ "$(tail -n 1 "$MOCK_STATE/gpu_burn.args")" = 4 ]
@@ -431,9 +474,10 @@ keys() {
 }
 
 @test "#140 case 2: mem: a read line after the warm-up and status 65 from a load that ended 1.7 s into mem 1 3 gives invalid, reason=short, exit 3" {
+  skip "contract #150 pending"
   MOCK_MEMTEST_RUN_MS=1700 load_sh mem 1 3 1
   verdict 3 invalid
-  block_ok 9
+  block_ok 10
   [ "$(value reason)" = short ]
   # it ended by itself, with the read line of 1.5 s printed
   [ ! -e "$MOCK_STATE/memtest_vulkan.signal" ]
@@ -447,38 +491,25 @@ keys() {
   [ ! -e "$MOCK_STATE/memtest_vulkan.signal" ]
 }
 
-@test "#140 case 3: the core and mem pass fixtures, run for their full time, still pass, with the key set of #134" {
+@test "#140 case 3: the core and mem pass fixtures, run for their full time, still pass, with the key set of #134 and power_cap (#150)" {
+  skip "contract #150 pending"
   load_sh core 1 1
   verdict 0 pass
   [ "$(value reason)" = ok ]
-  [ "$(keys)" = "core_mhz_max limited log mem_mhz_max pstate_min reason result xid " ]
+  [ "$(keys)" = "core_mhz_max limited log mem_mhz_max power_cap pstate_min reason result xid " ]
   rm -f "$MOCK_STATE"/*
   load_sh mem 1 1 1
   verdict 0 pass
   [ "$(value reason)" = ok ]
-  [ "$(keys)" = "core_mhz_max limited log mem_mhz_max pstate_min read_gbs reason result xid " ]
+  [ "$(keys)" = "core_mhz_max limited log mem_mhz_max power_cap pstate_min read_gbs reason result xid " ]
 }
 
-@test "#140 case 4: each of the seven limit reasons alone, Active in a sample after the warm-up, gives invalid, reason=limited" {
-  missed=""
-  for column in board_limit:0x200 reliability:0x400 sw_power_cap:0x4 hw_slowdown:0x8 \
-    sw_thermal_slowdown:0x20 hw_thermal_slowdown:0x40 hw_power_brake_slowdown:0x80; do
-    rm -f "$MOCK_STATE"/*
-    smi_rows 0x0 "${column#*:}"
-    load_sh core 1 1
-    if ! (verdict 3 invalid && [ "$(value reason)" = limited ] && [ "$(value limited)" = 1 ]); then
-      printf 'only %s Active: exit %s\n%s\n' "${column%:*}" "$status" "$output"
-      missed+=" ${column%:*}"
-    fi
-  done
-  [ -z "$missed" ] || {
-    echo "not counted as a limit:$missed"
-    return 1
-  }
-}
+# "#140 case 4" stood here: each of the seven limit reasons alone gives invalid,
+# reason=limited. Deleted for #150, which takes that rule back for three of the seven; the
+# four that are left, each alone, are #150 case 4.
 
 @test "#140 case 5: all seven limit reasons Active during the warm-up only: pass, limited=0" {
-  # 0x6ec: the seven bits of case 4
+  # 0x6ec: the bits of the seven limit reasons
   smi_rows 0x6ec 0x0
   load_sh core 1 1
   verdict 0 pass
@@ -582,4 +613,186 @@ keys() {
   ended="$(<"$(value log)/ended")"
   echo "ended at $ended ms"
   ((ended >= 2000))
+}
+
+# Contract for #150, cases 1 to 7 of its Check list. limited=1, and with it invalid,
+# reason=limited, is left to the four slowdown reasons; sw_power_cap, board_limit and
+# reliability change neither result nor reason, and sw_power_cap after the warm-up is
+# reported as power_cap=1, on the line after limited. Cases 1 and 2 replay what the real
+# card gave at stock clocks: samples and tool output of two kept logs of the pre-flight
+# (#121 comment 5953205480), in smi/recorded-*.rows, core/recorded.out, mem/recorded.out.
+
+@test "#150 case 1: core: the recorded real samples, sw_power_cap Active in every one, with the recorded clean gpu_burn output: result=pass, limited=0, power_cap=1, exit 0" {
+  skip "contract #150 pending"
+  MOCK_BURN_OUT="$FIX/core/recorded.out" MOCK_SMI_ROWS="$FIX/smi/recorded-core.rows" load_sh core 1 2
+  verdict 0 pass
+  block_ok 9
+  [ "$(value reason)" = ok ]
+  [ "$(value limited)" = 0 ]
+  [ "$(value power_cap)" = 1 ]
+  [ "$(value xid)" = 0 ]
+  [ "$(value pstate_min)" = 2 ]
+  [ "$(value core_mhz_max)" = 2205 ]
+  [ "$(value mem_mhz_max)" = 8751 ]
+  # what the run judged is the recording: every sample has sw_power_cap Active and no
+  # other reason, the first after the warm-up is the line of 30001 ms
+  log="$(value log)"
+  capped='P2, [0-9]+, 8751, 159\.[0-9]+, 59, Active(, Not Active){6}'
+  [ "$(grep -c '^[0-9]' "$log/samples.csv")" -ge 2 ]
+  [ "$(grep -c '^[0-9]' "$log/samples.csv")" -eq "$(grep -Ec "^[0-9]+, $capped\$" "$log/samples.csv")" ]
+  grep -Eq '^[0-9]+, P2, 2205, 8751, 159\.24, 59, Active(, Not Active){6}$' "$log/samples.csv"
+  grep -q -x $'\tGPU 0: OK' "$log/tool.out"
+  grep -q "100.0%  proc'd: 1672 (12086 Gflop/s)   errors: 0   temps: 63 C" "$log/tool.out"
+}
+
+@test "#150 case 2: mem: the recorded real samples, reliability Active in every one, with the recorded clean memtest_vulkan output: result=pass, limited=0, power_cap=0" {
+  skip "contract #150 pending"
+  MOCK_MEMTEST_OUT="$FIX/mem/recorded.out" MOCK_SMI_ROWS="$FIX/smi/recorded-mem.rows" load_sh mem 1 2 0
+  verdict 0 pass
+  block_ok 10
+  [ "$(value reason)" = ok ]
+  [ "$(value limited)" = 0 ]
+  [ "$(value power_cap)" = 0 ]
+  [ "$(value xid)" = 0 ]
+  [ "$(value pstate_min)" = 2 ]
+  [ "$(value core_mhz_max)" = 2730 ]
+  [ "$(value mem_mhz_max)" = 8751 ]
+  # the real run reported 250.75, the median of 249.7, 250.7, 250.8, 250.8
+  awk -v v="$(value read_gbs)" 'BEGIN { exit !(v >= 250.5 && v <= 250.8) }'
+  log="$(value log)"
+  flat='P2, 2730, 8751, 11[67]\.[0-9]+, 5[01](, Not Active){6}, Active'
+  [ "$(grep -c '^[0-9]' "$log/samples.csv")" -ge 2 ]
+  [ "$(grep -c '^[0-9]' "$log/samples.csv")" -eq "$(grep -Ec "^[0-9]+, $flat\$" "$log/samples.csv")" ]
+  [ "$(cat "$MOCK_STATE/memtest_vulkan.signal")" = INT ]
+}
+
+@test "#150 case 3: board_limit Active in the samples after the warm-up: pass, limited=0, power_cap=0; the three reasons that void nothing, all Active: pass, limited=0, power_cap=1" {
+  skip "contract #150 pending"
+  smi_rows 0x0 0x200
+  load_sh core 1 1
+  verdict 0 pass
+  [ "$(value reason)" = ok ]
+  [ "$(value limited)" = 0 ]
+  [ "$(value power_cap)" = 0 ]
+  rm -f "$MOCK_STATE"/*
+  # 0x604: sw_power_cap, board_limit and reliability
+  smi_rows 0x0 0x604
+  load_sh mem 1 1 1
+  verdict 0 pass
+  [ "$(value reason)" = ok ]
+  [ "$(value limited)" = 0 ]
+  [ "$(value power_cap)" = 1 ]
+}
+
+@test "#150 case 4: each of the four slowdown reasons alone, Active in a sample after the warm-up, gives invalid, reason=limited, limited=1, power_cap=0; Active during the warm-up only, it changes nothing" {
+  skip "contract #150 pending"
+  missed=""
+  for column in hw_slowdown:0x8 hw_thermal_slowdown:0x40 hw_power_brake_slowdown:0x80 \
+    sw_thermal_slowdown:0x20; do
+    rm -f "$MOCK_STATE"/*
+    smi_rows 0x0 "${column#*:}"
+    load_sh core 1 1
+    if ! (verdict 3 invalid && [ "$(value reason)" = limited ] && [ "$(value limited)" = 1 ] &&
+      [ "$(value power_cap)" = 0 ]); then
+      printf 'only %s Active after the warm-up: exit %s\n%s\n' "${column%:*}" "$status" "$output"
+      missed+=" ${column%:*}"
+    fi
+    rm -f "$MOCK_STATE"/*
+    smi_rows "${column#*:}" 0x0
+    load_sh core 1 1
+    if ! (verdict 0 pass && [ "$(value reason)" = ok ] && [ "$(value limited)" = 0 ] &&
+      [ "$(value power_cap)" = 0 ]); then
+      printf 'only %s Active in the warm-up: exit %s\n%s\n' "${column%:*}" "$status" "$output"
+      missed+=" ${column%:*}(warm-up)"
+    fi
+  done
+  [ -z "$missed" ] || {
+    echo "not as the contract says:$missed"
+    return 1
+  }
+}
+
+@test "#150 case 5: sw_power_cap Active during the warm-up only: pass, limited=0, power_cap=0" {
+  skip "contract #150 pending"
+  MOCK_SMI_ROWS="$FIX/smi/limit-warm.rows" load_sh core 1 1
+  verdict 0 pass
+  [ "$(value limited)" = 0 ]
+  [ "$(value power_cap)" = 0 ]
+}
+
+@test "#150 case 6: a slowdown reason and sw_power_cap in one run, in one sample or in two: invalid, reason=limited, limited=1, power_cap=1" {
+  skip "contract #150 pending"
+  # 0xc: hw_slowdown and sw_power_cap
+  smi_rows 0x0 0xc
+  load_sh core 1 1
+  verdict 3 invalid
+  [ "$(value reason)" = limited ]
+  [ "$(value limited)" = 1 ]
+  [ "$(value power_cap)" = 1 ]
+  rm -f "$MOCK_STATE"/*
+  # the power cap in the first sample after the warm-up, sw_thermal_slowdown from the second
+  smi_scenario 'warm P0 2520 8001 131.40 52 0x0' 'post P0 2400 8001 160.02 71 0x4' \
+    'post P0 2400 8001 131.40 71 0x20'
+  load_sh core 1 2
+  verdict 3 invalid
+  [ "$(value reason)" = limited ]
+  [ "$(value limited)" = 1 ]
+  [ "$(value power_cap)" = 1 ]
+}
+
+@test "#150 case 7: power_cap= is the line after limited= for both kinds, and nothing else of the block of #134 moved" {
+  skip "contract #150 pending"
+  load_sh core 1 1
+  verdict 0 pass
+  [ "$(after_limited)" = power_cap=0 ]
+  [ "$(key_order)" = "result reason pstate_min core_mhz_max mem_mhz_max limited power_cap xid log " ]
+  rm -f "$MOCK_STATE"/*
+  load_sh mem 1 1 1
+  verdict 0 pass
+  [ "$(after_limited)" = power_cap=0 ]
+  [ "$(key_order)" = "result reason pstate_min core_mhz_max mem_mhz_max limited power_cap xid read_gbs log " ]
+  rm -f "$MOCK_STATE"/*
+  # a load at the power limit; smi/limit-post.rows has sw_power_cap after the warm-up
+  MOCK_SMI_ROWS="$FIX/smi/limit-post.rows" load_sh core 1 1
+  verdict 0 pass
+  [ "$(value limited)" = 0 ]
+  [ "$(after_limited)" = power_cap=1 ]
+  rm -f "$MOCK_STATE"/*
+  MOCK_SMI_ROWS="$FIX/smi/limit-post.rows" load_sh mem 1 1 1
+  verdict 0 pass
+  [ "$(value limited)" = 0 ]
+  [ "$(after_limited)" = power_cap=1 ]
+  rm -f "$MOCK_STATE"/*
+  # the same place in a block that is not a pass
+  smi_rows 0x0 0x44
+  load_sh core 1 1
+  verdict 3 invalid
+  [ "$(value limited)" = 1 ]
+  [ "$(after_limited)" = power_cap=1 ]
+}
+
+@test "#150 case 7: a run with no sample after the warm-up prints limited= and power_cap= empty, power_cap= on the line after limited=" {
+  skip "contract #150 pending"
+  # the load ended in the warm-up (the nosample case of #140)
+  MOCK_BURN_RUN_MS=1500 load_sh core 2 1
+  verdict 3 invalid
+  [ "$(value reason)" = nosample ]
+  block_ok 9
+  [ "$(grep -c '^limited=$' <<<"$output")" -eq 1 ]
+  [ "$(after_limited)" = power_cap= ]
+  rm -f "$MOCK_STATE"/*
+  # the same for the memory kind
+  MOCK_MEMTEST_RUN_MS=1500 load_sh mem 2 1 1
+  verdict 3 invalid
+  block_ok 10
+  [ "$(grep -c '^limited=$' <<<"$output")" -eq 1 ]
+  [ "$(after_limited)" = power_cap= ]
+  rm -f "$MOCK_STATE"/*
+  # no load was started at all
+  mv "$BUILD" "$BATS_TEST_TMPDIR/build-elsewhere"
+  load_sh core 1 1
+  verdict 3 invalid
+  block_ok 9
+  [ "$(grep -c '^limited=$' <<<"$output")" -eq 1 ]
+  [ "$(after_limited)" = power_cap= ]
 }

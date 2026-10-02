@@ -1,0 +1,20 @@
+# memtest_vulkan output, timed: <ms since start>|<printf %b text>.
+# Recorded on the real card: tool.out of the kept log
+# ~/.cache/pc-oc/gpu-load/20261002T130352Z-mem-69260
+# (sha256 63ca4f25738003cb5c6c3dd18db035aae059891032c5895b9a15d6d096722f61),
+# the memtest_vulkan run "mem 30 120 0" of the pre-flight in #121 comment 5953205480
+# (device 0). Every line of it, byte for byte and in its order; only the
+# timing is squeezed: the real lines came 0.6, 0.6, 1.6, 6.6, 36.6, 66.7, 96.7 and
+# 126.7 s after the start, the last four after the 30 s warm-up. Here the last four come
+# after a 1 s warm-up, so their read ("checked") speeds 249.7, 250.7, 250.8 and 250.8
+# have the median the real run reported, 250.75. A clean run, ended by SIGINT with
+# status 65. gpu/load.sh of #140 called it invalid, reason=limited, for its samples
+# (smi/recorded-mem.rows).
+100|Standard 5-minute test of 1: Bus=0x01:00 DevId=0x2803   8GB NVIDIA GeForce RTX 4060 Ti\n
+100|      1 iteration. Passed  0.0377 seconds  written:    3.1GB 244.6GB/sec        checked:    6.2GB 251.0GB/sec\n
+250|     28 iteration. Passed  1.0165 seconds  written:   84.4GB 245.7GB/sec        checked:  168.8GB 250.7GB/sec\n
+400|    161 iteration. Passed  5.0127 seconds  written:  415.6GB 245.2GB/sec        checked:  831.2GB 250.5GB/sec\n
+1400|    955 iteration. Passed 30.0148 seconds  written: 2481.2GB 244.8GB/sec        checked: 4962.5GB 249.7GB/sec\n
+1800|   1752 iteration. Passed 30.0134 seconds  written: 2490.6GB 245.6GB/sec        checked: 4981.2GB 250.7GB/sec\n
+2200|   2550 iteration. Passed 30.0308 seconds  written: 2493.8GB 245.7GB/sec        checked: 4987.5GB 250.8GB/sec\n
+2600|   3348 iteration. Passed 30.0374 seconds  written: 2493.8GB 245.7GB/sec        checked: 4987.5GB 250.8GB/sec\n

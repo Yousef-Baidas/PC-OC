@@ -1,6 +1,6 @@
 # shellcheck shell=bash disable=SC2034,SC2154 # status, output and stderr are set by bats
 # run; the constants below are read by tests/gpu/search.bats
-# Shared helpers for the #135 contract: tests/gpu/search.bats.
+# Shared helpers for the #135 and #150 contracts: tests/gpu/search.bats.
 
 # The calling user of the fixture passwd, and the two boot ids guard.sh can bind.
 CALLER_UID=4242
@@ -12,6 +12,18 @@ BOOT_B=0b0b0b0b-0000-4000-8000-00000000000b
 # The two messages the ticket gives word for word besides "already running".
 MSG_OFFSETS="pc-oc: gpu: search: offsets are set by something else: run sudo pc-oc revert gpu"
 MSG_POWER="pc-oc: gpu: search: apply the power limit first: sudo pc-oc apply gpu"
+
+# The one switch of the #150 contract. 1: the mock load prints the power_cap line of #150
+# in every block, on the line after limited. 0 keeps the block of #134, the only one
+# gpu/search.sh reads until #150 is built; the cases of #150 turn it on for themselves
+# (power_cap_blocks). The worker of #150 sets this default to 1 and changes nothing else
+# in these fixtures.
+BLOCK_POWER_CAP=0
+
+# The line of #150 that a search ending with a result prints when a core step or core soak
+# of it was not checked against its clock. The ticket gives it from "gpu:" on; the other
+# messages of the script start "pc-oc: ", so line_at takes it with or without that.
+MSG_UNCHECKED="gpu: search: the core load ran at the power limit, so the core clock was not checked against the offset"
 
 # common_setup: the fake tree (lib/, gpu/pl.sh, gpu/values and the script under test from
 # the repo; the tiny gpu/search.values, the mock gpu/load.sh and a gpu/nvml.py that is never
@@ -56,6 +68,23 @@ fresh() {
   pl_w="$(sed -n 's/^pl_w=\([0-9][0-9]*\).*/\1/p' "$REPO/gpu/values")"
   printf '%s.00\n' "$pl_w" >"$MOCK/smi.limit"
   cp "$FIX/search.values" "$REPO/gpu/search.values"
+  # the mock load runs under env -i: a file is all of the switch that reaches it
+  ((BLOCK_POWER_CAP == 0)) || : >"$MOCK/block.power_cap"
+}
+
+# power_cap_blocks: a fresh state in which every block of the mock load has the power_cap
+# line of #150 (power_cap=0 unless the plan says otherwise), whatever the default of
+# BLOCK_POWER_CAP is. For the rest of the test, so a later fresh keeps it.
+power_cap_blocks() {
+  BLOCK_POWER_CAP=1
+  fresh
+}
+
+# old_baseline: the state directory with the baseline file a search before #150 wrote:
+# the three lines of #135, no core_power_cap and no mem_core_mhz_max
+old_baseline() {
+  mkdir -p "$STATE"
+  printf '%s\n' core_mhz_max=2535 mem_mhz_max=9000 read_gbs=400.0 >"$STATE/baseline"
 }
 
 # next_start: put the records of the starts so far aside, so the helpers below see only
@@ -108,6 +137,26 @@ start_as() {
 # "sudo pc-oc search gpu" leaves it
 search() {
   start_as root "SUDO_UID=$CALLER_UID" "SUDO_GID=$CALLER_GID" "$@"
+}
+
+# search_both: the same start with stderr in stdout, so output holds the lines of both in
+# the order they were written
+search_both() {
+  run in_ns root /usr/bin/env -i PATH=/usr/bin "SUDO_UID=$CALLER_UID" "SUDO_GID=$CALLER_GID" \
+    /usr/bin/bash "$REPO/gpu/search.sh"
+  stderr=""
+}
+
+# line_at <text>: the number of the output line of the last run that is this text, alone
+# or behind "pc-oc: "; fails unless exactly one line is
+line_at() {
+  local at
+  at="$(grep -n -Fx -e "$1" -e "pc-oc: $1" <<<"$output" | cut -d: -f1)"
+  [[ "$at" =~ ^[0-9]+$ ]] || {
+    printf 'not exactly one line "%s" (lines: %s):\n%s\n' "$1" "${at:-none}" "$output" >&2
+    return 1
+  }
+  printf '%s\n' "$at"
 }
 
 # plan <line>...: lines for the mock load's plan (fixtures/search/load.sh)
@@ -334,10 +383,15 @@ no_result() {
   }
 }
 
+# The one field #150 lets a step's line end with, behind reason=: clock=unchecked on a
+# core step or core soak, core_clock_delta=<n> on a memory load at a core offset.
+FIELD_150='( clock=unchecked| core_clock_delta=-?[0-9]+)?'
+
 # logged <core> <mem> <result regex> [reason regex]: the log has a line for that step,
-# in the ticket's format "<utc> phase=... core=... mem=... result=... reason=..."
+# in the ticket's format "<utc> phase=... core=... mem=... result=... reason=...", with
+# or without the field of #150 at its end (step_line is the helper that pins that field)
 logged() {
-  grep -Eq "^[^ ]+ phase=[^ ]+ core=$1 mem=$2 result=($3) reason=(${4:-[^ ]+})\$" "$STATE/log" || {
+  grep -Eq "^[^ ]+ phase=[^ ]+ core=$1 mem=$2 result=($3) reason=(${4:-[^ ]+})$FIELD_150\$" "$STATE/log" || {
     printf 'no log line core=%s mem=%s result=(%s) reason=(%s):\n%s\n' \
       "$1" "$2" "$3" "${4:-any}" "$(cat "$STATE/log" 2>&1)" >&2
     return 1
@@ -352,10 +406,23 @@ not_passed() {
   fi
 }
 
+# step_line <phase> <core> <mem> <rest>: the line of that step is "phase=<phase>
+# core=<core> mem=<mem> <rest>" to the last character, once on stdout of the last run and
+# once, behind its time, in the log
+step_line() {
+  local line="phase=$1 core=$2 mem=$3 $4"
+  if [[ "$(grep -c -Fx -- "$line" <<<"$output")" -ne 1 ]] ||
+    [[ "$(cut -d' ' -f2- "$STATE/log" | grep -c -Fx -- "$line")" -ne 1 ]]; then
+    printf 'not once on stdout and once in the log: %s\nstdout:\n%s\nlog:\n%s\n' \
+      "$line" "$output" "$(cat "$STATE/log" 2>&1)" >&2
+    return 1
+  fi
+}
+
 # log_ok: every line of the log is in the ticket's format
 log_ok() {
   local bad
-  local format='^[^ ]+ phase=[^ ]+ core=[0-9]+ mem=[0-9]+ result=[a-z]+ reason=[^ ]+$'
+  local format="^[^ ]+ phase=[^ ]+ core=[0-9]+ mem=[0-9]+ result=[a-z]+ reason=[^ ]+$FIELD_150\$"
   bad="$(grep -Ev "$format" "$STATE/log" || true)"
   [[ -s "$STATE/log" && -z "$bad" ]] || {
     printf 'log lines not in the format:\n%s\n' "$bad" >&2

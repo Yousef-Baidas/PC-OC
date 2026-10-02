@@ -23,6 +23,11 @@
 # and the seven of #140. The two that #140 adds are, in `nvidia-smi --help-query-gpu` of
 # driver 615.71, "clocks_event_reasons.board_limit" and "clocks_event_reasons.reliability"
 # (each also under clocks_throttle_reasons.); that help has no display_clock_setting field.
+# Recorded rows (contract #150): "<warm|post> csv <a line of a real samples.csv>". The
+# mock prints the line as the real nvidia-smi printed it, without the elapsed ms that
+# gpu/load.sh put in front. Such a scenario holds the "# elapsed ms, <fields>" line of
+# that samples.csv, and the row answers only a query for exactly those fields with
+# csv,noheader,nounits: a recorded line is no answer to any other question.
 set -u
 export LC_ALL=C
 : "${MOCK_STATE:?}"
@@ -58,12 +63,13 @@ if [[ -r "$MOCK_STATE/start" ]]; then
   start="$(<"$MOCK_STATE/start")"
   elapsed_ms=$(((${EPOCHREALTIME/./} - ${start/./}) / 1000))
 fi
-warm=() post=() late=()
+warm=() post=() late=() recorded=""
 while read -r phase rest; do
   case "$phase" in
     warm) warm+=("$rest") ;;
     post) post+=("$rest") ;;
     late) late+=("$rest") ;;
+    "#") [[ "$rest" != "elapsed ms, "* ]] || recorded="${rest#elapsed ms, }" ;;
   esac
 done <"$MOCK_SMI_ROWS"
 end_ms=""
@@ -83,6 +89,15 @@ fi
 if [[ "$row" == fail ]]; then
   echo "Unable to determine the device handle for GPU0000:01:00.0: Unknown Error"
   exit 15
+fi
+if [[ "$row" == "csv "* ]]; then
+  [[ -n "$recorded" && "$fields" == "$recorded" && -z "$header" && -z "$units" ]] || {
+    echo "mock nvidia-smi: a csv row answers only --query-gpu=$recorded --format=csv,noheader,nounits" >&2
+    exit 2
+  }
+  row="${row#csv }"
+  printf '%s\n' "${row#*, }"
+  exit 0
 fi
 read -r pstate core mem power temp reasons <<<"$row"
 [[ "$pstate" != unknown ]] || reasons=0

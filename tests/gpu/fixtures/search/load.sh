@@ -6,10 +6,17 @@
 # the clock move by it: core_mhz_max = 2535 + core offset, mem_mhz_max = 9000 + memory
 # offset, read_gbs = 400.0. The first line of the plan that matches the call changes that.
 # stderr always carries a line outside the block grammar; root must read stdout only.
+# With the file block.power_cap in the state directory (the helper's BLOCK_POWER_CAP) the
+# block is the one of #150: power_cap=0 on the line after limited. The plan then gives
+# every block that contract needs: power_cap=1 (a load at the power limit; on core@0/0 a
+# capped baseline), power_cap=2, drop=power_cap, dup=power_cap=0, and core_mhz_max=<n> for
+# a core clock under the offset or, on a mem line, a higher or lower one under the
+# memory load. Without the file the key is not printed, whatever the plan says of it.
 # State directory (fixed: the search starts this script under env -i):
 # /var/lib/pc-oc-test-mock
 #   load.plan    lines "<kind>@<core>/<mem> <action>...", a pattern, so * stands for any
 #                offset; a line with times=<n> applies to its first n matches only
+#   block.power_cap  there: every block has the power_cap line (contract #150)
 #   load.check   "<exit code> <stdout|stderr>" for the check verb (default: exit 0)
 #   load.calls   "<arguments> @<core>/<mem> <result>" per call, check included
 #   load.detail  "pid=<pid> lock=<held|free|nodir> pending=<content, or ABSENT>" per call
@@ -90,10 +97,12 @@ esac
 declare -A block=(
   [result]=pass [reason]=ok [pstate_min]=0
   [core_mhz_max]=$((2535 + core)) [mem_mhz_max]=$((9000 + mem))
-  [limited]=0 [xid]=0 [read_gbs]=400.0
+  [limited]=0 [power_cap]=0 [xid]=0 [read_gbs]=400.0
   [log]=/home/pc-oc-caller/.cache/pc-oc/gpu-load/mock
 )
-keys=(result reason pstate_min core_mhz_max mem_mhz_max limited xid)
+keys=(result reason pstate_min core_mhz_max mem_mhz_max limited)
+[[ ! -e "$s/block.power_cap" ]] || keys+=(power_cap)
+keys+=(xid)
 [[ "$kind" != mem ]] || keys+=(read_gbs)
 keys+=(log)
 extra=()

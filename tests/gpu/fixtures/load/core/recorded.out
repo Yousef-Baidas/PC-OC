@@ -1,0 +1,48 @@
+# gpu_burn output, timed: <ms since start>|<printf %b text>; "end-<ms>" and "end" count
+# from the run time the mock was given, which has to be 3 s or more for this file.
+# Recorded on the real card: tool.out of the kept log
+# ~/.cache/pc-oc/gpu-load/20261002T124850Z-core-2355328
+# (sha256 59fdcb2e769bfceb2f9d09e6afbf326df371ee6b698dfb11e466e6eadf19a484),
+# the gpu_burn run "core 30 120" of the pre-flight in #121 comment 5953205480 (command
+# ./gpu_burn -m 80% -stts 5 150). The text is the tool's, byte for byte and in its order,
+# with three changes: the UUID of the card is zeroed; of the progress updates between two
+# summaries only the first and the last are kept (20 of 748); and the 150 s are squeezed
+# into the run time of the mock. So "Burning for 150 seconds." stands as it was printed,
+# and the lines of the burn process ("Initialized device" to "done") come at the end,
+# where the real run put them. A clean run: every update has errors: 0, the summary says
+# OK. gpu/load.sh of #140 called it invalid, reason=limited, for its samples
+# (smi/recorded-core.rows).
+50|GPU 0: NVIDIA GeForce RTX 4060 Ti (UUID: GPU-00000000-0000-0000-0000-000000000000)\n
+100|Using compare file: compare.fatbin\nBurning for 150 seconds.\n
+250|\r1.3%  proc'd: 19 (10202 Gflop/s)   errors: 0   temps: 31 C 
+350|\r10.7%  proc'd: 171 (12250 Gflop/s)   errors: 0   temps: 56 C 
+350|\n\tSummary at:   Fri Oct  2 15:49:07 +03 2026\n\n
+450|\r11.3%  proc'd: 190 (12258 Gflop/s)   errors: 0   temps: 56 C 
+550|\r22.0%  proc'd: 361 (12209 Gflop/s)   errors: 0   temps: 59 C 
+550|\n\tSummary at:   Fri Oct  2 15:49:24 +03 2026\n\n
+650|\r23.3%  proc'd: 380 (12185 Gflop/s)   errors: 0   temps: 59 C 
+750|\r33.3%  proc'd: 551 (12152 Gflop/s)   errors: 0   temps: 60 C 
+750|\n\tSummary at:   Fri Oct  2 15:49:41 +03 2026\n\n
+850|\r33.3%  proc'd: 551 (12152 Gflop/s)   errors: 0   temps: 60 C 
+950|\r44.7%  proc'd: 741 (12121 Gflop/s)   errors: 0   temps: 61 C 
+950|\n\tSummary at:   Fri Oct  2 15:49:58 +03 2026\n\n
+1050|\r46.0%  proc'd: 760 (12122 Gflop/s)   errors: 0   temps: 61 C 
+1150|\r55.3%  proc'd: 912 (12113 Gflop/s)   errors: 0   temps: 62 C 
+1150|\n\tSummary at:   Fri Oct  2 15:50:14 +03 2026\n\n
+1250|\r56.0%  proc'd: 931 (12130 Gflop/s)   errors: 0   temps: 62 C 
+1350|\r66.7%  proc'd: 1102 (12097 Gflop/s)   errors: 0   temps: 62 C 
+1350|\n\tSummary at:   Fri Oct  2 15:50:31 +03 2026\n\n
+1450|\r66.7%  proc'd: 1102 (12097 Gflop/s)   errors: 0   temps: 62 C 
+1550|\r77.3%  proc'd: 1273 (12101 Gflop/s)   errors: 0   temps: 63 C 
+1550|\n\tSummary at:   Fri Oct  2 15:50:47 +03 2026\n\n
+1650|\r78.0%  proc'd: 1292 (12056 Gflop/s)   errors: 0   temps: 63 C 
+1750|\r87.3%  proc'd: 1444 (12096 Gflop/s)   errors: 0   temps: 63 C 
+1750|\n\tSummary at:   Fri Oct  2 15:51:02 +03 2026\n\n
+1850|\r88.7%  proc'd: 1463 (12081 Gflop/s)   errors: 0   temps: 63 C 
+1950|\r98.0%  proc'd: 1615 (12072 Gflop/s)   errors: 0   temps: 63 C 
+1950|\n\tSummary at:   Fri Oct  2 15:51:18 +03 2026\n\n
+end-300|\r98.7%  proc'd: 1634 (12108 Gflop/s)   errors: 0   temps: 63 C 
+end-150|\r100.0%  proc'd: 1672 (12086 Gflop/s)   errors: 0   temps: 63 C 
+end-100|\nKilling processes with SIGTERM (soft kill)\n
+end-50|Using compare file: compare.fatbin\nBurning for 150 seconds.\nInitialized device 0 with 7880 MB of memory (6777 MB available, using 5421 MB of it), using FLOATS\nResults are 268435456 bytes each, thus performing 19 iterations\nFreed memory for dev 0\nUninitted cublas\ndone\n
+end|\nTested 1 GPUs:\n\tGPU 0: OK\n

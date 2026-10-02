@@ -1,0 +1,17 @@
+# Recorded on the real card (RTX 4060 Ti, driver 615.71.09, stock clocks, 160 W limit):
+# seven lines of samples.csv of the kept log
+# ~/.cache/pc-oc/gpu-load/20261002T124850Z-core-2355328
+# (sha256 0538a77f5dcfc86b778f0b15d973aefadc98956e522d9b6a4bd8d032c5a97c67),
+# the gpu_burn run "core 30 120" of the pre-flight in #121 comment 5953205480. Verbatim:
+# its first line, the last sample of the 30 s warm-up (the warm row) and the first five
+# samples after it (the post rows). The mock prints a csv row without the elapsed ms.
+# sw_power_cap is Active in each of them, as in 148 of the 150 samples of that run and
+# in all 120 after its warm-up; no other reason is. gpu/load.sh of #140 called that run
+# invalid, reason=limited; #150 case 1 wants it passed, with power_cap=1.
+# elapsed ms, pstate,clocks.current.graphics,clocks.current.memory,power.draw,temperature.gpu,clocks_event_reasons.sw_power_cap,clocks_event_reasons.hw_slowdown,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_power_brake_slowdown,clocks_event_reasons.sw_thermal_slowdown,clocks_event_reasons.board_limit,clocks_event_reasons.reliability
+warm csv 29001, P2, 2175, 8751, 159.91, 59, Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active
+post csv 30001, P2, 2205, 8751, 159.24, 59, Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active
+post csv 31001, P2, 2205, 8751, 159.79, 59, Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active
+post csv 32001, P2, 2190, 8751, 159.55, 59, Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active
+post csv 33001, P2, 2205, 8751, 159.63, 59, Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active
+post csv 34000, P2, 2190, 8751, 159.79, 59, Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active
