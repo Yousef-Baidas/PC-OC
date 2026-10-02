@@ -19,6 +19,15 @@ set -euo pipefail
 #   block     stdout of the last load; timer: a fifo nobody writes to, read -t on it waits
 export PATH=/usr/bin LC_ALL=C
 umask 022
+# Whoever reads stdout or stderr may have left (| head, a pager that was quit, tee after
+# Ctrl+C). SIGPIPE is ignored, so a print into such a pipe fails and does not kill the
+# search above its zero. The one rule for a print that fails: it sets unheard and decides
+# nothing where it happens. The verdict of a step, its log line, the state files, the zero
+# and the exit status of that way out are what they are with a reader. A search that has
+# lost its reader then starts no further load and never says 0: stop_unheard ends it where
+# no step is open. die (lib/common.sh) prints unguarded, before any step: there set -e
+# ends the start with the exit 1 die gives.
+trap '' PIPE
 here="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=../lib/common.sh
 source "$here/../lib/common.sh"
@@ -101,7 +110,7 @@ caller=(/usr/bin/setpriv --reuid="$SUDO_UID" --regid="$SUDO_GID" --init-groups
 
 state="$(pc_oc_state)/gpu/search"
 
-armed="" hold="" signalled="" load_pid="" timer_pid="" load_rc=0
+armed="" hold="" signalled="" unheard="" load_pid="" timer_pid="" load_rc=0
 step="" step_logged="" verdict="" reason=""
 base_core="" base_mem="" base_gbs=""
 declare -A p=() b=()
@@ -112,13 +121,20 @@ progress_keys=(core_last core_stored mem_last mem_stored soak_core soak_mem core
 # from here on, so on_exit runs once and to its end.
 stop() {
   trap '' INT TERM HUP
-  printf 'pc-oc: gpu: search: %s\n' "$1" >&2
+  printf 'pc-oc: gpu: search: %s\n' "$1" >&2 || unheard=1
   exit 1
+}
+
+# stop_unheard: a print has failed, so nobody reads this search any more. Called where no
+# step is open: it ends there as on a signal, and the next start goes on from that point.
+stop_unheard() {
+  [[ -z "$unheard" ]] ||
+    stop "a line could not be printed (stdout or stderr is closed): the search ends here. $again"
 }
 
 # shout: nvml.py zero failed, so an offset of this search may still be set
 shout() {
-  printf 'pc-oc: gpu: search: NVML.PY ZERO FAILED: THE CLOCK OFFSETS MAY STILL BE SET. Run sudo reboot to clear them.\n' >&2
+  printf 'pc-oc: gpu: search: NVML.PY ZERO FAILED: THE CLOCK OFFSETS MAY STILL BE SET. Run sudo reboot to clear them.\n' >&2 || unheard=1
 }
 
 # put <name> <line>...: write a state file whole or not at all, and onto the disk: a
@@ -134,7 +150,7 @@ put() {
 
 # log_step <result> <reason>: one line of the log for the step at hand, and the same on stdout
 log_step() {
-  printf '%s result=%s reason=%s\n' "$step" "$1" "$2"
+  printf '%s result=%s reason=%s\n' "$step" "$1" "$2" || unheard=1
   printf '%s %s result=%s reason=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$step" "$1" "$2" >>"$state/log"
   step_logged=1
 }
@@ -377,13 +393,14 @@ run_load() {
 # gpu/load.sh as the calling user; its stdout goes to $state/block, its exit status to
 # load_rc. It is a job of this shell itself, in its own session, so the pid waited for is
 # the load and its session is all it started. One that is not back after the cap
-# ends the search: on_exit ends it.
+# ends the search: on_exit ends it. The load gets SIGPIPE at its default action back: only
+# a subshell of this shell can undo the ignore this shell set, a bash started anew cannot.
 run_capped() {
   local cap="$1" what="$2" who=""
   shift 2
   rm -f -- "$state/block"
   hold=1
-  /usr/bin/setsid "${caller[@]}" "$@" >"$state/block" &
+  (trap - PIPE && exec /usr/bin/setsid "${caller[@]}" "$@") >"$state/block" &
   load_pid=$!
   { read -rt "$cap" _ <>"$state/timer" || true; } >/dev/null 2>&1 9>&- &
   timer_pid=$!
@@ -409,6 +426,7 @@ run_capped() {
 run_step() {
   local phase="$1" kind="$2" core="$3" mem="$4" seconds="$5" mhz="$3"
   [[ "$kind" == core ]] || mhz="$mem"
+  stop_unheard
   step="phase=$phase core=$core mem=$mem" step_logged=""
   put pending "$step boot_id=$boot_id"
   # a set that fails or is killed may have written some performance states: zero follows
@@ -443,6 +461,7 @@ close_step() {
 # these are the facts the steps stand on (#121).
 baseline_load() {
   local kind="$1" hint=""
+  stop_unheard
   step="phase=baseline-$kind core=0 mem=0" step_logged=""
   run_load "$kind" "${v[${kind}_load_s]}"
   judge baseline "$kind" 0
@@ -499,8 +518,8 @@ soak() {
 
 # report: the result file on stdout, and what to do with it
 report() {
-  cat -- "$state/result"
-  printf 'pc-oc: gpu: search: finished. These offsets are not applied yet: gpu/offsets.md says how. The log is %s\n' "$state/log"
+  cat -- "$state/result" || unheard=1
+  printf 'pc-oc: gpu: search: finished. These offsets are not applied yet: gpu/offsets.md says how. The log is %s\n' "$state/log" || unheard=1
 }
 
 [[ -p "$state/timer" ]] || mkfifo -- "$state/timer" || stop "cannot create $state/timer"
@@ -548,23 +567,25 @@ if [[ -e "$state/pending" ]]; then
     stop "the offsets of the step that crashed were still set after a reboot, so a reboot does not clear them on this card. They are 0 now. Report this before you run sudo pc-oc search gpu again"
   # the fourth fact of #121, measured only here: the search died with offsets set
   [[ "$crashed_boot" == "$boot_id" || -z "$died" ]] ||
-    printf 'pc-oc: gpu: search: measured: the reboot cleared the offsets of the step that crashed\n'
+    printf 'pc-oc: gpu: search: measured: the reboot cleared the offsets of the step that crashed\n' || unheard=1
 else
   read_offsets || stop "nvml.py get failed, or printed something else than its lines"
   [[ -z "$any_offset" ]] || stop "offsets are set by something else: run sudo pc-oc revert gpu"
 fi
 
+stop_unheard
 (pl_verify "$pl_w") 2>/dev/null || stop "apply the power limit first: sudo pc-oc apply gpu"
 run_capped "${v[load_grace_s]}" "gpu/load.sh check" check
 # what it says is for the human, whichever stream it chose
-head -c 4096 -- "$state/block" >&2
+head -c 4096 -- "$state/block" >&2 || unheard=1
 ((load_rc == 0)) || stop "gpu/load.sh check failed: do what its line above says, then run sudo pc-oc search gpu again"
 
 # from here on every way out runs nvml.py zero
 armed=1
 if [[ -e "$state/result" ]]; then
   report
-  printf 'pc-oc: gpu: search: nothing was run: remove %s to search again\n' "$state"
+  printf 'pc-oc: gpu: search: nothing was run: remove %s to search again\n' "$state" || unheard=1
+  stop_unheard
   exit 0
 fi
 
@@ -599,3 +620,4 @@ put result "core_offset_mhz=${p[soak_core]}" "mem_offset_mhz=${p[soak_mem]}" \
   "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 sync -- "$state/log" || stop "cannot sync $state/log"
 report
+stop_unheard

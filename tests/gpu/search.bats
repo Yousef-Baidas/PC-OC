@@ -1402,3 +1402,200 @@ EOF
   search_ended "core 2 3 @120/0 pass" 120 0
   logged 120 0 invalid block
 }
+
+# The cases below: stdout, or stdout and stderr, of the search is a pipe whose reader
+# leaves (| head, a pager that was quit, tee after Ctrl+C). A print nobody takes ends
+# nothing above the zero, changes no verdict and keeps no line from the log; the search
+# then ends where no step is open, exit 1.
+
+# piped <reader...>: a start as search makes it, its stdout into the reader. SIGPIPE has
+# its default action when the search starts, whatever this test run was started with.
+# Under run, status is the exit status of the search and output what the reader printed.
+piped() {
+  in_ns root /usr/bin/env --default-signal=PIPE -i PATH=/usr/bin "SUDO_UID=$CALLER_UID" \
+    "SUDO_GID=$CALLER_GID" /usr/bin/bash "$REPO/gpu/search.sh" | "$@"
+  return "${PIPESTATUS[0]}"
+}
+
+# piped_both <reader...>: the same with stderr in that pipe as well, as 2>&1 | reader
+piped_both() {
+  in_ns root /usr/bin/env --default-signal=PIPE -i PATH=/usr/bin "SUDO_UID=$CALLER_UID" \
+    "SUDO_GID=$CALLER_GID" /usr/bin/bash "$REPO/gpu/search.sh" 2>&1 | "$@"
+  return "${PIPESTATUS[0]}"
+}
+
+# piped_err <reader...>: stderr alone in the pipe, stdout in the file stdout of the
+# test's temporary directory
+piped_err() {
+  in_ns root /usr/bin/env --default-signal=PIPE -i PATH=/usr/bin "SUDO_UID=$CALLER_UID" \
+    "SUDO_GID=$CALLER_GID" /usr/bin/bash "$REPO/gpu/search.sh" 2>&1 >"$BATS_TEST_TMPDIR/stdout" | "$@"
+  return "${PIPESTATUS[0]}"
+}
+
+@test "search: own: stdout into a reader that has left, TERM during a load: the step is logged, zero ran, exit 1" {
+  # head leaves after the lines of the two baseline loads and of the core step at 90
+  plan 'core@120/0 signal=TERM hang=30'
+  run --separate-stderr piped head -n 3
+  ends_at_zero
+  status_is 1
+  [ "$(<"$MOCK/signal.sent")" = TERM ]
+  logged 120 0 invalid signal
+  gone_at_zero
+  load_gone
+  [ -e "$STATE/pending" ]
+  no_result
+  lock_free
+  # with a reader that stays it ends the same way, and the reader gets the step's line
+  fresh
+  plan 'core@120/0 signal=TERM hang=30'
+  run --separate-stderr piped cat
+  ends_at_zero
+  status_is 1
+  logged 120 0 invalid signal
+  grep -Fxq 'phase=core core=120 mem=0 result=invalid reason=signal' <<<"$output"
+  said 'got a signal'
+}
+
+@test "search: own: stdout into a reader that has left, no signal: the step that ran for nobody keeps its verdict, then the search ends: zero ran, exit 1, and the next start goes on" {
+  run --separate-stderr piped head -n 3
+  ends_at_zero
+  status_is 1
+  [ "$(wc -l <<<"$output")" -eq 3 ]
+  # the step at 120 passed, its line could not be printed: in the log and counted, and
+  # no further step was started
+  [ "$(core_steps)" = "90 120" ]
+  logged 120 0 pass
+  [ ! -e "$STATE/pending" ]
+  said 'could not be printed'
+  no_result
+  next_start
+  search
+  status_is 0
+  [ "$(core_steps)" = "150 180 210 240" ]
+  result_is 210 1300
+}
+
+@test "search: own: a pending step with its offset still set, stdout into a reader that has left: the crash is logged, zero ran, exit 1" {
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  run --separate-stderr piped true
+  ends_at_zero
+  status_is 1
+  [ "$(calls nvml | paste -sd' ')" = "get zero" ]
+  logged 150 0 fail crash
+  [ -z "$(calls load)" ]
+  # the crash is counted once: the next start stores core 90 and goes on with memory
+  next_start
+  search
+  status_is 0
+  [ -z "$(core_steps)" ]
+  result_is 90 1300
+}
+
+@test "search: own: stdout and stderr into one reader that has left, TERM during a load: the step is logged, zero ran, exit 1" {
+  # sed leaves at the line of the core step at 90, so "got a signal" has no reader either
+  plan 'core@120/0 signal=TERM hang=30'
+  run --separate-stderr piped_both sed '/core=90 .*result=pass/q'
+  ends_at_zero
+  status_is 1
+  [ "$(<"$MOCK/signal.sent")" = TERM ]
+  logged 120 0 invalid signal
+  gone_at_zero
+  load_gone
+  [ -e "$STATE/pending" ]
+  lock_free
+}
+
+@test "search: own: the search ignores SIGPIPE and every load it starts has the default action back" {
+  local search load n=0
+  # gpu/load.sh of the fake tree is a stand-in of this case: it notes the signals the
+  # search and it itself ignore (SigIgn of /proc/<pid>/status, where SIGPIPE, signal 13,
+  # is the bit 0x1000), then it is the contract's mock load
+  cp "$FIX/load.sh" "$REPO/gpu/load.mock.sh"
+  cat >"$REPO/gpu/load.sh" <<'EOF'
+#!/usr/bin/bash
+# pc-oc-test-mock
+s=/var/lib/pc-oc-test-mock
+ign() { /usr/bin/sed -n 's/^SigIgn:[[:space:]]*//p' "/proc/$1/status"; }
+echo "$(ign "$(<"$s/search.pid")") $(ign "$$")" >>"$s/load.sigign"
+exec /usr/bin/bash "${BASH_SOURCE[0]%/*}/load.mock.sh" "$@"
+EOF
+  run --separate-stderr piped head -n 3
+  ends_at_zero
+  status_is 1
+  while read -r search load; do
+    n=$((n + 1))
+    if (((16#$search & 0x1000) == 0 || (16#$load & 0x1000) != 0)); then
+      printf 'load %s: SigIgn of the search %s, of the load %s\n' "$n" "$search" "$load" >&2
+      return 1
+    fi
+  done <"$MOCK/load.sigign"
+  # the check, the two baseline loads and the core steps at 90 and 120
+  [ "$n" -eq 5 ]
+}
+
+@test "search: own: a pending step, a zero that fails and nobody to read the capitals: one zero, exit 1" {
+  crashed_at core@150/0
+  echo 150 >"$MOCK/nvml.core"
+  helper_fails all 1 zero
+  run --separate-stderr piped_both true
+  status_is 1
+  # the message that could not be printed did not end the start above its own exit: a
+  # start that left there would run zero once more on its way out
+  [ "$(calls nvml | paste -sd' ')" = "get zero" ]
+  logged 150 0 fail crash
+}
+
+@test "search: own: a start-up refusal nobody reads is exit 1 all the same and calls nothing" {
+  rm "$REPO/gpu/search.values"
+  run --separate-stderr piped_both true
+  status_is 1
+  [ -z "$(calls nvml)$(calls python3)$(calls setpriv)$(calls load)" ]
+  [ ! -e "$VARLIB/pc-oc" ]
+}
+
+@test "search: own: stdout into a reader that left before the first line: the load that ran is logged, no further one starts, nothing is set, exit 1" {
+  run --separate-stderr piped true
+  ends_at_zero
+  status_is 1
+  [ "$(baseline_loads)" = "core 2 3" ]
+  logged 0 0 pass
+  no_set
+  said 'could not be printed'
+  next_start
+  search
+  all_passed
+}
+
+@test "search: own: a finished search whose result nobody reads does not say 0: the result is written, zero ran, exit 1" {
+  # head leaves after the lines of all 24 steps, ahead of the lines of the result
+  run --separate-stderr piped head -n 24
+  ends_at_zero
+  status_is 1
+  [ "$(wc -l <"$STATE/log")" -eq 24 ]
+  result_is 210 1300
+  said 'could not be printed'
+  # the same for a start that finds that result and has nobody to show it to
+  next_start
+  run --separate-stderr piped true
+  ends_at_zero
+  status_is 1
+  no_set
+  no_load
+  said 'could not be printed'
+  result_is 210 1300
+}
+
+@test "search: own: stderr alone into a reader that has left: the load dies of its own SIGPIPE, an invalid step, zero ran, exit 1" {
+  # the mock load writes a line to stderr ahead of its block: with the default action
+  # that write ends it, and no block is no pass. What the search then says has no reader
+  run --separate-stderr piped_err true
+  ends_at_zero
+  status_is 1
+  [ "$(baseline_loads)" = "core 2 3" ]
+  logged 0 0 invalid block
+  grep -Fxq 'phase=baseline-core core=0 mem=0 result=invalid reason=block' "$BATS_TEST_TMPDIR/stdout"
+  no_set
+  no_result
+  lock_free
+}
