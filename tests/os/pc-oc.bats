@@ -311,7 +311,6 @@ one_drop() {
 }
 
 @test "non-root pc-oc apply toolchain runs toolchain/apply.sh once, as the caller" {
-  skip "contract #117 pending"
   fake_all_loggers
   fake_recorder toolchain apply
   run --separate-stderr env HOME="$BATS_TEST_TMPDIR/home" "$root/pc-oc" apply toolchain
@@ -322,7 +321,6 @@ one_drop() {
 
 # apply all is the #56 case above; with toolchain let through, the other components must still refuse
 @test "non-root pc-oc apply gpu refuses with the sudo hint and runs no component" {
-  skip "contract #117 pending"
   refused apply gpu
 }
 
@@ -351,27 +349,22 @@ needs_caller() {
 }
 
 @test "as EUID 0 with SUDO_UID unset apply toolchain dies needing the calling user and runs nothing" {
-  skip "contract #117 pending"
   needs_caller -u SUDO_UID
 }
 
 @test "as EUID 0 with SUDO_UID=0 apply toolchain dies needing the calling user and runs nothing" {
-  skip "contract #117 pending"
   needs_caller SUDO_UID=0
 }
 
 @test "as EUID 0 with SUDO_UID=12x apply toolchain dies needing the calling user and runs nothing" {
-  skip "contract #117 pending"
   needs_caller SUDO_UID=12x
 }
 
 @test "as EUID 0 with SUDO_GID unset apply toolchain dies needing the calling user and runs nothing" {
-  skip "contract #117 pending"
   needs_caller -u SUDO_GID
 }
 
 @test "as EUID 0 apply toolchain calls setpriv with exactly the contract's argument vector and a clean environment" {
-  skip "contract #117 pending"
   fake_all_loggers
   fake_recorder toolchain apply
   run --separate-stderr as_root env HOME="$BATS_TEST_TMPDIR/home" CALLER_MARK=set \
@@ -386,7 +379,6 @@ needs_caller() {
 }
 
 @test "as EUID 0 with SUDO_UID unset revert all still runs gpu's revert, exits 1 and names toolchain" {
-  skip "contract #117 pending"
   fake_recorder gpu revert
   fake_recorder toolchain revert
   run --separate-stderr as_root env -u SUDO_UID "$root/pc-oc" revert all
@@ -399,7 +391,6 @@ needs_caller() {
 }
 
 @test "as EUID 0 probe all drops for the toolchain probe only; the other probes run as root as today" {
-  skip "contract #117 pending"
   local c
   for c in cpu ram gpu os toolchain; do
     fake_recorder "$c" probe
@@ -421,4 +412,66 @@ needs_caller() {
     i=$((i + 1))
   done
   [[ "${ran[4]}" == "ran toolchain probe uid="*" $dropped_env" ]]
+}
+
+# Interface rules of #117 that its Check list does not name.
+@test "as EUID 0 with SUDO_GID=12x apply toolchain dies needing the calling user and runs nothing" {
+  needs_caller SUDO_GID=12x
+}
+
+# setpriv and getent read an id modulo 2^32: 00 and 4294967296 are uid 0, whose fixture home is absolute,
+# and 4294967295 is setresuid's "keep". Each would leave the script running as root.
+@test "as EUID 0 with a SUDO_UID or SUDO_GID that setpriv would read as another id apply toolchain dies and runs nothing" {
+  needs_caller SUDO_UID=00
+  needs_caller SUDO_UID=4294967296
+  needs_caller SUDO_UID=4294967295
+  needs_caller SUDO_GID=4294967296
+}
+
+# In a UTF-8 locale a [0-9] range matches fullwidth digits too. The fixture has a user of that name with a
+# home, so only an ASCII digit check stops it; the lookup would not.
+@test "as EUID 0 with fullwidth digits in SUDO_UID apply toolchain dies needing the calling user and runs nothing" {
+  locale -a | grep -qix 'en_US\.utf-\?8' || skip "no en_US.UTF-8 locale on this machine"
+  printf '%s\n' '４２４２:x:4247:4343::/home/pc-oc-wide:/usr/bin/bash' >>"$BATS_TEST_TMPDIR/passwd"
+  needs_caller LC_ALL=en_US.UTF-8 SUDO_UID=４２４２
+}
+
+@test "as EUID 0 with no absolute home for SUDO_UID apply toolchain dies needing the calling user and runs nothing" {
+  printf '%s\n' 'pc-oc-relhome:x:4245:4343::home/pc-oc-relhome:/usr/bin/bash' \
+    'pc-oc-nohome:x:4246:4343:::/usr/bin/bash' >>"$BATS_TEST_TMPDIR/passwd"
+  needs_caller SUDO_UID=4245
+  needs_caller SUDO_UID=4246
+  # no passwd entry at all
+  needs_caller SUDO_UID=4999
+}
+
+@test "as EUID 0 with SUDO_UID unset apply all runs the root components, then dies needing the calling user" {
+  local c
+  for c in cpu ram gpu os toolchain; do
+    fake_recorder "$c" apply
+  done
+  run --separate-stderr as_root env -u SUDO_UID "$root/pc-oc" apply all
+  [ "$status" -eq 1 ]
+  mapfile -t ran <"$calls"
+  [ "${#ran[@]}" -eq 4 ]
+  [[ "${ran[3]}" == "ran os apply uid=0 "* ]]
+  [ ! -e "$setpriv_log" ]
+  [ "$stderr" = "pc-oc: toolchain: needs the calling user: run it without sudo, or through sudo from your own account" ]
+}
+
+@test "non-root pc-oc revert toolchain and probe toolchain run the script once, as the caller, with no drop" {
+  local v
+  fake_all_loggers
+  for v in revert probe; do
+    fake_recorder toolchain "$v"
+    rm -f "$calls"
+    run --separate-stderr env HOME="$BATS_TEST_TMPDIR/home" "$root/pc-oc" "$v" toolchain
+    [ "$status" -eq 0 ] || {
+      echo "non-root $v toolchain exited $status; stderr '$stderr'" >&3
+      return 1
+    }
+    [ "$(wc -l <"$calls")" -eq 1 ]
+    [[ "$(<"$calls")" == "ran toolchain $v uid=$(id -u) HOME=$BATS_TEST_TMPDIR/home "* ]]
+    [ ! -e "$setpriv_log" ]
+  done
 }
